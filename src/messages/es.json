@@ -125,5 +125,147 @@
     "invalidEmail": "Escribí un email válido, con arroba.",
     "invalidDate": "Escribí la fecha como dd/mm/aaaa.",
     "invalidPhone": "Escribí el teléfono con código de país, por ejemplo +54 9 11 1234 5678."
+  },
+  "budget": {
+    "title": "Presupuesto",
+    "stepOf": "Paso {current} de {total}",
+    "steps": {
+      "general": "Datos generales",
+      "itinerary": "Itinerario y hoteles",
+      "directCosts": "Comidas y eventos",
+      "indirectCosts": "Costos del grupo",
+      "prices": "Revisión y precios"
+    },
+    "panel": {
+      "title": "Costo por pasajero",
+      "costDouble": "Habitación compartida",
+      "costSingle": "Habitación individual",
+      "breakdown": "Cómo se compone",
+      "lodging": "Hoteles",
+      "extras": "Comidas y eventos",
+      "indirect": "Costos del grupo, por pasajero",
+      "indirectTotal": "Total de costos del grupo",
+      "residue": "Sobrante por redondeo: {amount}",
+      "residueHelp": "Al repartir los costos del grupo se redondea hacia arriba, así nunca queda corto. Esto es lo que sobra en total.",
+      "margin": "Margen",
+      "noPriceYet": "Todavía no fijaste los precios.",
+      "show": "Ver costo",
+      "hide": "Ocultar",
+      "dividedBy": "Repartido entre {count} pasajeros presupuestados"
+    },
+    "general": {
+      "name": "Nombre del viaje",
+      "namePlaceholder": "Londres, París y Roma — mayo 2027",
+      "startDate": "Fecha de salida",
+      "endDate": "Fecha de regreso",
+      "currency": "Moneda del viaje",
+      "currencyHelp": "Todos los costos y los precios se cargan en esta moneda.",
+      "minPassengers": "Mínimo de pasajeros",
+      "maxPassengers": "Máximo de pasajeros",
+      "budgetedPassengers": "Pasajeros presupuestados",
+      "budgetedHelp": "Entre cuántos se reparten los costos del grupo. No incluye a los coordinadores, porque no se les factura.",
+      "coordinatorCount": "Cantidad de coordinadores",
+      "coordinatorHelp": "Su alojamiento se carga como costo del grupo, no como costo de pasajero.",
+      "passportMonths": "Meses de validez del pasaporte",
+      "passportMonthsHelp": "Cuántos meses tiene que seguir vigente el pasaporte después del regreso.",
+      "requireFullValidity": "Exigir esa validez para poder confirmar",
+      "requireFullValidityHelp": "Activalo si el destino lo pide a la entrada, como el espacio Schengen. Sin esto es solo una advertencia.",
+      "belowMinimum": "Estás presupuestando {budgeted} pasajeros pero el mínimo del viaje es {min}. Si viajan menos de los presupuestados, el costo por pasajero sube."
+    },
+    "itinerary": {
+      "addStop": "Agregar destino",
+      "editStop": "Editar destino",
+      "city": "Ciudad",
+      "country": "País",
+      "fromDate": "Llegada",
+      "toDate": "Salida",
+      "notes": "Notas",
+      "empty": "Todavía no cargaste ningún destino. Empezá por el primero.",
+      "hotels": "Hoteles",
+      "addHotel": "Agregar hotel",
+      "hotelName": "Nombre del hotel",
+      "nights": "Noches",
+      "pricePerNightDouble": "Por noche, compartida",
+      "pricePerNightSingle": "Por noche, individual",
+      "perPersonHelp": "Precio por persona, por noche.",
+      "noHotels": "Sin hoteles cargados en este destino."
+    },
+    "directCosts": {
+      "intro": "Lo que se le cobra a cada pasajero: cenas, entradas, trenes. Se carga el importe por persona.",
+      "add": "Agregar concepto",
+      "concept": "Concepto",
+      "amountPerPassenger": "Importe por pasajero",
+      "type": "Tipo",
+      "empty": "Todavía no cargaste comidas ni eventos.",
+      "types": {
+        "COMIDA": "Comida",
+        "EVENTO": "Evento",
+        "TRANSPORTE": "Transporte",
+        "OTRO": "Otro"
+      }
+    },
+    "indirectCosts": {
+      "intro": "Lo que se paga una vez para todo el grupo: el charter, los traslados, el alojamiento de los coordinadores. Se carga el total y el sistema lo reparte.",
+      "add": "Agregar costo del grupo",
+      "concept": "Concepto",
+      "totalAmount": "Importe total",
+      "type": "Tipo",
+      "empty": "Todavía no cargaste costos del grupo.",
+      "types": {
+        "CHARTER": "Charter",
+        "TRANSFER": "Traslados",
+        "HOSPEDAJE_COORDINADOR": "Alojamiento de coordinadores",
+        "OTRO": "Otro"
+      }
+    },
+    "prices": {
+      "intro": "El costo lo calcula el sistema. El precio lo ponés vos: la diferencia es el margen.",
+      "priceDouble": "Precio en habitación compartida",
+      "priceSingle": "Precio en habitación individual",
+      "costIs": "Costo: {amount}",
+      "marginPerPassenger": "Margen por pasajero",
+      "totalMargin": "Margen total del viaje",
+      "basisConfirmed": "Sobre los {count} pasajeros confirmados ({double} en compartida, {single} en individual)",
+      "basisScenarioDouble": "Si los {count} viajan en habitación compartida",
+      "basisScenarioSingle": "Si los {count} viajan en habitación individual",
+      "noConfirmedYet": "Todavía no hay pasajeros confirmados, así que el margen total depende de cuántos elijan habitación individual. Estos son los dos extremos.",
+      "impactTitle": "Antes de guardar",
+      "impactDouble": "El costo en compartida pasa de {before} a {after}",
+      "impactSingle": "El costo en individual pasa de {before} a {after}",
+      "negativeMargin": "Este precio está por debajo del costo: perderías {amount} por pasajero.",
+      "save": "Guardar precios"
+    },
+    "actions": {
+      "add": "Agregar",
+      "edit": "Editar",
+      "delete": "Eliminar",
+      "saving": "Guardando…",
+      "saved": "Guardado",
+      "saveError": "No se pudo guardar. Probá de nuevo.",
+      "deleteStopConfirm": "Se va a eliminar el destino «{name}» y todos sus hoteles. Esto no se puede deshacer.",
+      "deleteHotelConfirm": "Se va a eliminar el hotel «{name}». Esto no se puede deshacer.",
+      "deleteCostConfirm": "Se va a eliminar «{name}». Esto no se puede deshacer.",
+      "confirmDelete": "Sí, eliminar",
+      "previous": "Anterior",
+      "next": "Siguiente",
+      "finish": "Terminar"
+    },
+    "newTrip": {
+      "title": "Nuevo viaje",
+      "subtitle": "Empezá con los datos generales. El viaje se guarda como borrador y podés seguir cargándolo cuando quieras.",
+      "create": "Crear borrador"
+    },
+    "detail": {
+      "tabBudget": "Presupuesto",
+      "tabPassengers": "Pasajeros",
+      "tabPayments": "Pagos",
+      "tabCommunications": "Comunicaciones",
+      "comingSoon": "Esta sección todavía no está disponible.",
+      "editBudget": "Editar presupuesto",
+      "dates": "{from} al {to}",
+      "statusLabel": "Estado",
+      "changeStatus": "Cambiar estado",
+      "readOnly": "Este viaje está finalizado: solo se puede consultar."
+    }
   }
 }

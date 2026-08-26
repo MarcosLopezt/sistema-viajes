@@ -125,5 +125,147 @@
     "invalidEmail": "Please write a valid email, with an @ sign.",
     "invalidDate": "Please write the date as dd/mm/yyyy.",
     "invalidPhone": "Please include the country code, for example +44 7700 900123."
+  },
+  "budget": {
+    "title": "Budget",
+    "stepOf": "Step {current} of {total}",
+    "steps": {
+      "general": "General details",
+      "itinerary": "Itinerary and hotels",
+      "directCosts": "Meals and events",
+      "indirectCosts": "Group costs",
+      "prices": "Review and pricing"
+    },
+    "panel": {
+      "title": "Cost per passenger",
+      "costDouble": "Shared room",
+      "costSingle": "Single room",
+      "breakdown": "What makes it up",
+      "lodging": "Hotels",
+      "extras": "Meals and events",
+      "indirect": "Group costs, per passenger",
+      "indirectTotal": "Total group costs",
+      "residue": "Left over from rounding: {amount}",
+      "residueHelp": "Group costs are rounded up when split, so the total never falls short. This is what's left over.",
+      "margin": "Margin",
+      "noPriceYet": "You haven't set the prices yet.",
+      "show": "Show cost",
+      "hide": "Hide",
+      "dividedBy": "Split between {count} budgeted passengers"
+    },
+    "general": {
+      "name": "Trip name",
+      "namePlaceholder": "London, Paris and Rome — May 2027",
+      "startDate": "Departure date",
+      "endDate": "Return date",
+      "currency": "Trip currency",
+      "currencyHelp": "All costs and prices are entered in this currency.",
+      "minPassengers": "Minimum passengers",
+      "maxPassengers": "Maximum passengers",
+      "budgetedPassengers": "Budgeted passengers",
+      "budgetedHelp": "How many people the group costs are split between. Coordinators aren't included, since they aren't charged.",
+      "coordinatorCount": "Number of coordinators",
+      "coordinatorHelp": "Their accommodation goes in as a group cost, not as a passenger cost.",
+      "passportMonths": "Months of passport validity",
+      "passportMonthsHelp": "How long the passport must stay valid after the return date.",
+      "requireFullValidity": "Require that validity before confirming",
+      "requireFullValidityHelp": "Turn this on if the destination requires it on entry, like the Schengen area. Without it, it's only a warning.",
+      "belowMinimum": "You're budgeting for {budgeted} passengers but the trip minimum is {min}. If fewer travel than budgeted, the cost per passenger goes up."
+    },
+    "itinerary": {
+      "addStop": "Add destination",
+      "editStop": "Edit destination",
+      "city": "City",
+      "country": "Country",
+      "fromDate": "Arrival",
+      "toDate": "Departure",
+      "notes": "Notes",
+      "empty": "You haven't added any destinations yet. Start with the first one.",
+      "hotels": "Hotels",
+      "addHotel": "Add hotel",
+      "hotelName": "Hotel name",
+      "nights": "Nights",
+      "pricePerNightDouble": "Per night, shared",
+      "pricePerNightSingle": "Per night, single",
+      "perPersonHelp": "Price per person, per night.",
+      "noHotels": "No hotels added for this destination."
+    },
+    "directCosts": {
+      "intro": "What each passenger is charged: dinners, tickets, trains. Enter the amount per person.",
+      "add": "Add item",
+      "concept": "Item",
+      "amountPerPassenger": "Amount per passenger",
+      "type": "Type",
+      "empty": "You haven't added any meals or events yet.",
+      "types": {
+        "COMIDA": "Meal",
+        "EVENTO": "Event",
+        "TRANSPORTE": "Transport",
+        "OTRO": "Other"
+      }
+    },
+    "indirectCosts": {
+      "intro": "What's paid once for the whole group: the charter, transfers, the coordinators' accommodation. Enter the total and the system splits it.",
+      "add": "Add group cost",
+      "concept": "Item",
+      "totalAmount": "Total amount",
+      "type": "Type",
+      "empty": "You haven't added any group costs yet.",
+      "types": {
+        "CHARTER": "Charter",
+        "TRANSFER": "Transfers",
+        "HOSPEDAJE_COORDINADOR": "Coordinators' accommodation",
+        "OTRO": "Other"
+      }
+    },
+    "prices": {
+      "intro": "The system works out the cost. You set the price: the difference is the margin.",
+      "priceDouble": "Price in a shared room",
+      "priceSingle": "Price in a single room",
+      "costIs": "Cost: {amount}",
+      "marginPerPassenger": "Margin per passenger",
+      "totalMargin": "Total trip margin",
+      "basisConfirmed": "Based on the {count} confirmed passengers ({double} sharing, {single} in single rooms)",
+      "basisScenarioDouble": "If all {count} travel in shared rooms",
+      "basisScenarioSingle": "If all {count} travel in single rooms",
+      "noConfirmedYet": "No passengers are confirmed yet, so the total margin depends on how many choose a single room. These are the two extremes.",
+      "impactTitle": "Before you save",
+      "impactDouble": "The shared-room cost goes from {before} to {after}",
+      "impactSingle": "The single-room cost goes from {before} to {after}",
+      "negativeMargin": "This price is below cost: you'd lose {amount} per passenger.",
+      "save": "Save prices"
+    },
+    "actions": {
+      "add": "Add",
+      "edit": "Edit",
+      "delete": "Delete",
+      "saving": "Saving…",
+      "saved": "Saved",
+      "saveError": "We couldn't save that. Please try again.",
+      "deleteStopConfirm": "This will delete the destination “{name}” and all its hotels. This can't be undone.",
+      "deleteHotelConfirm": "This will delete the hotel “{name}”. This can't be undone.",
+      "deleteCostConfirm": "This will delete “{name}”. This can't be undone.",
+      "confirmDelete": "Yes, delete",
+      "previous": "Previous",
+      "next": "Next",
+      "finish": "Finish"
+    },
+    "newTrip": {
+      "title": "New trip",
+      "subtitle": "Start with the general details. The trip is saved as a draft, so you can keep filling it in whenever you like.",
+      "create": "Create draft"
+    },
+    "detail": {
+      "tabBudget": "Budget",
+      "tabPassengers": "Passengers",
+      "tabPayments": "Payments",
+      "tabCommunications": "Messages",
+      "comingSoon": "This section isn't available yet.",
+      "editBudget": "Edit budget",
+      "dates": "{from} to {to}",
+      "statusLabel": "Status",
+      "changeStatus": "Change status",
+      "readOnly": "This trip is completed: it can only be viewed."
+    }
   }
 }

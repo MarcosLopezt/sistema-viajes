@@ -1,10 +1,23 @@
-import { Prisma } from "@/generated/prisma/client";
+import DecimalJs from "decimal.js";
 
-export type Decimal = Prisma.Decimal;
-export const Decimal = Prisma.Decimal;
+/**
+ * Aritmética de dinero.
+ *
+ * Se usa `decimal.js` directamente y NO `Prisma.Decimal`, aunque Prisma use
+ * decimal.js por debajo y los valores sean intercambiables. El motivo es que
+ * el cliente generado de Prisma importa `node:process` y `node:path`: con esa
+ * dependencia, este módulo no se podría importar desde un Client Component, y
+ * el panel de costo en vivo del wizard necesita recalcular en el navegador con
+ * exactamente las mismas funciones que usa el servidor.
+ *
+ * Los Decimal que vienen de la base se convierten a string en la capa de
+ * servicios antes de llegar acá (ver src/lib/services/trip.ts).
+ */
+export type Decimal = DecimalJs;
+export const Decimal = DecimalJs;
 
 /** Valores que aceptamos como entrada de un monto. Nunca `number` suelto. */
-export type MoneyInput = Prisma.Decimal | string | number;
+export type MoneyInput = DecimalJs | string | number;
 
 export function toDecimal(value: MoneyInput): Decimal {
   return new Decimal(value);

@@ -1,44 +1,34 @@
 import { getTranslations } from "next-intl/server";
 import { CalendarRange, Plus, Users } from "lucide-react";
-import { requireSessionUser } from "@/lib/auth/guards";
-import { prisma } from "@/lib/db/prisma";
+import { Link } from "@/i18n/navigation";
+import { listTripsForViewer } from "@/lib/services/trip";
 import { formatDate } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
+/**
+ * Listado de viajes.
+ *
+ * El alcance lo resuelve `listTripsForViewer()`: el ADMIN ve todos, el
+ * coordinador solo aquellos donde tiene un TripMember, y un pasajero no ve
+ * ninguno. El filtro va en la consulta, no en esta página.
+ */
 export default async function TripsPage() {
-  const user = await requireSessionUser();
+  const trips = await listTripsForViewer();
   const t = await getTranslations("coordinatorHome");
   const tStatus = await getTranslations("tripStatus");
-
-  // Un ADMIN ve todos los viajes; un coordinador, solo aquellos de los que es
-  // miembro. El filtro se arma en la consulta, no descartando filas después.
-  const trips = await prisma.trip.findMany({
-    where:
-      user.role === "ADMIN"
-        ? {}
-        : { members: { some: { userId: user.id, role: "COORDINADOR" } } },
-    orderBy: { startDate: "desc" },
-    select: {
-      id: true,
-      name: true,
-      startDate: true,
-      endDate: true,
-      status: true,
-      budgetedPassengers: true,
-      _count: { select: { passengers: true } },
-    },
-  });
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-3xl font-semibold">{t("title")}</h1>
         {trips.length > 0 ? (
-          <Button size="default" disabled>
-            <Plus aria-hidden="true" />
-            {t("emptyAction")}
+          <Button asChild>
+            <Link href="/viajes/nuevo">
+              <Plus aria-hidden="true" />
+              {t("emptyAction")}
+            </Link>
           </Button>
         ) : null}
       </div>
@@ -57,9 +47,11 @@ export default async function TripsPage() {
                 {t("emptyBody")}
               </p>
             </div>
-            <Button size="lg" disabled>
-              <Plus aria-hidden="true" />
-              {t("emptyAction")}
+            <Button asChild size="lg">
+              <Link href="/viajes/nuevo">
+                <Plus aria-hidden="true" />
+                {t("emptyAction")}
+              </Link>
             </Button>
           </CardContent>
         </Card>
@@ -67,10 +59,19 @@ export default async function TripsPage() {
         <ul className="grid gap-4 sm:grid-cols-2">
           {trips.map((trip) => (
             <li key={trip.id}>
-              <Card className="h-full">
+              <Card className="hover:border-ring relative h-full transition-colors">
                 <CardHeader className="gap-2">
                   <div className="flex items-start justify-between gap-3">
-                    <CardTitle className="text-xl">{trip.name}</CardTitle>
+                    <CardTitle className="text-xl">
+                      <Link
+                        href={`/viajes/${trip.id}`}
+                        // El link cubre toda la tarjeta: en el celular el
+                        // objetivo táctil es la tarjeta entera, no el texto.
+                        className="after:absolute after:inset-0 focus-visible:outline-none"
+                      >
+                        {trip.name}
+                      </Link>
+                    </CardTitle>
                     <Badge variant="secondary">{tStatus(trip.status)}</Badge>
                   </div>
                 </CardHeader>
@@ -82,7 +83,7 @@ export default async function TripsPage() {
                   <p className="flex items-center gap-2">
                     <Users className="size-4" aria-hidden="true" />
                     {t("passengerCount", {
-                      count: trip._count.passengers,
+                      count: trip.passengerCount,
                       budgeted: trip.budgetedPassengers,
                     })}
                   </p>

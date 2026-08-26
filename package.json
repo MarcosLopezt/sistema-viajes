@@ -8,10 +8,10 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "vitest run --project unit",
+    "test:watch": "vitest --project unit",
     "check:i18n": "tsx scripts/check-i18n.ts",
-    "verify": "npm run check:i18n && npm run typecheck && npm run lint && npm run test",
+    "verify": "npm run check:i18n && npm run typecheck && npm run lint && npm run test && npm run test:db",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
@@ -20,7 +20,8 @@
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset",
     "postinstall": "prisma generate",
-    "check:db": "tsx scripts/check-db.ts"
+    "check:db": "tsx scripts/check-db.ts",
+    "test:db": "vitest run --project integration"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
@@ -30,6 +31,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
+    "decimal.js": "^10.6.0",
     "lucide-react": "^1.34.0",
     "next": "16.3.3",
     "next-intl": "^4.13.7",

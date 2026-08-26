@@ -2,7 +2,7 @@
 
 Aplicación para organizar viajes grupales cerrados (14 pasajeros + 2 coordinadores): armado del presupuesto, alta y autogestión de pasajeros, cobro y seguimiento de pagos, y comunicaciones por mail.
 
-**Estado: Fase 1 (fundaciones) terminada.** Ver [Qué hay hecho](#qué-hay-hecho-y-qué-no).
+**Estado: Fase 2 (viajes y presupuesto) terminada.** Ver [Qué hay hecho](#qué-hay-hecho-y-qué-no).
 
 ---
 
@@ -322,6 +322,46 @@ Se guarda el **SHA-256** de `acción + identificador`, no el identificador en cl
 
 ---
 
+## El motor de cálculo
+
+Vive en [`src/lib/domain/pricing.ts`](src/lib/domain/pricing.ts). No importa Prisma, ni React, ni nada de Node: recibe estructuras planas y devuelve `Decimal`.
+
+Que sea así no es purismo. Corre **en los dos lados**: el servidor lo usa para persistir y el navegador para el panel de costo en vivo del wizard. Al ser el mismo código, servidor y cliente no pueden dar números distintos. (Por eso `money.ts` usa `decimal.js` directamente y no `Prisma.Decimal`: el cliente generado de Prisma importa `node:process`, y con esa dependencia no se podría importar desde un Client Component.)
+
+```
+directDouble  = Σ(noches × precioNocheDoble)  + Σ(costoDirectoPorPasajero)
+directSingle  = Σ(noches × precioNocheSingle) + Σ(costoDirectoPorPasajero)
+indirectPerPassenger = ROUND_UP( Σ(indirectos) / budgetedPassengers )
+totalDouble   = directDouble + indirectPerPassenger
+totalSingle   = directSingle + indirectPerPassenger
+roundingResidue = indirectPerPassenger × budgetedPassengers − Σ(indirectos)
+```
+
+`roundingResidue` se devuelve explícito y se muestra en el panel. Es plata que el presupuesto recauda de más por el redondeo hacia arriba, y quien fija el precio tiene derecho a verla.
+
+### El margen total nunca es un número suelto
+
+El margen **por pasajero** es directo: precio − costo, para doble y para single.
+
+El margen **total** depende del mix single/doble, y hasta que no haya confirmados ese mix no se conoce. Entonces:
+
+- **Con pasajeros CONFIRMADOS** → un solo total, calculado con la distribución real, y `basis` dice cuántos van en cada base.
+- **Sin confirmados** → dos escenarios, «todos en compartida» y «todos en individual», cada uno declarando sobre qué está calculado.
+
+Todo `TotalMargin` lleva su `basis` obligatoriamente. No existe forma de obtener un total sin saber de qué mix salió: «£6.800 de margen» no significa nada si no se dice con cuántos singles.
+
+El porcentaje es **sobre el precio de venta** (`(precio − costo) / precio`), que es la convención del rubro. La otra lectura posible —sobre el costo, o markup— da un número más grande para la misma operación, y mezclarlas es una fuente clásica de confusión.
+
+## Monedas
+
+[`src/lib/domain/fx.ts`](src/lib/domain/fx.ts) es la parte pura; [`src/lib/services/fx.ts`](src/lib/services/fx.ts) la que trae y cachea.
+
+- La API de frankfurter se consulta **una vez por día**, nunca por request. El cache es la tabla `FxRate`.
+- Si la API falla se usa la última cotización guardada, marcada como vieja. Una API de terceros caída no rompe una pantalla.
+- **Los cruces GBP↔EUR se derivan** de las dos tasas contra el dólar en el momento de usarlas. No se guardan precalculados: duplicar la fuente de verdad abre la puerta a que ida y vuelta queden inconsistentes.
+- El redondeo se aplica **una sola vez, al importe final**. Redondear el tipo de cambio antes de multiplicar introduce un error que crece con el importe.
+- La leyenda «cotización del DD/MM/AAAA» usa `date` —el día hábil que reporta el BCE— y no `fetchedAt`. Un sábado la API devuelve el viernes, y eso es lo que hay que mostrar.
+
 ## La regla del pasaporte
 
 | Situación | Nivel | ¿Bloquea confirmar? |
@@ -353,6 +393,28 @@ Los guards son cáscaras finas. Las reglas viven en un solo lugar, así que no h
 `passengerVisibilityFilter()` devuelve el fragmento de `where` de Prisma que acota cada consulta. Para quien no tiene acceso devuelve una condición imposible en lugar de `{}`: si por error se omitiera el guard, la consulta trae cero filas en vez de traerlas todas. Fallar cerrado, no abierto.
 
 `ForbiddenError` se traduce a 404 y no a 403 en todo lo que cuelga de una URL: un 403 le confirma a quien prueba ids a mano que ese pasajero existe.
+
+### Un solo módulo toca Passenger y Person
+
+[`src/lib/services/passengers.ts`](src/lib/services/passengers.ts) es el **único** lugar del sistema que consulta esas dos tablas. Ninguna página, Server Action ni servicio las toca por fuera.
+
+El motivo es que el aislamiento depende de que `passengerVisibilityFilter()` se aplique siempre, y una regla que hay que acordarse de repetir en cada consulta es una regla que tarde o temprano se olvida en alguna. Si aparece un `prisma.passenger` o `prisma.person` en otro archivo, es un bug de seguridad, no un atajo.
+
+### Verificado, no supuesto
+
+Los 44 tests de `tests/integration/` corren contra la base **real**. Lo único mockeado es la resolución de la sesión de Supabase; los guards, los servicios y las consultas se ejecutan de verdad. Un test de aislamiento con Prisma mockeado no prueba aislamiento: prueba que el mock hace lo que le dijimos.
+
+Escenario: dos viajes independientes con sus coordinadores y pasajeros. Se verifica que una pasajera no llega a los datos de otro pasajero del mismo viaje, a nada del otro viaje, ni a los costos de ninguno —tampoco pasando ids a mano.
+
+Además, comprobado por HTTP contra el servidor corriendo:
+
+| Ruta | Pasajera | Coordinador |
+|---|---|---|
+| `/viajes` | 307 → `/inicio` | listado |
+| `/viajes/[id]` | 307 → `/inicio` | detalle |
+| `/viajes/[id]/presupuesto` | 307 → `/inicio` | wizard |
+
+Cero cifras de costo (`3.499,43`, `1.721,43`, `4.344,43`) aparecen en el HTML que recibe la pasajera en cualquiera de las tres. El coordinador las ve las tres.
 
 ---
 
@@ -417,32 +479,72 @@ prisma/
 src/
   app/[locale]/          todas las páginas (el root layout vive acá)
     (auth)/              login, recuperar, reset
-    (coordinador)/       viajes, admin
+    (coordinador)/
+      viajes/            listado · nuevo · [tripId] · [tripId]/presupuesto
+      viajes/actions.ts  Server Actions del módulo de presupuesto
+      admin/
     (pasajero)/          inicio
   app/api/auth/callback/ canje del código de los links de Supabase
   components/
+    budget/              wizard, panel de costo en vivo y sus 5 pasos
     layout/              nav, menú de usuario, selector de idioma
     ui/                  primitivos de shadcn (re-themeados)
   i18n/                  routing, request, navigation
   lib/
     auth/                policy (puro) · guards · rate-limit · sync
-    db/                  cliente Prisma
-    domain/              money · passport · person  (funciones puras)
+    db/                  cliente Prisma + pool de pg
+    domain/              money · pricing · fx · passport · person (puros)
     email/               interfaz + adaptadores
+    services/            trip · passengers · fx · audit  (autorización + base)
     supabase/            clientes server / browser / proxy
+    validation/          schemas Zod compartidos cliente/servidor
     format.ts            formateo de montos y fechas
   messages/              es.json · en.json
   proxy.ts               i18n + refresco de sesión (era "middleware")
   styles/app-theme.css   tokens y ajustes de accesibilidad
-scripts/check-i18n.ts
+scripts/
+  check-i18n.ts          paridad de traducciones
+  check-db.ts            diagnóstico de conexión y pooling
 tests/
-  auth/policy.test.ts    matriz de permisos y aislamiento entre pasajeros
-  domain/                passport · person · money
+  auth/policy.test.ts    matriz de permisos
+  domain/                passport · person · money · pricing · fx
+  integration/           contra la base real: aislamiento y flujo de presupuesto
 ```
+
+## El wizard de presupuesto
+
+La pantalla más difícil del sistema. Cinco pasos: datos generales → itinerario y hoteles → comidas y eventos → costos del grupo → revisión y precios.
+
+- **El viaje se crea en BORRADOR desde el paso 1.** A partir de ahí cada fila autoguarda apenas se confirma, así que se puede abandonar y retomar sin perder nada.
+- **El paso vive en la URL** (`?paso=3`): recargar no devuelve al principio.
+- **El panel de costo** es fijo a la derecha en escritorio y una barra inferior colapsable en pantallas chicas. Recalcula en el navegador con el mismo motor que usa el servidor.
+- **Antes de guardar un precio** se muestra el impacto: «el costo en compartida pasa de £3.499,43 a £3.599,43».
+- Si `budgetedPassengers < minPassengers` aparece una alerta que **no bloquea**: casi siempre es un descuido, pero puede ser deliberado.
+
+### Estados del viaje
+
+| Estado | Qué permite |
+|---|---|
+| `BORRADOR` | Editable. No visible para los pasajeros. Es donde se arma. |
+| `ABIERTO` | Se invita y se cobra. **El presupuesto sigue editable**: en la práctica los precios del mayorista cambian con el viaje ya abierto, y cada cambio queda auditado. |
+| `CERRADO` | No se invita más, se sigue cobrando. |
+| `FINALIZADO` | Solo lectura. |
+
+Las transiciones son explícitas (`BORRADOR → ABIERTO → CERRADO → FINALIZADO`, con vuelta atrás salvo desde `FINALIZADO`); cualquier salto fuera de esa tabla se rechaza.
 
 ---
 
 ## Qué hay hecho y qué no
+
+### Fase 2 — terminada
+
+- Motor de cálculo puro (`pricing.ts`): costos, prorrateo, residuo de redondeo, margen por pasajero y margen total con base declarada. 36 tests.
+- Servicio de cotizaciones con cache diario, degradación al último valor guardado y cruces derivados. 18 tests.
+- Capa de servicios (`trip.ts`, `passengers.ts`, `audit.ts`) con autorización por `requireTripRole` y auditoría de todo cambio de precio.
+- Validación Zod compartida cliente/servidor.
+- Wizard de 5 pasos con autoguardado y panel de costo en vivo (fijo en escritorio, barra colapsable en mobile).
+- Listado y detalle de viaje con pestañas; estados del viaje con transiciones controladas.
+- 44 tests de integración contra la base real, incluidos los de aislamiento.
 
 ### Fase 1 — terminada
 
@@ -460,7 +562,6 @@ tests/
 
 | Fase | Qué falta |
 |---|---|
-| 2 | ABM de viaje, itinerario, hospedajes, costos. Motor de cálculo + tests. Wizard con panel de costo en vivo. Precios y margen. |
 | 3 | Invitaciones con token, registro en 3 pasos con autoguardado, subida de archivos, edición por coordinador con `AuditLog`. |
 | 4 | Planes de 1 a 6 cuotas, congelamiento de TC, revisión de comprobantes, dashboard con semáforo. |
 | 5 | Editor bilingüe, envío masivo, endpoint de cron, plantillas de mail. |
@@ -477,10 +578,12 @@ Pasarela de pago online (el modelo ya tiene `provider` y `externalId` preparados
 ```bash
 npm run dev            # servidor de desarrollo
 npm run build          # build de producción
-npm run verify         # i18n + typecheck + lint + tests
-npm run test           # solo tests
-npm run test:watch     # tests en modo watch
-npm run check:i18n     # solo paridad de traducciones
+npm run verify         # i18n + typecheck + lint + tests unitarios + integración
+npm run test           # tests unitarios (rápidos, sin base)
+npm run test:db        # tests de integración (necesitan DATABASE_URL)
+npm run test:watch     # unitarios en modo watch
+npm run check:i18n     # paridad de traducciones
+npm run check:db       # diagnóstico de conexión y pooling
 npm run typecheck      # solo tsc
 npm run lint           # solo eslint
 ```

@@ -7,10 +7,12 @@ import {
   can,
   canEditPassenger,
   canViewPassenger,
+  isAdmin,
+  isCoordinator,
   type Capability,
   type ViewerContext,
 } from "@/lib/auth/policy";
-import type { GlobalRole } from "@/generated/prisma/enums";
+import type { GlobalRole, TripRole } from "@/generated/prisma/enums";
 
 /**
  * Guards del servidor. Son cáscaras finas: resuelven quién es el usuario y
@@ -103,6 +105,37 @@ export async function requireCapability(
   if (!can(viewer, capability)) {
     throw new ForbiddenError();
   }
+  return viewer;
+}
+
+/**
+ * Exige un rol sobre un viaje. Es el guard de entrada de todo el módulo de
+ * presupuesto: ninguna operación sobre Trip, itinerario o costos se ejecuta
+ * sin pasar por acá.
+ *
+ * Un ADMIN pasa siempre, sin necesidad de ser miembro del viaje.
+ *
+ * `requireTripRole` y `requireCapability` no son reglas paralelas: las dos
+ * consultan la misma matriz de src/lib/auth/policy.ts. Esta es la forma corta
+ * para el caso frecuente ("¿es coordinador de este viaje?"); la otra es la
+ * granular, para cuando importa la acción puntual.
+ */
+export async function requireTripRole(
+  tripId: string,
+  role: TripRole = "COORDINADOR",
+): Promise<ViewerContext> {
+  const viewer = await getTripViewer(tripId);
+
+  if (isAdmin(viewer)) return viewer;
+
+  if (role === "COORDINADOR" && !isCoordinator(viewer)) {
+    throw new ForbiddenError();
+  }
+  // Para PASAJERO alcanza con ser miembro del viaje, en cualquier rol.
+  if (viewer.tripRole === null) {
+    throw new ForbiddenError();
+  }
+
   return viewer;
 }
 
