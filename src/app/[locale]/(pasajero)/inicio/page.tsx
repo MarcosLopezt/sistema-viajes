@@ -1,11 +1,24 @@
 import { getLocale, getTranslations } from "next-intl/server";
-import { CheckCircle2, ChevronRight, Megaphone, Receipt, UserRound } from "lucide-react";
+import {
+  BedDouble,
+  CheckCircle2,
+  ChevronRight,
+  Megaphone,
+  Receipt,
+  UserRound,
+} from "lucide-react";
+import { Link } from "@/i18n/navigation";
 import { requireSessionUser } from "@/lib/auth/guards";
-import { prisma } from "@/lib/db/prisma";
-import { evaluatePersonCompleteness } from "@/lib/domain/person";
-import { formatDate, formatMoney, type LocaleCode } from "@/lib/format";
+import {
+  getMyActivePassenger,
+  getRecentCoordinatorEdits,
+} from "@/lib/services/passengers";
+import { toIsoDate } from "@/lib/validation/trip";
+import { formatMoney, type LocaleCode } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PassportAlert } from "@/components/passenger/passport-alert";
+import { CoordinatorEditNotice } from "@/components/passenger/coordinator-edit-notice";
 
 /**
  * Home del pasajero: exactamente tres tarjetas, nada más.
@@ -14,43 +27,29 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
  *
  * El pasajero no ve ni puede llegar a los costos, el presupuesto o el margen:
  * esta consulta ni siquiera los trae. Tampoco aparecen las palabras "base
- * doble", "costo indirecto" ni "margen" en ninguna de las tarjetas.
+ * doble", "costo indirecto" ni "margen" en ninguna parte.
  */
 export default async function PassengerHomePage() {
-  const user = await requireSessionUser();
+  await requireSessionUser();
+
   const locale = (await getLocale()) as LocaleCode;
   const t = await getTranslations("passengerHome");
+  const tRooms = await getTranslations("roomTypes");
 
-  // Solo lo propio: el filtro sale de `user.personId`, que viene de la sesión.
-  const passenger = user.personId
-    ? await prisma.passenger.findFirst({
-        where: { personId: user.personId, status: { not: "CANCELADO" } },
-        orderBy: { trip: { startDate: "desc" } },
-        select: {
-          id: true,
-          person: true,
-          trip: { select: { id: true, name: true, currency: true } },
-          paymentPlan: {
-            select: {
-              totalAmount: true,
-              currency: true,
-              installments: {
-                where: { status: { in: ["PENDIENTE", "VENCIDA"] } },
-                orderBy: { dueDate: "asc" },
-                take: 1,
-                select: { amount: true, dueDate: true },
-              },
-            },
-          },
-        },
-      })
-    : null;
+  const passenger = await getMyActivePassenger();
 
-  const completeness = passenger
-    ? evaluatePersonCompleteness(passenger.person)
-    : null;
-  const nextInstallment = passenger?.paymentPlan?.installments[0] ?? null;
-  const firstName = passenger?.person.fullName?.split(" ")[0] ?? "";
+  if (!passenger) {
+    return (
+      <div className="py-10 text-center">
+        <p className="text-muted-foreground text-base">{t("newsEmpty")}</p>
+      </div>
+    );
+  }
+
+  const edits = await getRecentCoordinatorEdits(passenger.id);
+  const person = passenger.person;
+  const firstName = person.fullName?.split(" ")[0] ?? "";
+  const missingPercent = 100 - passenger.completeness.completionPercentage;
 
   return (
     <div className="space-y-5 py-2">
@@ -59,6 +58,21 @@ export default async function PassengerHomePage() {
           {t("greeting", { name: firstName })}
         </h1>
       ) : null}
+
+      {edits.length > 0 ? <CoordinatorEditNotice edits={edits} /> : null}
+
+      <PassportAlert
+        level={passenger.passport.level}
+        expiryDate={
+          person.passportExpiryDate
+            ? toIsoDate(person.passportExpiryDate)
+            : null
+        }
+        tripEndDate={toIsoDate(passenger.trip.endDate)}
+        minimumToConfirm={toIsoDate(passenger.passport.minimumExpiryToConfirm)}
+        validityMonths={passenger.trip.passportValidityMonths}
+        requiresFullValidity={passenger.trip.requireFullPassportValidity}
+      />
 
       {/* 1 — Mis datos */}
       <Card>
@@ -69,23 +83,24 @@ export default async function PassengerHomePage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {completeness?.complete ? (
-            <p className="text-status-ok flex items-center gap-2 text-base">
-              <CheckCircle2 className="size-5" aria-hidden="true" />
-              {t("myDataComplete")}
-            </p>
+          {passenger.completeness.complete ? (
+            <>
+              <p className="text-status-ok flex items-center gap-2 text-base">
+                <CheckCircle2 className="size-5" aria-hidden="true" />
+                {t("myDataComplete")}
+              </p>
+              <Button asChild variant="outline" className="w-full">
+                <Link href="/mis-datos">{t("myDataAction")}</Link>
+              </Button>
+            </>
           ) : (
             <>
               <p className="text-base">
-                {t("myDataIncomplete", {
-                  percent: 100 - (completeness?.completionPercentage ?? 0),
-                })}
+                {t("myDataIncomplete", { percent: missingPercent })}
               </p>
-              {/* Barra de progreso: `role="progressbar"` para que el lector de
-                  pantalla anuncie el avance, no solo el color. */}
               <div
                 role="progressbar"
-                aria-valuenow={completeness?.completionPercentage ?? 0}
+                aria-valuenow={passenger.completeness.completionPercentage}
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-label={t("myDataTitle")}
@@ -94,16 +109,43 @@ export default async function PassengerHomePage() {
                 <div
                   className="bg-primary h-full rounded-full transition-all"
                   style={{
-                    width: `${completeness?.completionPercentage ?? 0}%`,
+                    width: `${passenger.completeness.completionPercentage}%`,
                   }}
                 />
               </div>
-              <Button size="lg" className="w-full" disabled>
-                {t("myDataAction")}
-                <ChevronRight aria-hidden="true" />
+              {/* Único botón primario de la pantalla. */}
+              <Button asChild size="lg" className="w-full">
+                <Link href="/mis-datos">
+                  {t("myDataAction")}
+                  <ChevronRight aria-hidden="true" />
+                </Link>
               </Button>
             </>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Habitación: solo el nombre de la compañera, ningún otro dato. */}
+      <Card>
+        <CardHeader className="gap-1">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <BedDouble className="size-5" aria-hidden="true" />
+            {tRooms("yourRoom")}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-1">
+          <p className="text-base">
+            {passenger.roomType === "DOBLE"
+              ? tRooms("doubleExplained")
+              : tRooms("singleExplained")}
+          </p>
+          {passenger.roomType === "DOBLE" ? (
+            <p className="text-muted-foreground text-base">
+              {passenger.roommateName
+                ? tRooms("roommate", { name: passenger.roommateName })
+                : tRooms("roommatePending")}
+            </p>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -115,32 +157,15 @@ export default async function PassengerHomePage() {
             {t("myPaymentsTitle")}
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
-          {passenger?.paymentPlan ? (
-            <>
-              <p className="text-2xl font-semibold">
-                {/* Decimal de Prisma no serializa a Client Components ni a
-                    Intl: se convierte a string en el borde, siempre. */}
-                {formatMoney(
-                  passenger.paymentPlan.totalAmount.toString(),
-                  passenger.paymentPlan.currency,
-                  locale,
-                )}
-              </p>
-              {nextInstallment ? (
-                <p className="text-muted-foreground text-base">
-                  {formatMoney(
-                    nextInstallment.amount.toString(),
-                    passenger.paymentPlan.currency,
-                    locale,
-                  )}{" "}
-                  · {formatDate(nextInstallment.dueDate)}
-                </p>
-              ) : null}
-              <Button size="lg" className="w-full" disabled>
-                {t("myPaymentsAction")}
-              </Button>
-            </>
+        <CardContent>
+          {passenger.priceOverride ? (
+            <p className="text-2xl font-semibold">
+              {formatMoney(
+                passenger.priceOverride,
+                passenger.trip.currency,
+                locale,
+              )}
+            </p>
           ) : (
             <p className="text-muted-foreground text-base">
               {t("myPaymentsEmpty")}

@@ -21,7 +21,7 @@ export default async function BudgetPage({
   params,
 }: PageProps<"/[locale]/viajes/[tripId]/presupuesto">) {
   const { tripId } = await params;
-  const [{ trip }, passengerMix] = await Promise.all([
+  const [{ trip, passengersWithActivePlan }, passengerMix] = await Promise.all([
     getTripBudget(tripId),
     getPassengerMix(tripId),
   ]);
@@ -80,6 +80,7 @@ export default async function BudgetPage({
 
       <BudgetWizard
         initialTrip={wizardTrip}
+        passengersWithActivePlan={passengersWithActivePlan}
         passengerMix={passengerMix.map((p) => ({
           roomType: p.roomType,
           isCoordinator: p.isCoordinator,

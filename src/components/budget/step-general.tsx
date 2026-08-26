@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Field } from "./field";
+import { Field } from "@/components/form/field";
 import type { WizardTrip } from "./types";
 
 /**

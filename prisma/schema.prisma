@@ -516,6 +516,10 @@ model Invitation {
   roomType    RoomType
   expiresAt   DateTime
   usedAt      DateTime?
+  /// Se marca al reenviar la invitación: el token anterior deja de servir
+  /// aunque todavía no haya vencido. Se anula en vez de borrar la fila para
+  /// no perder el rastro de a quién se invitó y cuándo.
+  revokedAt   DateTime?
   createdById String?   @db.Uuid
   createdAt   DateTime  @default(now())
 

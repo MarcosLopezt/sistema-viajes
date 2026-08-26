@@ -31,6 +31,7 @@ export default async function TripDetailPage({
   const tPanel = await getTranslations("budget.panel");
   const tPrices = await getTranslations("budget.prices");
   const tStatus = await getTranslations("tripStatus");
+  const tPassengers = await getTranslations("passengers");
 
   const money = (value: string) => formatMoney(value, trip.currency, locale);
   const confirmed = counts["CONFIRMADO"] ?? 0;
@@ -151,7 +152,23 @@ export default async function TripDetailPage({
           </Button>
         </TabsContent>
 
-        {["passengers", "payments", "communications"].map((tab) => (
+        <TabsContent value="passengers" className="space-y-4 pt-5">
+          <Card>
+            <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
+              <Users className="text-muted-foreground size-8" aria-hidden="true" />
+              <p className="text-base">
+                {confirmed} / {trip.budgetedPassengers}
+              </p>
+              <Button asChild size="lg">
+                <Link href={`/viajes/${trip.id}/pasajeros`}>
+                  {tPassengers("title")}
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {["payments", "communications"].map((tab) => (
           <TabsContent key={tab} value={tab} className="pt-5">
             <Card>
               <CardContent className="text-muted-foreground py-12 text-center text-base">

@@ -6,7 +6,7 @@ import { Hotel, MapPin, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatMoney, type CurrencyCode, type LocaleCode } from "@/lib/format";
-import { Field } from "./field";
+import { Field } from "@/components/form/field";
 import { ConfirmDelete } from "./confirm-delete";
 import type { WizardAccommodation, WizardStop } from "./types";
 

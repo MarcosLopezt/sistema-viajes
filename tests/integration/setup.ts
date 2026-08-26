@@ -39,3 +39,26 @@ vi.mock("@/lib/supabase/server", () => ({
 // `server-only` aborta si se importa fuera de un Server Component. En un test
 // de Node no hay tal contexto, así que se neutraliza.
 vi.mock("server-only", () => ({}));
+
+/**
+ * `headers()` de Next tira fuera de un request. El rate limiting del canje de
+ * invitaciones la usa para sacar la IP, así que devolvemos una vacía: sin IP
+ * cae al fallback por token, que es exactamente el camino que queremos
+ * ejercitar en los tests.
+ */
+vi.mock("next/headers", () => ({
+  headers: async () => new Headers(),
+  cookies: async () => ({
+    getAll: () => [],
+    set: () => undefined,
+  }),
+}));
+
+/**
+ * `revalidatePath` solo tiene sentido dentro del render de Next. Los tests
+ * llaman a los servicios directamente, pero algunas acciones la invocan.
+ */
+vi.mock("next/cache", () => ({
+  revalidatePath: () => undefined,
+  revalidateTag: () => undefined,
+}));

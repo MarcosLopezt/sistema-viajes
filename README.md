@@ -2,7 +2,7 @@
 
 Aplicación para organizar viajes grupales cerrados (14 pasajeros + 2 coordinadores): armado del presupuesto, alta y autogestión de pasajeros, cobro y seguimiento de pagos, y comunicaciones por mail.
 
-**Estado: Fase 2 (viajes y presupuesto) terminada.** Ver [Qué hay hecho](#qué-hay-hecho-y-qué-no).
+**Estado: Fase 3 (pasajeros e invitaciones) terminada.** Ver [Qué hay hecho](#qué-hay-hecho-y-qué-no).
 
 ---
 
@@ -223,7 +223,25 @@ Este procedimiento está **probado**, no supuesto: ver [Prueba de restauración]
    `ON_ERROR_STOP=1` es a propósito: preferís que falle ruidosamente a que te
    deje una base incompleta.
 
-**Lo que el backup NO incluye:** los usuarios de Supabase Auth. El dump es del schema `public`; el schema `auth` es de Supabase y no se puede restaurar así. Si hubiera que reconstruir el proyecto desde cero, los usuarios se recrean con la API de administración (es lo que hace `prisma/seed.ts` en `ensureAuthUser`) y las personas vuelven a entrar por el link de recuperación de contraseña. Los datos de los viajes, pagos y pasajeros sí están completos en el dump.
+### ⚠️ Deuda conocida: el backup está incompleto
+
+Anotado para la fase 6. Hoy el backup cubre **solo el schema `public`**, y eso deja dos huecos:
+
+| Falta | Consecuencia al restaurar |
+|---|---|
+| Los usuarios de **Supabase Auth** (schema `auth`) | La base queda íntegra pero **nadie puede iniciar sesión**. |
+| Los archivos del **Storage** | Los `medicalAssuranceFileId` y `proofFileId` apuntan a objetos que no existen. |
+
+Es decir: restaurar hoy da una base correcta e inutilizable. Los datos de viajes, pasajeros y pagos sí están completos.
+
+**Mitigación provisional**, si hubiera que reconstruir el proyecto desde cero antes de la fase 6:
+
+1. Restaurar el dump (procedimiento de arriba).
+2. Recrear los usuarios de Auth con la API de administración, tomando los `User.id` y `User.email` de la base restaurada — es lo mismo que hace `ensureAuthUser` en `prisma/seed.ts`. Los ids tienen que coincidir: son la clave que une `auth.users` con `public.User`.
+3. Avisarle a cada persona que entre por «Olvidé mi contraseña».
+4. Los archivos se pierden. Habría que volver a pedirlos.
+
+Lo que falta construir en la fase 6: agregar al workflow un volcado de `auth.users` (los campos mínimos: id, email, confirmación) y una sincronización del bucket, ambos dentro del mismo artifact cifrado.
 
 ### Prueba de restauración
 
@@ -361,6 +379,58 @@ El porcentaje es **sobre el precio de venta** (`(precio − costo) / precio`), q
 - **Los cruces GBP↔EUR se derivan** de las dos tasas contra el dólar en el momento de usarlas. No se guardan precalculados: duplicar la fuente de verdad abre la puerta a que ida y vuelta queden inconsistentes.
 - El redondeo se aplica **una sola vez, al importe final**. Redondear el tipo de cambio antes de multiplicar introduce un error que crece con el importe.
 - La leyenda «cotización del DD/MM/AAAA» usa `date` —el día hábil que reporta el BCE— y no `fetchedAt`. Un sábado la API devuelve el viernes, y eso es lo que hay que mostrar.
+
+## Invitaciones y registro
+
+### El link importa tanto como el mail
+
+El coordinador invita por email, pero el botón de **copiar el link** tiene el mismo peso visual que el envío, no menos: en la práctica la mayoría se van a mandar por WhatsApp. Tratar esa vía como secundaria sería diseñar para el flujo que no ocurre.
+
+Por eso el link se muestra completo apenas se crea la invitación —no escondido detrás del botón de copiar, para que se pueda seleccionar a mano si el portapapeles falla— y el envío del mail nunca hace fallar la operación: si el proveedor está caído, el coordinador todavía tiene el link.
+
+- Token de 256 bits, **hasheado con SHA-256 en la base**. El token en claro existe una sola vez, en el momento de crearlo. Si la base se filtrara, los links seguirían sin poder canjearse.
+- Vence a los 14 días, de un solo uso.
+- **Reenviar revoca el anterior** (`Invitation.revokedAt`). Si se reenvía es porque el anterior se perdió o se filtró: dejarlo vivo sería dejar dos llaves dando vueltas.
+- Rate limiting en el canje, por IP.
+- Si el email ya tiene una `Person` de otro viaje, **se reutiliza**: llega al formulario con sus datos cargados para confirmar o actualizar. Y si ya tiene cuenta, tiene que iniciar sesión antes de canjear — sin eso, cualquiera con el link podría sumar la cuenta de otro a un viaje.
+
+### Los dos schemas de validación ⚠️
+
+Este es el punto donde un formulario de tres pasos se arruina, así que está separado a propósito:
+
+| Schema | Cuándo | Qué hace |
+|---|---|---|
+| `personDraftSchema` | En cada autoguardado | **Nunca rechaza.** Solo recorta espacios, convierte `""` en `null` y acota longitudes. |
+| `personStrictSchema` | Al tocar "Terminar" | Exige todo lo obligatorio y valida formato. |
+
+Si el autoguardado usara el estricto, el pasajero escribe `ana@` en el campo de mail, el guardado del paso entero falla **en silencio**, y cuando cierra la pestaña pierde los ocho campos que sí había completado.
+
+Un test recorre campo por campo verificando que `personStrictSchema` y `isPersonComplete()` coinciden en qué es obligatorio. Si alguien agrega un campo en un lado y se olvida del otro, el pasajero vería 100% mientras el botón sigue sin dejarlo terminar — y el test rompe antes de que eso llegue a producción.
+
+### Archivos
+
+El navegador sube **directo al bucket** con una signed upload URL; el archivo no pasa por el servidor, que en Vercel chocaría con el límite de body y el timeout. Pero la validación sí es del servidor, en dos momentos:
+
+1. Al pedir la URL firmada se valida lo **declarado** y se decide la path. El cliente no elige dónde escribe.
+2. Después de subir, `confirmUpload` consulta el objeto **real** en el bucket y verifica su tipo y tamaño. Recién ahí la path se guarda.
+
+El paso 2 no es redundante: lo del paso 1 es lo que dice el cliente.
+
+Las imágenes se comprimen en el navegador con canvas (1600px de lado mayor, JPEG 0.82) antes de salir — una foto de certificado sacada con un celular pesa entre 4 y 12 MB y para leer un papel eso es un desperdicio. Los PDF no se tocan. Las descargas van por signed URL de 60 segundos.
+
+### Habitaciones
+
+Máximo dos personas por `Room`, con el tope validado dentro de una transacción: dos asignaciones simultáneas no pueden dejar tres.
+
+Quien queda solo en habitación compartida aparece marcado en el listado, **pero el precio no cambia solo**. Ahí es donde el coordinador aplica `priceOverride` con un motivo, y queda en el `AuditLog`.
+
+**El pasajero ve el nombre de su compañera de habitación y nada más** — ni mail, ni teléfono, ni nada de salud. Es información que va a saber igual al llegar al hotel y le ahorra una consulta al coordinador. Un test verifica que ningún otro dato del compañero viaja en la respuesta.
+
+### Edición por el coordinador
+
+Cada campo que el coordinador modifica genera una entrada de `AuditLog`, y el pasajero ve después un aviso de qué se tocó y cuándo. Que alguien más te cambie el número de pasaporte sin que te enteres no es aceptable.
+
+El aviso no dice *quién* lo hizo: en un viaje con dos coordinadores ese dato no le aporta nada al pasajero y expone actividad interna. En el `AuditLog` queda completo, con el actor.
 
 ## La regla del pasaporte
 
@@ -536,6 +606,18 @@ Las transiciones son explícitas (`BORRADOR → ABIERTO → CERRADO → FINALIZA
 
 ## Qué hay hecho y qué no
 
+### Fase 3 — terminada
+
+- Invitaciones con token hasheado, vencimiento de 14 días, un solo uso, revocación al reenviar y rate limiting en el canje. Botón de copiar link como acción de primer nivel.
+- Registro del pasajero en 3 pasos con autoguardado, barra de progreso y elección de idioma. Dos schemas Zod separados.
+- Subida directa al bucket con compresión en cliente y validación del objeto real en el servidor.
+- Alerta de pasaporte visible para las dos partes, con `requireFullPassportValidity`.
+- Transiciones de estado validadas en el servicio.
+- Habitaciones con tope de dos y alerta de "sin compañero"; `priceOverride` con motivo y auditoría.
+- Listado del coordinador con semáforo y filtros; ficha editable con `AuditLog` y aviso al pasajero.
+- Plantilla de mail de invitación en es/en.
+- 81 tests de integración (37 nuevos) y 148 unitarios (21 nuevos).
+
 ### Fase 2 — terminada
 
 - Motor de cálculo puro (`pricing.ts`): costos, prorrateo, residuo de redondeo, margen por pasajero y margen total con base declarada. 36 tests.
@@ -562,10 +644,9 @@ Las transiciones son explícitas (`BORRADOR → ABIERTO → CERRADO → FINALIZA
 
 | Fase | Qué falta |
 |---|---|
-| 3 | Invitaciones con token, registro en 3 pasos con autoguardado, subida de archivos, edición por coordinador con `AuditLog`. |
 | 4 | Planes de 1 a 6 cuotas, congelamiento de TC, revisión de comprobantes, dashboard con semáforo. |
 | 5 | Editor bilingüe, envío masivo, endpoint de cron, plantillas de mail. |
-| 6 | Exportación a Excel (**con fecha y hora de generación en la primera fila**), panel de admin con escritura, revisión de accesibilidad. |
+| 6 | Exportación a Excel (**con fecha y hora de generación en la primera fila**), panel de admin con escritura, revisión de accesibilidad. **Completar el backup**: usuarios de Auth y archivos del Storage (ver [deuda conocida](#️-deuda-conocida-el-backup-está-incompleto)). |
 
 ### Fuera de alcance
 

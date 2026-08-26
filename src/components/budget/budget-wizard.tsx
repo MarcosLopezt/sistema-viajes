@@ -57,9 +57,11 @@ import {
 export function BudgetWizard({
   initialTrip,
   passengerMix,
+  passengersWithActivePlan,
 }: {
   initialTrip: WizardTrip;
   passengerMix: WizardPassengerMix[];
+  passengersWithActivePlan: number;
 }) {
   const t = useTranslations("budget");
   const tActions = useTranslations("budget.actions");
@@ -375,6 +377,7 @@ export function BudgetWizard({
             passengerMix={passengerMix}
             savedPriceDouble={trip.priceDouble}
             savedPriceSingle={trip.priceSingle}
+            passengersWithActivePlan={passengersWithActivePlan}
             disabled={readOnly}
             onSave={async (prices) => {
               const result = await save(() =>

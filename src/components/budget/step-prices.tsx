@@ -11,7 +11,7 @@ import {
   calculateTripMargin,
   type TripCostBreakdown,
 } from "@/lib/domain/pricing";
-import { Field } from "./field";
+import { Field } from "@/components/form/field";
 import type { WizardPassengerMix } from "./types";
 
 /**
@@ -33,6 +33,7 @@ export function StepPrices({
   passengerMix,
   savedPriceDouble,
   savedPriceSingle,
+  passengersWithActivePlan,
   disabled,
   onSave,
 }: {
@@ -42,6 +43,8 @@ export function StepPrices({
   passengerMix: WizardPassengerMix[];
   savedPriceDouble: string | null;
   savedPriceSingle: string | null;
+  /** Cuántos pasajeros ya tienen un plan de pagos generado. */
+  passengersWithActivePlan: number;
   disabled?: boolean;
   onSave: (prices: {
     priceDouble: string;
@@ -132,6 +135,19 @@ export function StepPrices({
           )}
         </Field>
       </div>
+
+      {/* Los planes ya generados NO se tocan al cambiar el precio.
+          Es deliberado —nadie quiere que a quien ya pagó dos cuotas se le
+          reescriba la deuda— pero es invisible si no se dice, así que se dice
+          antes de guardar y con el número exacto de afectados. */}
+      {priceChanged && passengersWithActivePlan > 0 ? (
+        <Alert role="alert" className="border-status-warning/40 bg-status-warning-surface">
+          <AlertTriangle aria-hidden="true" />
+          <AlertDescription>
+            {t("activePlansWarning", { count: passengersWithActivePlan })}
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       {/* Impacto: qué le cambia al pasajero respecto de lo ya guardado. */}
       {hasSavedPrices && priceChanged ? (

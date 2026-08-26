@@ -595,10 +595,21 @@ export async function getTripBudget(tripId: string) {
     trip.budgetedPassengers,
   );
 
+  // Cuántos pasajeros ya tienen un plan de pagos generado.
+  //
+  // Un plan congela su totalAmount y sus cuotas al crearse: cambiar el precio
+  // del viaje NO los toca. Eso es deliberado —nadie quiere que a alguien que
+  // ya pagó dos cuotas se le reescriba la deuda— pero es invisible si no se
+  // dice, así que este número alimenta la advertencia del paso de precios.
+  const passengersWithActivePlan = await prisma.passenger.count({
+    where: { tripId, isCoordinator: false, paymentPlan: { isNot: null } },
+  });
+
   return {
     trip: serializeTrip(trip),
     breakdown: serializeBreakdown(breakdown),
     margin: serializeMargin(margin),
+    passengersWithActivePlan,
   };
 }
 

@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatMoney, type CurrencyCode, type LocaleCode } from "@/lib/format";
-import { Field } from "./field";
+import { Field } from "@/components/form/field";
 import { ConfirmDelete } from "./confirm-delete";
 
 /**
