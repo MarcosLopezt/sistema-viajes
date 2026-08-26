@@ -1,0 +1,109 @@
+name: Backup semanal de la base
+
+# El free tier de Supabase no hace backups automáticos: si se pierde el
+# proyecto, se pierde todo. Esto corre un pg_dump completo, lo comprime, lo
+# cifra y lo guarda como artifact del repositorio.
+#
+# ⚠️ Los workflows programados de GitHub SE DESACTIVAN SOLOS tras 60 días sin
+# actividad en el repositorio. Es exactamente por eso que el cron diario de la
+# aplicación va por Vercel Cron y no por acá. Para este backup el riesgo se
+# acepta, pero conviene revisar la pestaña Actions cada tanto: GitHub avisa por
+# mail antes de desactivarlo y alcanza con volver a habilitarlo desde la UI.
+#
+# Secretos necesarios (Settings → Secrets and variables → Actions):
+#   BACKUP_DATABASE_URL  la connection string DIRECTA de Supabase (puerto 5432,
+#                        NO el pooler: pg_dump no funciona contra pgbouncer).
+#   BACKUP_PASSPHRASE    frase larga para cifrar el dump. Guardala también
+#                        fuera de GitHub: sin ella el backup es irrecuperable.
+#
+# Restauración: ver README §Backups. Ojo con un detalle que solo aparece al
+# probarlo: el dump trae su propio `CREATE SCHEMA public`, así que en el
+# destino hay que correr `DROP SCHEMA IF EXISTS public CASCADE` ANTES de
+# restaurar, o psql aborta con "schema public already exists".
+
+on:
+  schedule:
+    # Domingos a las 04:00 UTC (01:00 en Argentina).
+    - cron: "0 4 * * 0"
+  # Permite lanzarlo a mano desde la pestaña Actions, que además cuenta como
+  # actividad y retrasa la desactivación automática.
+  workflow_dispatch:
+
+# Sin permisos sobre el contenido del repo: este job solo lee la base.
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Instalar pg_dump 17
+        # El pg_dump de los repos de Ubuntu suele ir por detrás de la versión
+        # de Postgres que corre Supabase, y un pg_dump viejo contra un servidor
+        # nuevo aborta. Por eso se instala desde el repositorio oficial de PGDG.
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+            https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client-17
+          pg_dump --version
+
+      - name: Generar, comprimir y cifrar el dump
+        env:
+          PGCONN: ${{ secrets.BACKUP_DATABASE_URL }}
+          PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${PGCONN}" ] || [ -z "${PASSPHRASE}" ]; then
+            echo "::error::Faltan los secretos BACKUP_DATABASE_URL y/o BACKUP_PASSPHRASE."
+            exit 1
+          fi
+
+          STAMP="$(date -u +%Y-%m-%d)"
+          OUT="backup-${STAMP}.sql.gz.gpg"
+
+          # --no-owner y --no-privileges: los roles de Supabase no existen en
+          # una base local, y sin esto la restauración se llena de errores.
+          # Solo el schema public: `auth` y `storage` son de Supabase y no se
+          # pueden restaurar así (ver README para los usuarios de Auth).
+          pg_dump "${PGCONN}" \
+            --schema=public \
+            --no-owner \
+            --no-privileges \
+            --format=plain \
+            | gzip -9 \
+            | gpg --batch --yes --symmetric \
+                  --cipher-algo AES256 \
+                  --passphrase "${PASSPHRASE}" \
+                  --output "${OUT}"
+
+          SIZE=$(stat -c%s "${OUT}")
+          echo "Archivo: ${OUT} (${SIZE} bytes)"
+
+          # Un dump de una base con datos nunca pesa 1 KB. Si pesa eso, algo
+          # falló en silencio y es mejor que el job se ponga en rojo ahora y no
+          # que nos enteremos el día que haya que restaurar.
+          if [ "${SIZE}" -lt 1024 ]; then
+            echo "::error::El backup pesa ${SIZE} bytes: sospechosamente chico."
+            exit 1
+          fi
+
+          echo "ARTIFACT_NAME=backup-${STAMP}" >> "${GITHUB_ENV}"
+          echo "ARTIFACT_PATH=${OUT}" >> "${GITHUB_ENV}"
+
+      - name: Subir el backup cifrado
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ env.ARTIFACT_PATH }}
+          # ~3 meses de historia. El artifact ya está cifrado, así que ni
+          # GitHub ni quien tenga acceso al repo puede leer su contenido.
+          retention-days: 90
+          if-no-files-found: error

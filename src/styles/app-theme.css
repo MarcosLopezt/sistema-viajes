@@ -1,0 +1,93 @@
+/* ---------------------------------------------------------------------------
+ * Ajustes de tema propios del sistema, encima del preset de shadcn.
+ *
+ * Se importan al final de globals.css para que ganen sobre los defaults.
+ * Todo lo de acá responde a criterios de aceptación del documento de
+ * requisitos, no a preferencias estéticas.
+ * ------------------------------------------------------------------------- */
+
+@theme {
+  /* Semáforo del dashboard del coordinador y de la alerta de pasaporte.
+     Son tres colores que tienen que distinguirse en dos segundos y también
+     para quien no distingue rojo de verde: por eso en la UI nunca van solos,
+     siempre acompañados de un ícono con forma distinta y de un texto. */
+  --color-status-ok: oklch(0.55 0.15 155);
+  --color-status-ok-surface: oklch(0.96 0.03 155);
+  --color-status-warning: oklch(0.62 0.15 75);
+  --color-status-warning-surface: oklch(0.96 0.05 85);
+  --color-status-danger: oklch(0.55 0.19 25);
+  --color-status-danger-surface: oklch(0.96 0.03 25);
+
+  /* Altura mínima de un target táctil. Referenciable desde componentes
+     propios: `min-h-(--size-touch-target)`. */
+  --size-touch-target: 2.75rem; /* 44px */
+}
+
+@layer base {
+  html {
+    /* 100% respeta el tamaño de letra que el usuario configuró en el sistema
+       operativo. Fijar 16px acá lo pisaría, y el público es adulto: hay gente
+       que agrandó la letra del teléfono a propósito. */
+    font-size: 100%;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    /* 1rem = 16px por defecto, el mínimo que pide el documento. */
+    font-size: 1rem;
+    line-height: 1.6;
+    text-wrap: pretty;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+    line-height: 1.25;
+  }
+
+  /* Cualquier control interactivo llega al mínimo táctil aunque su contenido
+     sea chico. Se excluyen los que están dentro de tablas densas del panel de
+     escritorio, que declaran su propio tamaño. */
+  button:not([data-size]),
+  [role="button"]:not([data-size]),
+  a[data-touch],
+  select,
+  summary {
+    min-height: var(--size-touch-target);
+  }
+
+  /* Foco siempre visible: se navega con teclado y con lector de pantalla. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@utility skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  padding: 0.75rem 1rem;
+  background: var(--background);
+  color: var(--foreground);
+  border: 2px solid var(--ring);
+  border-radius: var(--radius-md);
+
+  &:focus {
+    left: 0.5rem;
+    top: 0.5rem;
+  }
+}

@@ -1,0 +1,129 @@
+{
+  "common": {
+    "appName": "Viajes",
+    "loading": "Cargando…",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "back": "Volver",
+    "next": "Siguiente",
+    "close": "Cerrar",
+    "logout": "Cerrar sesión",
+    "language": "Idioma",
+    "languageEs": "Español",
+    "languageEn": "English",
+    "skipToContent": "Ir al contenido"
+  },
+  "nav": {
+    "coordinator": {
+      "sectionLabel": "Panel del coordinador",
+      "trips": "Viajes",
+      "passengers": "Pasajeros",
+      "payments": "Pagos",
+      "communications": "Comunicaciones",
+      "admin": "Administración"
+    },
+    "passenger": {
+      "sectionLabel": "Mi viaje",
+      "home": "Inicio",
+      "myData": "Mis datos",
+      "myPayments": "Mis pagos",
+      "news": "Novedades"
+    }
+  },
+  "auth": {
+    "login": {
+      "title": "Entrar",
+      "subtitle": "Ingresá con tu email y tu contraseña.",
+      "email": "Email",
+      "emailPlaceholder": "tu@email.com",
+      "password": "Contraseña",
+      "submit": "Entrar",
+      "submitting": "Entrando…",
+      "forgotPassword": "Olvidé mi contraseña",
+      "invalidCredentials": "El email o la contraseña no son correctos.",
+      "rateLimited": "Demasiados intentos. Probá de nuevo en {minutes} minutos.",
+      "genericError": "No pudimos entrar. Probá de nuevo en un momento.",
+      "noSelfSignup": "¿No tenés cuenta? Se entra solo con la invitación que te manda el coordinador del viaje."
+    },
+    "recover": {
+      "title": "Recuperar contraseña",
+      "subtitle": "Te mandamos un link para elegir una nueva.",
+      "email": "Email",
+      "submit": "Enviar link",
+      "submitting": "Enviando…",
+      "sent": "Si ese email está registrado, te mandamos un link para crear una contraseña nueva. Revisá tu casilla.",
+      "backToLogin": "Volver a entrar",
+      "rateLimited": "Ya pediste varios links. Esperá una hora antes de pedir otro."
+    },
+    "reset": {
+      "title": "Elegí tu contraseña nueva",
+      "subtitle": "Tiene que tener al menos 8 caracteres.",
+      "password": "Contraseña nueva",
+      "passwordConfirm": "Repetir contraseña",
+      "submit": "Guardar contraseña",
+      "submitting": "Guardando…",
+      "success": "Listo. Ya podés entrar con tu contraseña nueva.",
+      "mismatch": "Las dos contraseñas tienen que ser iguales.",
+      "tooShort": "La contraseña tiene que tener al menos 8 caracteres.",
+      "linkExpired": "Este link ya venció. Pedí uno nuevo desde «Olvidé mi contraseña»."
+    }
+  },
+  "passengerHome": {
+    "greeting": "Hola, {name}",
+    "myDataTitle": "Mis datos",
+    "myDataComplete": "Tus datos están completos.",
+    "myDataIncomplete": "Te falta completar {percent}%.",
+    "myDataAction": "Completar mis datos",
+    "myPaymentsTitle": "Mis pagos",
+    "myPaymentsAction": "Subir comprobante",
+    "newsTitle": "Novedades",
+    "newsEmpty": "Todavía no hay novedades del viaje.",
+    "myPaymentsEmpty": "Todavía no hay nada para pagar. El coordinador te va a avisar cuando esté listo."
+  },
+  "coordinatorHome": {
+    "title": "Mis viajes",
+    "emptyTitle": "Todavía no creaste ningún viaje.",
+    "emptyBody": "Empezá por acá: armá el viaje, cargá el itinerario y los costos, y después invitá a los pasajeros.",
+    "emptyAction": "Crear un viaje",
+    "passengerCount": "{count} de {budgeted} pasajeros"
+  },
+  "tripStatus": {
+    "BORRADOR": "Borrador",
+    "ABIERTO": "Abierto",
+    "CERRADO": "Cerrado",
+    "FINALIZADO": "Finalizado"
+  },
+  "admin": {
+    "title": "Administración",
+    "userCount": "{count, plural, =0 {Sin usuarios} one {# usuario} other {# usuarios}}",
+    "tripCount": "{count, plural, =0 {sin viajes} one {# viaje} other {# viajes}}"
+  },
+  "passport": {
+    "ok": "Pasaporte en regla",
+    "warning": "Revisá tu pasaporte",
+    "blocking": "Tu pasaporte no sirve para este viaje",
+    "missing": "Falta la fecha de vencimiento del pasaporte",
+    "blockingDetail": "Tu pasaporte vence el {expiry}, antes de que termine el viaje ({tripEnd}). Necesitás renovarlo para poder viajar.",
+    "warningDetail": "Tu pasaporte vence el {expiry}. Muchos países piden que tenga al menos {months} meses de validez después del regreso. Conviene que lo renueves.",
+    "blockingByPolicyDetail": "Tu pasaporte vence el {expiry}. Para este destino tiene que seguir vigente al menos {months} meses después del regreso, o sea hasta el {minimumDate}. Necesitás renovarlo.",
+    "missingDetail": "Cargá la fecha de vencimiento de tu pasaporte para que podamos confirmarte en el viaje."
+  },
+  "errors": {
+    "unauthorizedTitle": "Necesitás iniciar sesión",
+    "unauthorizedBody": "Entrá con tu email y contraseña para ver esta página.",
+    "forbiddenTitle": "No encontramos esta página",
+    "forbiddenBody": "Puede que el link esté mal o que no tengas acceso a esto.",
+    "notFoundTitle": "No encontramos esta página",
+    "notFoundBody": "Revisá el link o volvé al inicio.",
+    "genericTitle": "Algo salió mal",
+    "genericBody": "Probá de nuevo en un momento. Si sigue pasando, avisale al coordinador.",
+    "backHome": "Volver al inicio",
+    "retry": "Reintentar"
+  },
+  "validation": {
+    "required": "Este dato es obligatorio.",
+    "invalidEmail": "Escribí un email válido, con arroba.",
+    "invalidDate": "Escribí la fecha como dd/mm/aaaa.",
+    "invalidPhone": "Escribí el teléfono con código de país, por ejemplo +54 9 11 1234 5678."
+  }
+}

@@ -1,0 +1,576 @@
+// ---------------------------------------------------------------------------
+// Sistema de viajes grupales — schema de datos
+//
+// Decisiones de modelado acordadas en la fase de diseño (ver README §Decisiones):
+//  1. Trip.budgetedPassengers cuenta SOLO pasajeros facturables (excluye
+//     coordinadores). Los indirectos se dividen por ese número.
+//  2. Un Passenger con isCoordinator=true no computa costo directo ni recibe
+//     PaymentPlan. Su alojamiento se carga como IndirectCost.
+//  3. El precio final es por pasajero: Passenger.priceOverride pisa el precio
+//     del Trip cuando el coordinador decide un ajuste (ej. single sin compañero).
+//  4. La convivencia se modela con Room (1..2 pasajeros), no con un
+//     roommateId unidireccional que puede quedar inconsistente.
+//  5. Autorización en dos niveles: User.role global (ADMIN | USER) y
+//     TripMember.role por viaje (COORDINADOR | PASAJERO).
+//  6. Los reembolsos son Payment con kind=REEMBOLSO colgando del PaymentPlan
+//     (installmentId nulo). Nunca alteran el estado de una cuota.
+// ---------------------------------------------------------------------------
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ------------------------------- Enums -------------------------------------
+
+enum GlobalRole {
+  ADMIN
+  USER
+}
+
+enum TripRole {
+  COORDINADOR
+  PASAJERO
+}
+
+enum Language {
+  ES
+  EN
+}
+
+enum Currency {
+  GBP
+  USD
+  EUR
+}
+
+enum TripStatus {
+  BORRADOR
+  ABIERTO
+  CERRADO
+  FINALIZADO
+}
+
+enum RoomType {
+  DOBLE
+  SINGLE
+}
+
+enum PassengerStatus {
+  INVITADO
+  REGISTRADO
+  CONFIRMADO
+  CANCELADO
+}
+
+enum DirectCostType {
+  COMIDA
+  EVENTO
+  TRANSPORTE
+  OTRO
+}
+
+enum IndirectCostType {
+  CHARTER
+  TRANSFER
+  HOSPEDAJE_COORDINADOR
+  OTRO
+}
+
+enum InstallmentStatus {
+  PENDIENTE
+  EN_REVISION
+  PAGADA
+  VENCIDA
+}
+
+enum PaymentStatus {
+  EN_REVISION
+  CONFIRMADO
+  RECHAZADO
+}
+
+enum PaymentKind {
+  PAGO
+  REEMBOLSO
+}
+
+enum CommunicationAudience {
+  TODOS
+  SELECCION
+}
+
+enum CommunicationStatus {
+  BORRADOR
+  PROGRAMADA
+  ENVIANDO
+  ENVIADA
+  FALLIDA
+}
+
+enum RecipientStatus {
+  PENDIENTE
+  ENVIADO
+  FALLIDO
+}
+
+// ------------------------- Identidad y acceso ------------------------------
+
+/// Espejo de auth.users de Supabase. El id ES el uuid de Supabase Auth.
+/// No hay FK real hacia el schema `auth`: la sincronización se hace en el
+/// canje de invitación y en el login (ver src/lib/auth/sync.ts).
+model User {
+  id        String     @id @db.Uuid
+  email     String     @unique
+  role      GlobalRole @default(USER)
+  personId  String?    @unique @db.Uuid
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  person           Person?         @relation(fields: [personId], references: [id], onDelete: SetNull)
+  tripMemberships  TripMember[]
+  auditLogs        AuditLog[]      @relation("AuditActor")
+  reviewedPayments Payment[]       @relation("PaymentReviewer")
+  createdInvites   Invitation[]    @relation("InvitationCreator")
+  createdComms     Communication[] @relation("CommunicationCreator")
+
+  @@index([role])
+}
+
+/// Quién puede operar sobre un viaje y con qué rol. Fuente de verdad de la
+/// autorización por viaje. Un COORDINADOR puede no viajar (no tener Passenger).
+model TripMember {
+  id        String   @id @default(uuid()) @db.Uuid
+  tripId    String   @db.Uuid
+  userId    String   @db.Uuid
+  role      TripRole
+  createdAt DateTime @default(now())
+
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tripId, userId])
+  @@index([userId])
+}
+
+// ------------------------------- Viaje -------------------------------------
+
+model Trip {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+  currency  Currency
+
+  minPassengers Int
+  maxPassengers Int
+  /// Divisor de los costos indirectos. Cuenta SOLO pasajeros facturables:
+  /// NO incluye a los coordinadores (decisión 1).
+  budgetedPassengers Int
+  coordinatorCount   Int @default(2)
+
+  status TripStatus @default(BORRADOR)
+
+  /// Precio de lista por pasajero. Nulos hasta que el coordinador los fija.
+  /// Passenger.priceOverride puede pisarlos caso por caso.
+  priceDouble Decimal? @db.Decimal(12, 2)
+  priceSingle Decimal? @db.Decimal(12, 2)
+
+  /// Ventana de advertencia amarilla del pasaporte, en meses posteriores al
+  /// fin del viaje.
+  passportValidityMonths Int @default(3)
+  /// Si es true, la advertencia amarilla pasa a ser bloqueante: el pasaporte
+  /// debe tener `passportValidityMonths` de validez después del regreso.
+  /// Se activa para destinos que lo exigen a la entrada (ej. Schengen).
+  requireFullPassportValidity Boolean @default(false)
+
+  /// Offsets en días para los recordatorios de cuota, relativos al vencimiento.
+  /// Negativo = antes del vencimiento. Default: 7 días antes y 1 día después.
+  reminderOffsetsDays Int[] @default([-7, 1])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members        TripMember[]
+  stops          ItineraryStop[]
+  directCosts    DirectCost[]
+  indirectCosts  IndirectCost[]
+  passengers     Passenger[]
+  rooms          Room[]
+  invitations    Invitation[]
+  communications Communication[]
+
+  @@index([status])
+}
+
+model ItineraryStop {
+  id       String   @id @default(uuid()) @db.Uuid
+  tripId   String   @db.Uuid
+  order    Int
+  city     String
+  country  String
+  fromDate DateTime @db.Date
+  toDate   DateTime @db.Date
+  notes    String?
+
+  trip           Trip            @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  accommodations Accommodation[]
+  directCosts    DirectCost[]
+
+  @@unique([tripId, order])
+}
+
+model Accommodation {
+  id     String @id @default(uuid()) @db.Uuid
+  stopId String @db.Uuid
+
+  hotelName String
+  nights    Int
+  /// Precio por noche POR PERSONA en habitación doble.
+  pricePerNightDouble Decimal @db.Decimal(12, 2)
+  /// Precio por noche POR PERSONA en habitación single.
+  pricePerNightSingle Decimal @db.Decimal(12, 2)
+  notes               String?
+
+  stop ItineraryStop @relation(fields: [stopId], references: [id], onDelete: Cascade)
+
+  @@index([stopId])
+}
+
+/// Costo que se imputa a cada pasajero facturable (cenas, entradas, ferrys).
+model DirectCost {
+  id                 String         @id @default(uuid()) @db.Uuid
+  tripId             String         @db.Uuid
+  stopId             String?        @db.Uuid
+  concept            String
+  amountPerPassenger Decimal        @db.Decimal(12, 2)
+  type               DirectCostType
+
+  trip Trip           @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  stop ItineraryStop? @relation(fields: [stopId], references: [id], onDelete: SetNull)
+
+  @@index([tripId])
+}
+
+/// Costo total del viaje que se prorratea entre budgetedPassengers
+/// (charter, transfers grupales, hospedaje de los coordinadores).
+model IndirectCost {
+  id          String           @id @default(uuid()) @db.Uuid
+  tripId      String           @db.Uuid
+  concept     String
+  totalAmount Decimal          @db.Decimal(12, 2)
+  type        IndirectCostType
+
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tripId])
+}
+
+// ----------------------------- Personas ------------------------------------
+
+/// Datos personales reutilizables entre viajes.
+///
+/// Casi todas las columnas son nullable a nivel base PESE A ser obligatorias
+/// de negocio: el formulario del pasajero son 3 pasos con autoguardado, y una
+/// fila a medio completar tiene que poder persistirse. La obligatoriedad se
+/// valida con isPersonComplete() (src/lib/domain/person.ts), que es además el
+/// gate para pasar a CONFIRMADO.
+model Person {
+  id String @id @default(uuid()) @db.Uuid
+
+  // Paso 1 — quién sos
+  fullName           String?
+  nationalityCountry String?
+  residenceCountry   String?
+  residenceAddress   String?
+  residenceCity      String?
+  mobilePhone        String?
+  documentNumber     String?
+  passportNumber     String?
+  passportExpiryDate DateTime? @db.Date
+
+  // Paso 2 — emergencia y salud
+  emergencyContactName    String?
+  emergencyContactPhone   String?
+  medicalAssuranceCompany String?
+  medicalAssuranceId      String?
+  medicalAssurancePhone   String?
+  medicalAssuranceEmail   String?
+
+  hasDietaryRestrictions     Boolean @default(false)
+  dietaryRestrictionsDetail  String?
+  hasMobilityRestrictions    Boolean @default(false)
+  mobilityRestrictionsDetail String?
+  /// Único campo verdaderamente opcional del formulario.
+  otherHealthNotes String?
+
+  // Paso 3 — documentos
+  /// Path interna en el bucket privado de Supabase Storage. NUNCA una URL.
+  /// Obligatorio: entra en isPersonComplete() y bloquea el pase a CONFIRMADO.
+  medicalAssuranceFileId String?
+
+  preferredLanguage Language @default(ES)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user       User?
+  passengers Passenger[]
+}
+
+/// Habitación asignada. Reemplaza al roommateId unidireccional (decisión 4).
+model Room {
+  id     String @id @default(uuid()) @db.Uuid
+  tripId String @db.Uuid
+  label  String
+
+  trip       Trip        @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  passengers Passenger[]
+
+  @@unique([tripId, label])
+}
+
+/// Vincula una Person con un Trip.
+model Passenger {
+  id       String @id @default(uuid()) @db.Uuid
+  tripId   String @db.Uuid
+  personId String @db.Uuid
+
+  roomType RoomType
+  roomId   String?         @db.Uuid
+  status   PassengerStatus @default(INVITADO)
+
+  /// Coordinador: carga sus datos como cualquiera, pero NO se le computa
+  /// costo directo ni se le genera plan de pagos (decisión 2).
+  isCoordinator Boolean @default(false)
+
+  /// Pisa priceDouble/priceSingle del viaje para este pasajero (decisión 3).
+  priceOverride       Decimal? @db.Decimal(12, 2)
+  priceOverrideReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  trip                 Trip                     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  person               Person                   @relation(fields: [personId], references: [id], onDelete: Restrict)
+  room                 Room?                    @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  paymentPlan          PaymentPlan?
+  communicationTargets CommunicationRecipient[]
+
+  @@unique([tripId, personId])
+  @@index([tripId, status])
+}
+
+// ------------------------------- Pagos -------------------------------------
+
+model PaymentPlan {
+  id               String   @id @default(uuid()) @db.Uuid
+  passengerId      String   @unique @db.Uuid
+  totalAmount      Decimal  @db.Decimal(12, 2)
+  currency         Currency
+  installmentCount Int
+
+  /// Cotizaciones congeladas al crear el plan. Forma:
+  /// { base: "USD", date: "2026-08-25", rates: { EUR: "0.92", GBP: "0.79" } }
+  /// Los importes de las cuotas NO se recalculan después.
+  fxSnapshot     Json
+  fxSnapshotDate DateTime @db.Date
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  passenger    Passenger     @relation(fields: [passengerId], references: [id], onDelete: Cascade)
+  installments Installment[]
+  payments     Payment[]
+}
+
+model Installment {
+  id      String            @id @default(uuid()) @db.Uuid
+  planId  String            @db.Uuid
+  number  Int
+  dueDate DateTime          @db.Date
+  amount  Decimal           @db.Decimal(12, 2)
+  status  InstallmentStatus @default(PENDIENTE)
+
+  plan      PaymentPlan    @relation(fields: [planId], references: [id], onDelete: Cascade)
+  payments  Payment[]
+  reminders SentReminder[]
+
+  @@unique([planId, number])
+  @@index([status, dueDate])
+}
+
+model Payment {
+  id     String @id @default(uuid()) @db.Uuid
+  planId String @db.Uuid
+  /// Obligatorio para kind=PAGO, nulo para kind=REEMBOLSO (decisión 6).
+  installmentId String? @db.Uuid
+
+  kind     PaymentKind @default(PAGO)
+  amount   Decimal     @db.Decimal(12, 2)
+  currency Currency
+  /// TC usado si la moneda del pago difiere de la del viaje. Lo ingresa el
+  /// coordinador al confirmar, con la cotización del día como sugerencia.
+  fxRateUsed Decimal? @db.Decimal(18, 8)
+  /// Importe imputado, siempre en la moneda del viaje.
+  amountInTripCurrency Decimal @db.Decimal(12, 2)
+
+  method String
+  /// Path interna en el bucket privado. NUNCA una URL.
+  proofFileId String?
+
+  status       PaymentStatus @default(EN_REVISION)
+  reviewedById String?       @db.Uuid
+  reviewedAt   DateTime?
+  notes        String?
+
+  /// Preparado para una pasarela futura. Hoy siempre 'manual'.
+  provider   String  @default("manual")
+  externalId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  plan        PaymentPlan  @relation(fields: [planId], references: [id], onDelete: Cascade)
+  installment Installment? @relation(fields: [installmentId], references: [id], onDelete: SetNull)
+  reviewedBy  User?        @relation("PaymentReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([planId])
+  @@index([status])
+}
+
+/// Garantiza "nunca más de un recordatorio del mismo tipo por cuota".
+/// El "tipo" es el offset en días configurado en Trip.reminderOffsetsDays.
+/// El unique compuesto hace idempotente al cron.
+model SentReminder {
+  id            String   @id @default(uuid()) @db.Uuid
+  installmentId String   @db.Uuid
+  offsetDays    Int
+  sentAt        DateTime @default(now())
+
+  installment Installment @relation(fields: [installmentId], references: [id], onDelete: Cascade)
+
+  @@unique([installmentId, offsetDays])
+}
+
+// -------------------------- Comunicaciones ---------------------------------
+
+model Communication {
+  id     String @id @default(uuid()) @db.Uuid
+  tripId String @db.Uuid
+
+  subjectEs String
+  bodyEs    String
+  subjectEn String?
+  bodyEn    String?
+
+  scheduledFor DateTime?
+  sentAt       DateTime?
+  audience     CommunicationAudience @default(TODOS)
+  status       CommunicationStatus   @default(BORRADOR)
+
+  createdById String?  @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  trip       Trip                     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  createdBy  User?                    @relation("CommunicationCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  recipients CommunicationRecipient[]
+
+  @@index([tripId, status])
+}
+
+/// Una fila por destinatario. Permite envío por lotes desde el cron (el free
+/// tier de Brevo son 300/día y Vercel Hobby corta a los ~10s) y deja
+/// trazabilidad de quién recibió qué.
+model CommunicationRecipient {
+  id              String @id @default(uuid()) @db.Uuid
+  communicationId String @db.Uuid
+  passengerId     String @db.Uuid
+
+  lang   Language
+  status RecipientStatus @default(PENDIENTE)
+  sentAt DateTime?
+  error  String?
+
+  communication Communication @relation(fields: [communicationId], references: [id], onDelete: Cascade)
+  passenger     Passenger     @relation(fields: [passengerId], references: [id], onDelete: Cascade)
+
+  @@unique([communicationId, passengerId])
+  @@index([status])
+}
+
+// ---------------------- Invitaciones y auditoría ---------------------------
+
+/// Se guarda el HASH del token, nunca el token en claro: si se filtra la base
+/// los links siguen sin poder canjearse.
+model Invitation {
+  id          String    @id @default(uuid()) @db.Uuid
+  tripId      String    @db.Uuid
+  email       String
+  tokenHash   String    @unique
+  roomType    RoomType
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdById String?   @db.Uuid
+  createdAt   DateTime  @default(now())
+
+  trip      Trip  @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  createdBy User? @relation("InvitationCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([tripId])
+  @@index([email])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  actorUserId String?  @db.Uuid
+  entity      String
+  entityId    String
+  field       String
+  oldValue    String?
+  newValue    String?
+  createdAt   DateTime @default(now())
+
+  actor User? @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([entity, entityId])
+  @@index([actorUserId])
+}
+
+/// Cache diario de cotizaciones (frankfurter.dev). Se consulta una vez por día
+/// desde el cron, nunca por request.
+///
+/// `date` es la fecha que reporta la API (el BCE publica solo días hábiles),
+/// `fetchedAt` es cuándo la llamamos. La leyenda "cotización del DD/MM/AAAA"
+/// que ve el usuario usa `date`, no `fetchedAt`.
+model FxRate {
+  id        String   @id @default(uuid()) @db.Uuid
+  date      DateTime @db.Date
+  base      Currency
+  rates     Json
+  fetchedAt DateTime @default(now())
+
+  @@unique([date, base])
+  @@index([base, date])
+}
+
+/// Contador de intentos para el rate limiting de login, recuperacion de
+/// contrasena y canje de invitaciones.
+///
+/// Va en la base y no en memoria porque en Vercel cada request puede caer en
+/// una instancia distinta: un contador en memoria no limita nada. Se guarda el
+/// HASH de la clave (accion + identificador) para no persistir emails ni IPs
+/// en claro. Las filas viejas las purga el cron diario.
+model RateLimitHit {
+  id        String   @id @default(uuid()) @db.Uuid
+  keyHash   String
+  createdAt DateTime @default(now())
+
+  @@index([keyHash, createdAt])
+  @@index([createdAt])
+}

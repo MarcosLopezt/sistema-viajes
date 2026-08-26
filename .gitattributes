@@ -1,0 +1,16 @@
+# Normaliza los finales de linea: LF en el repositorio, nativo en el disco.
+# Sin esto, un mismo archivo editado en Windows y en Linux genera diffs
+# completos por el CRLF y las revisiones se vuelven ilegibles.
+* text=auto eol=lf
+
+# Binarios: nunca tocar.
+*.png binary
+*.jpg binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+
+# Generados o vendorizados: se colapsan en los diffs de GitHub.
+package-lock.json linguist-generated=true -diff
+prisma/migrations/**/*.sql linguist-generated=true

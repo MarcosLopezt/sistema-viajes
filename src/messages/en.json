@@ -1,0 +1,129 @@
+{
+  "common": {
+    "appName": "Trips",
+    "loading": "Loading…",
+    "save": "Save",
+    "cancel": "Cancel",
+    "back": "Back",
+    "next": "Next",
+    "close": "Close",
+    "logout": "Log out",
+    "language": "Language",
+    "languageEs": "Español",
+    "languageEn": "English",
+    "skipToContent": "Skip to content"
+  },
+  "nav": {
+    "coordinator": {
+      "sectionLabel": "Coordinator panel",
+      "trips": "Trips",
+      "passengers": "Passengers",
+      "payments": "Payments",
+      "communications": "Messages",
+      "admin": "Administration"
+    },
+    "passenger": {
+      "sectionLabel": "My trip",
+      "home": "Home",
+      "myData": "My details",
+      "myPayments": "My payments",
+      "news": "Updates"
+    }
+  },
+  "auth": {
+    "login": {
+      "title": "Log in",
+      "subtitle": "Enter your email and password.",
+      "email": "Email",
+      "emailPlaceholder": "you@email.com",
+      "password": "Password",
+      "submit": "Log in",
+      "submitting": "Logging in…",
+      "forgotPassword": "I forgot my password",
+      "invalidCredentials": "That email or password isn't right.",
+      "rateLimited": "Too many attempts. Try again in {minutes} minutes.",
+      "genericError": "We couldn't log you in. Please try again in a moment.",
+      "noSelfSignup": "No account? You can only join through the invitation your trip coordinator sends you."
+    },
+    "recover": {
+      "title": "Reset your password",
+      "subtitle": "We'll email you a link to choose a new one.",
+      "email": "Email",
+      "submit": "Send link",
+      "submitting": "Sending…",
+      "sent": "If that email is registered, we've sent a link to create a new password. Please check your inbox.",
+      "backToLogin": "Back to log in",
+      "rateLimited": "You've already requested several links. Please wait an hour before asking for another."
+    },
+    "reset": {
+      "title": "Choose your new password",
+      "subtitle": "It needs at least 8 characters.",
+      "password": "New password",
+      "passwordConfirm": "Repeat password",
+      "submit": "Save password",
+      "submitting": "Saving…",
+      "success": "All set. You can now log in with your new password.",
+      "mismatch": "Both passwords need to match.",
+      "tooShort": "The password needs at least 8 characters.",
+      "linkExpired": "This link has expired. Request a new one from \"I forgot my password\"."
+    }
+  },
+  "passengerHome": {
+    "greeting": "Hello, {name}",
+    "myDataTitle": "My details",
+    "myDataComplete": "Your details are complete.",
+    "myDataIncomplete": "You still have {percent}% to fill in.",
+    "myDataAction": "Complete my details",
+    "myPaymentsTitle": "My payments",
+    "myPaymentsAction": "Upload receipt",
+    "newsTitle": "Updates",
+    "newsEmpty": "No updates about the trip yet.",
+    "myPaymentsEmpty": "Nothing to pay yet. Your coordinator will let you know when it is ready."
+  },
+  "coordinatorHome": {
+    "title": "My trips",
+    "emptyTitle": "You haven't created a trip yet.",
+    "emptyBody": "Start here: set up the trip, add the itinerary and the costs, then invite your passengers.",
+    "emptyAction": "Create a trip",
+    "passengerCount": "{count} of {budgeted} passengers"
+  },
+  "tripStatus": {
+    "BORRADOR": "Draft",
+    "ABIERTO": "Open",
+    "CERRADO": "Closed",
+    "FINALIZADO": "Completed"
+  },
+  "admin": {
+    "title": "Administration",
+    "userCount": "{count, plural, =0 {No users} one {# user} other {# users}}",
+    "tripCount": "{count, plural, =0 {no trips} one {# trip} other {# trips}}"
+  },
+  "passport": {
+    "ok": "Passport is fine",
+    "warning": "Check your passport",
+    "blocking": "Your passport won't work for this trip",
+    "missing": "Passport expiry date is missing",
+    "blockingDetail": "Your passport expires on {expiry}, before the trip ends ({tripEnd}). You'll need to renew it in order to travel.",
+    "warningDetail": "Your passport expires on {expiry}. Many countries require it to stay valid for at least {months} months after you return. It's worth renewing it.",
+    "blockingByPolicyDetail": "Your passport expires on {expiry}. For this destination it must stay valid for at least {months} months after you return, that is until {minimumDate}. You'll need to renew it.",
+    "missingDetail": "Please add your passport expiry date so we can confirm your place on the trip."
+  },
+  "errors": {
+    "unauthorizedTitle": "You need to log in",
+    "unauthorizedBody": "Log in with your email and password to see this page.",
+    "forbiddenTitle": "We couldn't find this page",
+    "forbiddenBody": "The link may be wrong, or you may not have access to this.",
+    "notFoundTitle": "We couldn't find this page",
+    "notFoundBody": "Check the link, or go back to the home page.",
+    "genericTitle": "Something went wrong",
+    "genericBody": "Please try again in a moment. If it keeps happening, let your coordinator know.",
+    "backHome": "Back to home",
+    "retry": "Try again"
+  },
+  "validation": {
+    "required": "This one is required.",
+    "invalidEmail": "Please write a valid email, with an @ sign.",
+    "invalidDate": "Please write the date as dd/mm/yyyy.",
+    "invalidPhone": "Please include the country code, for example +44 7700 900123."
+  }
+}
