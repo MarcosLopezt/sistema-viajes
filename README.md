@@ -395,7 +395,437 @@ Y a mano, que es donde se ven los problemas de verdad:
 2. **Abrir un comprobante de pago** desde la aplicación. Si da 404, faltan archivos del paso 5.
 3. Mirar el **% de completitud** de un pasajero que tenía certificado cargado.
 
-### Qué encontramos al probarlo
+### La restauración completa, probada
+
+El ciclo entero se corrió contra un **Postgres 17 en Docker**, con los mismos flags que usa el workflow. Resultados:
+
+| Paso | Resultado |
+|---|---|
+| `pg_dump` del schema `public` | 154.474 bytes |
+| `pg_dump` de `auth.users` + `auth.identities` | 10.713 bytes · 6 usuarios · 6 identidades |
+| `DROP SCHEMA public CASCADE` + restaurar datos | **22 tablas, 0 errores** |
+| Restaurar las cuentas (paso 4) | **0 errores** |
+| Correr el paso 4 **una segunda vez** | 0 errores, siguen siendo 6 usuarios |
+
+Verificado en el destino:
+
+```
+usuarios en auth.users:       6
+identidades:                  6
+con contraseña no vacía:      6
+con email confirmado:         6
+filas en public."User":       6
+ids que cruzan auth <-> public: 6      ← el vínculo del que depende el login
+```
+
+Y las contraseñas llegaron intactas, no solo presentes: el `md5()` de todos los `encrypted_password` concatenados **coincide exactamente** entre origen y destino (`c8cbb6a7…`). Los hashes son bcrypt (`$2a# Sistema de viajes grupales
+
+Aplicación para organizar viajes grupales cerrados (14 pasajeros + 2 coordinadores): armado del presupuesto, alta y autogestión de pasajeros, cobro y seguimiento de pagos, y comunicaciones por mail.
+
+**Estado: Fase 6 (cierre) terminada.** Ver [Qué hay hecho](#qué-hay-hecho-y-qué-no).
+
+| Si venís a… | Andá a |
+|---|---|
+| **usar** el sistema | [Operación](#operación--guía-para-usar-el-sistema) — escrita para quien no programa |
+| **ponerlo en producción** | [DEPLOY.md](DEPLOY.md) — checklist paso a paso |
+| **desarrollarlo** | [Setup desde cero](#setup-desde-cero) y [Arquitectura](#arquitectura) |
+| **restaurar un backup** | [Backups](#backups) |
+| **entender en qué estado está** | [ESTADO.md](ESTADO.md) — qué falta verificar y qué no hay que "arreglar" |
+
+---
+
+## Stack
+
+| Pieza | Elección |
+|---|---|
+| Framework | Next.js 16 (App Router) + TypeScript estricto |
+| Base de datos | PostgreSQL en Supabase · Prisma 7 con adapter `pg` |
+| Auth | Supabase Auth (email + contraseña) · roles en tabla propia |
+| Storage | Supabase Storage, bucket privado, solo signed URLs |
+| Estilos | Tailwind v4 + shadcn/ui (re-themeado, ver [UX](#decisiones-de-ux-que-están-en-el-código)) |
+| i18n | next-intl · `es` (default) y `en` |
+| Mail | Interfaz `EmailProvider` · adaptadores `console` y `brevo` |
+| Tests | Vitest |
+| Deploy | Vercel · cron por Vercel Cron |
+
+---
+
+## Setup desde cero
+
+### 1. Requisitos
+
+- Node.js 22 o superior
+- Una cuenta de [Supabase](https://supabase.com) (free tier alcanza)
+- Opcional para mandar mails de verdad: una cuenta de [Brevo](https://www.brevo.com) (free tier: 300 mails/día)
+
+### 2. Clonar e instalar
+
+```bash
+git clone <url-del-repo>
+cd sistema-viajes
+npm install
+```
+
+`npm install` dispara `prisma generate`, que crea el cliente en `src/generated/prisma`. Ese directorio **no se versiona**: se regenera siempre desde el schema.
+
+### 3. Crear el proyecto en Supabase
+
+1. Creá un proyecto nuevo. Guardá la contraseña de la base: se muestra una sola vez.
+2. **Storage** → creá un bucket llamado `documentos` y dejalo **privado** (sin acceso público). Ahí van los comprobantes de pago y los certificados de cobertura médica.
+3. **Project Settings → API** → copiá `Project URL`, la `anon key` y la `service_role key`.
+4. **Project Settings → Database → Connection string** → copiá las dos variantes (ver abajo por qué hacen falta las dos).
+
+### 4. Variables de entorno
+
+```bash
+cp .env.example .env
+```
+
+Completá `.env` con los valores del paso anterior. Cada variable está documentada en `.env.example`.
+
+Para generar el `CRON_SECRET`:
+
+```bash
+openssl rand -base64 32
+```
+
+### 5. Crear las tablas y cargar datos de ejemplo
+
+```bash
+npm run db:migrate    # crea el schema en Supabase
+npm run db:seed       # carga el viaje de ejemplo
+```
+
+### 6. Arrancar
+
+```bash
+npm run dev
+```
+
+Abrí <http://localhost:3000>. Redirige a `/es` y de ahí al login.
+
+### 7. Verificar que está todo bien
+
+```bash
+npm run verify
+```
+
+Corre, en orden: paridad de traducciones, typecheck, lint y tests. Es lo mismo que conviene correr antes de cada commit.
+
+---
+
+## Usuarios de ejemplo
+
+El seed crea estos usuarios. Si `SUPABASE_SERVICE_ROLE_KEY` está configurada, también los crea en Supabase Auth y se puede iniciar sesión con ellos.
+
+| Email | Rol | Para qué sirve |
+|---|---|---|
+| `admin@ejemplo.test` | ADMIN | Ve todos los viajes y el panel de administración |
+| `coordinador@ejemplo.test` | Coordinador | Panel del viaje de ejemplo |
+| `ana@ejemplo.test` | Pasajera | Datos completos, pasaporte 🟢, plan de 3 cuotas: una con pago confirmado, una vencida sin pagar y una a futuro |
+| `beto@ejemplo.test` | Pasajero | Pasaporte 🟡 (vence dentro de los 3 meses posteriores), pago en revisión, interfaz en inglés |
+| `carla@ejemplo.test` | Pasajera | Pasaporte 🔴: el sistema **no** deja confirmarla |
+| `diego@ejemplo.test` | Pasajero | Datos a medio cargar: sirve para ver el % de completitud |
+
+Contraseña de todos: `viajes-demo-2026`. **Solo para desarrollo.**
+
+---
+
+## Operación · guía para usar el sistema
+
+Esta sección es para quien **usa** el sistema, no para quien lo programa. No hace falta saber nada de código para seguirla.
+
+### Los tres roles
+
+| Rol | Qué puede hacer |
+|---|---|
+| **Pasajero** | Ver y completar sus propios datos, ver sus pagos, informar una transferencia, leer las novedades. Nada más: no ve datos de otros pasajeros ni ningún número de costos. |
+| **Coordinador** | Todo lo del viaje que coordina: armar el presupuesto, invitar, revisar pagos, mandar comunicaciones, exportar planillas. |
+| **Administrador** | Lo mismo en todos los viajes, más la gestión de usuarios y el historial de cambios. |
+
+Una misma persona puede ser coordinadora de un viaje y pasajera de otro. El sistema lo resuelve solo.
+
+---
+
+### Cómo crear un viaje
+
+1. Entrá a **Viajes** y apretá **Nuevo viaje**.
+2. Se abre un asistente de cinco pasos. **Se va guardando solo**: podés cerrarlo a la mitad y seguir después, no se pierde nada.
+   - **General** — nombre, fechas, cuántos pasajeros esperás.
+   - **Itinerario** — ciudades y fechas.
+   - **Hospedajes** — dónde duerme el grupo.
+   - **Costos** — lo que pagás vos: aéreos, hoteles, traslados, guías.
+   - **Precios** — cuánto le cobrás a cada pasajero. Acá ves el margen en vivo mientras escribís.
+3. Cuando esté listo, cambiá el estado de **Borrador** a **Publicado**.
+
+> Mientras el viaje está en **Borrador** no se puede invitar a nadie. Es a propósito: evita mandar una invitación a un viaje con los precios a medio cargar.
+
+**Sobre los precios.** El precio se fija por tipo de habitación (compartida e individual). Si con alguien puntual acordás otro precio, se cambia en su ficha, con un motivo escrito. Ese cambio queda registrado con tu nombre y la fecha.
+
+---
+
+### Cómo invitar a alguien
+
+1. Entrá al viaje → pestaña **Pasajeros** → **Invitaciones**.
+2. Escribí el email y elegí si va en habitación compartida o individual.
+3. Apretá **Invitar**.
+
+El sistema hace dos cosas: manda un mail con el link, y **te muestra el link en pantalla**. Copiálo. En la práctica la mayoría de la gente lo recibe mejor por WhatsApp que por mail, y además así tenés el link aunque el mail no salga.
+
+**El link vence a los 7 días.** Si venció, o si la persona lo perdió, usá **Reenviar**: eso genera un link nuevo y anula el anterior.
+
+Cuando la persona entra por el link, elige una contraseña y ya está adentro. No hay que darle de alta a mano.
+
+---
+
+### Cómo revisar un pago
+
+Cuando un pasajero informa una transferencia, el pago queda **En revisión**. No se descuenta de su saldo hasta que vos lo confirmes.
+
+1. Entrá al viaje → **Pagos** → pestaña **Por revisar**.
+2. Cada renglón muestra quién pagó, cuánto declaró, de qué cuota, y el comprobante que subió.
+3. Abrí el comprobante y compará con tu extracto bancario.
+4. Si coincide: **Confirmar**. Si el pasajero pagó en otra moneda, poné **el tipo de cambio real de tu extracto**, no el sugerido — el sugerido es una estimación para que el pasajero vea algo mientras espera.
+5. Si no coincide: **Rechazar**, y escribí el motivo. El pasajero lo ve tal cual lo escribas, así que conviene ser concreto: «el comprobante es de otra cuenta» sirve, «rechazado» no.
+
+**Si te equivocaste al confirmar**, hay un botón para deshacer. Queda registrado, como todo.
+
+**El semáforo**, en la lista de pasajeros:
+
+- 🟢 **Verde** — al día.
+- 🟡 **Amarillo** — tiene una cuota por vencer pronto, o un comprobante esperando que lo revises.
+- 🔴 **Rojo** — tiene al menos una cuota vencida sin pagar.
+
+---
+
+### Cómo exportar las planillas
+
+En **Pasajeros** y en **Pagos** hay botones de descarga. Salen tres planillas de Excel:
+
+| Planilla | Para qué |
+|---|---|
+| **Listado de pasajeros** | La que le mandás al hotel o al mayorista: nombres, nacionalidad, documento, pasaporte y vencimiento, restricciones alimenticias y de movilidad, contacto de emergencia y habitación. |
+| **Rooming list** | Quién duerme con quién. Al final lista a los que todavía no tienen habitación asignada: si esa parte tiene gente, la lista todavía no está para mandar. |
+| **Estado de pagos** | Por pasajero: total, pagado, saldo, cuotas vencidas y próximo vencimiento. |
+
+**Las tres traen la fecha y hora de generación en la primera fila.** Está puesto ahí a propósito: el archivo se manda por mail y se mira semanas después, cuando ya hay tres versiones dando vueltas.
+
+> Estas planillas tienen **datos personales**: pasaportes, contactos de emergencia, información de salud. Cada descarga queda registrada con tu nombre. Mandalas solo a quien las necesita y no las dejes en carpetas compartidas.
+
+---
+
+### Qué hacer si un mail no llega
+
+Lo primero: **el sistema nunca depende de un mail para funcionar**. Todo lo que se avisa por mail también está en la pantalla del pasajero.
+
+Por orden, de lo más común a lo menos:
+
+1. **Que mire spam.** Es la causa en la enorme mayoría de los casos.
+2. **Verificá que el email esté bien escrito.** En la lista de invitaciones se ve la dirección a la que se mandó.
+3. **Mandale el link por WhatsApp.** Para invitaciones, el link está en pantalla cuando la creás, y también con **Reenviar**.
+4. **Si es un recordatorio de cuota o una novedad**, decile que entre al sistema: lo va a ver igual en su pantalla de inicio.
+5. **Si no le llega ningún mail a nadie**, es un problema del proveedor de envío (Brevo). Entrá a tu cuenta de Brevo y mirá si quedaste sin créditos del plan gratuito o si hay algún aviso. Ese es el único caso que necesita ayuda técnica.
+
+**Un aviso nunca se manda dos veces.** El sistema anota qué mandó, así que si algo falla y se reintenta, nadie recibe el mismo recordatorio dos veces.
+
+---
+
+### Cosas que conviene saber
+
+**Un pasajero no pasa a Confirmado hasta que sus datos estén completos.** Falta un campo obligatorio o el certificado de cobertura médica, y el botón no se habilita. La ficha muestra exactamente qué falta.
+
+**Los pasaportes se avisan solos.** El sistema calcula si el pasaporte alcanza para el viaje según los meses de validez que hayas configurado, y avisa al pasajero cuando está justo o vencido.
+
+**Si le cambiás el precio a un viaje, los planes de pago ya generados NO cambian.** Es deliberado: a alguien que ya pagó dos cuotas no se le reescribe la deuda. La pantalla de precios te dice cuántos pasajeros ya tienen plan.
+
+**Todo cambio de precio y de estado de pago queda registrado**, con quién lo hizo y cuándo. Un administrador lo ve en **Administración → Auditoría**, con filtros por fecha y por persona.
+
+---
+
+## Base de datos
+
+### Por qué hay dos connection strings
+
+Supabase expone dos y las dos hacen falta:
+
+| Variable | Puerto | Quién la usa |
+|---|---|---|
+| `DATABASE_URL` | 6543 · transaction pooler | La app en runtime |
+| `DIRECT_URL` | 5432 · session pooler | `prisma migrate`, `prisma db seed`, `pg_dump` |
+
+Las migraciones tienen que ir por `DIRECT_URL`: contra el transaction pooler fallan con errores crípticos sobre prepared statements, y `pg_dump` directamente no funciona.
+
+`prisma7.config.ts` (que lee solo el CLI) usa `DIRECT_URL`. `src/lib/db/prisma.ts` (runtime) usa `DATABASE_URL`.
+
+### El límite de conexiones va en código, no en la URL ⚠️
+
+Esto cambió con Prisma 7 y **no es evidente**.
+
+Los parámetros `?pgbouncer=true&connection_limit=1` eran directivas del motor de consultas propio de Prisma. Prisma 7 lo eliminó: ahora habla con Postgres a través del driver `pg`, y **`pg` no conoce esos parámetros**. `pg-connection-string` los parsea como propiedades sueltas sin significado y los ignora:
+
+```
+pg-connection-string ve: { pgbouncer: "true", connection_limit: "1", host: …, port: "6543" }
+pg.Pool.options.max     → 10   ← el default de pg, NO el 1 de la URL
+```
+
+Diez conexiones **por instancia**. En Vercel, con varias lambdas concurrentes, eso agota el cupo del free tier de Supabase. El síntoma aparece solo bajo concurrencia y es intermitente, que es la peor forma de enterarse.
+
+Por eso [`src/lib/db/prisma.ts`](src/lib/db/prisma.ts) construye un `pg.Pool` explícito:
+
+- **`max: 1`**, en código. El pooler de Supabase ya multiplexa del otro lado: abrir más conexiones desde la app no da paralelismo, solo consume cupo.
+- **El pool y el cliente se cachean en `globalThis`.** Nunca se crea un pool por request. Sirve para dos cosas a la vez: el hot reload de Next en desarrollo y el reuso entre invocaciones de una lambda tibia en producción.
+- **Al adapter se le pasa el `Pool` ya construido**, no un `connectionString`. Si se le pasara la URL, `PrismaPg` armaría su propio pool con los defaults y perderíamos el `max: 1`.
+- `idleTimeoutMillis: 10s` (el pooler corta las ociosas por su cuenta), `connectionTimeoutMillis: 10s` (para fallar con un error accionable en vez de colgarse) y `allowExitOnIdle` (para que el seed y el cron terminen).
+
+Para comprobarlo en cualquier momento:
+
+```bash
+npm run check:db
+```
+
+Verifica los puertos, demuestra que `pg` ignora el `connection_limit` de la URL, y lanza 25 consultas en paralelo confirmando que se abre **una sola** conexión.
+
+> **Contrapartida medida:** con `max: 1` las consultas concurrentes dentro de un mismo request se serializan. Cinco `count()` en `Promise.all` tardan ~2,4 s contra Supabase en lugar de ~500 ms. Es el precio de no agotar el cupo y, para este volumen (14 pasajeros), está bien pagado. Si alguna pantalla llegara a sentirse lenta, subir `max` a 3 es la primera perilla: el transaction pooler admite muchas más conexiones de cliente de las que multiplexa contra Postgres, así que es seguro. El panel de costo en vivo del wizard no toca la base (calcula con funciones puras en el cliente), así que no lo afecta.
+
+### Comandos
+
+```bash
+npm run db:migrate     # crear y aplicar una migración en desarrollo
+npm run db:deploy      # aplicar migraciones en producción
+npm run db:seed        # cargar datos de ejemplo (borra y recrea el viaje demo)
+npm run db:studio      # explorador visual de la base
+npm run db:reset       # ⚠️ borra TODO y vuelve a migrar + seed
+```
+
+### Si Supabase pausa el proyecto por inactividad
+
+El free tier **pausa los proyectos tras ~7 días sin actividad**. Cuando pasa, la app deja de conectar.
+
+Para despausarlo:
+
+1. Entrá a <https://supabase.com/dashboard>.
+2. El proyecto aparece con el cartel *Paused*. Tocá **Restore project**.
+3. Tarda unos minutos. Los datos **no se pierden** al pausarse.
+
+Para que no vuelva a pasar, el cron diario (fase 5) hace una consulta trivial a la base que cuenta como actividad. Mientras el cron no exista, alcanza con abrir la app o el Studio una vez por semana.
+
+---
+
+## Backups
+
+El free tier de Supabase **no hace backups automáticos**. El workflow [`.github/workflows/backup.yml`](.github/workflows/backup.yml) corre todos los domingos y guarda las **tres** piezas que hacen falta para volver a tener un sistema que funcione:
+
+| Pieza | Qué es | Sin esto, al restaurar… |
+|---|---|---|
+| schema `public` | viajes, pasajeros, pagos, comunicaciones | no hay datos |
+| `auth.users` + `auth.identities` | las cuentas, **con las contraseñas** | la base está íntegra y **nadie puede iniciar sesión** |
+| objetos del Storage | certificados médicos y comprobantes | los paths apuntan a archivos que no existen |
+
+Las tres van juntas en un solo `.tar.gz` cifrado con AES-256. Van juntas a propósito: separadas, tarde o temprano alguien restaura la base sin los archivos.
+
+> 🔴 **El backup contiene hashes de contraseña.** `auth.users` incluye `encrypted_password`, que es justamente lo que permite que después de restaurar la gente entre con su contraseña de siempre. La consecuencia es que el cifrado no es una precaución opcional: es lo único que separa a este archivo de una filtración de credenciales. `BACKUP_PASSPHRASE` no puede vivir solo en GitHub.
+
+### Configuración
+
+En **Settings → Secrets and variables → Actions** del repositorio:
+
+| Secreto | Valor |
+|---|---|
+| `BACKUP_DATABASE_URL` | Connection string **directa** (puerto 5432). `pg_dump` no funciona contra el pooler. |
+| `BACKUP_PASSPHRASE` | Frase larga para cifrar. **Guardala también fuera de GitHub**: sin ella el backup es irrecuperable. |
+| `BACKUP_SUPABASE_URL` | `https://<proyecto>.supabase.co` |
+| `BACKUP_SERVICE_ROLE_KEY` | Service role. El bucket es privado: la anon key no lo lee. |
+| `BACKUP_STORAGE_BUCKET` | Opcional. Por defecto `documentos`. |
+
+> ⚠️ Los workflows programados de GitHub **se desactivan solos tras 60 días sin actividad en el repositorio**. GitHub avisa por mail antes; alcanza con volver a habilitarlo desde la pestaña Actions. Es exactamente por eso que el cron diario de la aplicación va por Vercel Cron y no por GitHub Actions.
+
+El workflow se verifica a sí mismo cada semana: falla si falta un secreto, si el dump de `auth` no trajo ningún usuario, si algún objeto del Storage no se pudo bajar, si el archivo final pesa menos de 1 KB, y **si el resultado no se puede volver a descifrar**. Ese último paso existe porque un backup que no abre es un archivo inútil con nombre tranquilizador, y eso conviene descubrirlo un domingo cualquiera y no el día del incidente.
+
+### Cómo restaurar
+
+El procedimiento completo, en orden. **El orden importa**: los archivos del Storage se suben al final, porque los paths que quedan escritos en la base tienen que existir después.
+
+**1 · Bajar y abrir el backup**
+
+```bash
+gpg --batch --decrypt --passphrase "<BACKUP_PASSPHRASE>" \
+    --output backup.tar.gz backup-2026-08-23.tar.gz.gpg
+mkdir restore && tar -xzf backup.tar.gz -C restore
+ls restore          # public.sql  auth.sql  storage/
+```
+
+**2 · Sacar el schema `public` del destino ANTES de restaurar**
+
+```bash
+psql "<connection-string-directa-del-destino>" -c 'DROP SCHEMA IF EXISTS public CASCADE'
+```
+
+> ⚠️ Este paso no es opcional y es fácil de pasar por alto. El dump incluye su
+> propio `CREATE SCHEMA public` (porque en Supabase ese schema pertenece a un
+> rol propio). Contra una base nueva —que ya trae un `public` vacío— la
+> restauración aborta con `ERROR: schema "public" already exists`. Corriendo
+> `psql` sin `ON_ERROR_STOP=1` el error pasa desapercibido y la restauración
+> queda a medias, que es peor.
+
+**3 · Restaurar los datos**
+
+```bash
+psql "<connection-string-directa-del-destino>" -v ON_ERROR_STOP=1 -f restore/public.sql
+```
+
+`ON_ERROR_STOP=1` es a propósito: preferís que falle ruidosamente a que te deje una base incompleta.
+
+**4 · Restaurar las cuentas**
+
+```bash
+psql "<connection-string-directa-del-destino>" -v ON_ERROR_STOP=1 -f restore/auth.sql
+```
+
+El dump es `--data-only` sobre `auth.users` y `auth.identities`, con `--column-inserts` y `ON CONFLICT DO NOTHING`. Eso significa tres cosas:
+
+- El schema `auth` **tiene que existir ya** en el destino. En un proyecto Supabase nuevo existe desde el minuto cero: no hay que crearlo.
+- Las cuentas que ya existan en el destino no se pisan.
+- Como cada `INSERT` nombra sus columnas, el dump sigue aplicando aunque el destino corra una versión de GoTrue con columnas nuevas.
+
+No se restauran `auth.sessions` ni `auth.refresh_tokens`: son estado efímero, y lo único que lograrían es revivir sesiones viejas. La gente vuelve a iniciar sesión con su contraseña de siempre.
+
+**5 · Restaurar los archivos**
+
+```bash
+export NEXT_PUBLIC_SUPABASE_URL="https://<proyecto-destino>.supabase.co"
+export SUPABASE_SERVICE_ROLE_KEY="<service-role-del-destino>"
+export SUPABASE_STORAGE_BUCKET="documentos"
+
+npx tsx scripts/restore-storage.ts restore/storage
+```
+
+> ⚠️ Verificá dos veces a qué proyecto apunta `NEXT_PUBLIC_SUPABASE_URL`. El script sube con `upsert: true`: contra el proyecto equivocado pisa archivos buenos.
+
+El bucket tiene que existir y ser **privado**. Si es un proyecto nuevo, creálo antes — ver [DEPLOY.md](DEPLOY.md).
+
+**6 · Verificar**
+
+```bash
+npm run check:db      # cuenta filas por tabla
+```
+
+Y a mano, que es donde se ven los problemas de verdad:
+
+1. **Iniciar sesión** con un usuario real. Si esto falla, el paso 4 no salió bien.
+2. **Abrir un comprobante de pago** desde la aplicación. Si da 404, faltan archivos del paso 5.
+3. Mirar el **% de completitud** de un pasajero que tenía certificado cargado.
+
+).
+
+Los datos de negocio coinciden uno a uno con el origen: 1 viaje, 7 personas, 6 pasajeros, 5 cuotas.
+
+> ⚠️ **Lo que la prueba dejó al descubierto:** un Postgres pelado **no tiene el schema `auth`**. Ese schema lo crea Supabase, no Postgres. El dump de cuentas es `--data-only`, así que restaurarlo contra una base que no sea un proyecto Supabase falla con `relation "auth.users" does not exist`.
+>
+> Para la prueba hubo que recrear la forma del destino a mano —un `CREATE SCHEMA auth` más un `pg_dump --schema-only` de esas dos tablas— y **ese paso no es parte del procedimiento**: contra un proyecto Supabase real, que es el destino previsto, el schema ya existe. Está dicho arriba en el paso 4, y ahora está comprobado por qué importa.
+
+Lo único que sigue sin poder probarse localmente es el **inicio de sesión de punta a punta**, porque eso lo resuelve GoTrue y GoTrue solo corre dentro de Supabase. Lo que sí quedó demostrado es todo lo que el login necesita: la cuenta existe, el hash de contraseña es idéntico al original, el mail figura como confirmado, y el `id` cruza con `public."User"`.
+
+### Lo que encontramos al escribir el backup del Storage
 
 El ciclo del **Storage** se probó de punta a punta contra el proyecto real: se subieron tres objetos en carpetas anidadas, se corrió `backup-storage.ts`, se borraron del bucket, se corrió `restore-storage.ts` y se volvieron a bajar para comparar. Los tres volvieron **idénticos byte a byte**, y después se limpiaron los archivos de prueba.
 
@@ -406,9 +836,7 @@ Dos cosas aparecieron al escribirlo, y las dos habrían producido un backup inco
 
 El dump de **Auth** se verificó contra la base real: el rol de la connection string lee `auth.users` (35 columnas, `encrypted_password` incluida) y `auth.identities`, y las cuentas coinciden una a una con `public."User"` (6 y 6). Eso confirma que un `pg_dump` de esas dos tablas es el enfoque correcto y que no hace falta la API de administración.
 
-> ⏳ **Lo que todavía NO se probó:** la restauración completa de base + Auth contra un Postgres limpio, con login posterior. Requiere Docker corriendo, y en la máquina donde se escribió esto el daemon estaba apagado. La parte de datos (`public.sql`) sí se probó en la fase 2 con los mismos flags contra un Postgres 17 en Docker; lo que queda pendiente de verificar es el paso 4 y el inicio de sesión después de restaurar.
-
-La prueba de la fase 2, que sigue valiendo para `public.sql`:
+La prueba de la fase 2, con la que se verificó además que el cifrado no pierde nada:
 
 ```
 pg_dump (Supabase, puerto 5432)  →  44.522 bytes
@@ -417,7 +845,7 @@ gpg -d + gunzip                  →  44.522 bytes  (idéntico al original)
 psql -v ON_ERROR_STOP=1          →  sin errores
 ```
 
-Verificado en la base restaurada: 21 tablas, 15 enums, 25 foreign keys, 52 índices, y las filas coincidiendo una a una con el origen. Los `Decimal` conservan la escala (`3990.00`, `1330.00`), las fechas y los enums quedan intactos, y los acentos también (`Londres, París y Roma`).
+Verificado en la base restaurada: 21 tablas (hoy son 22: `SentNotification` se agregó en la fase 5), 15 enums, 25 foreign keys, 52 índices, y las filas coincidiendo una a una con el origen. Los `Decimal` conservan la escala (`3990.00`, `1330.00`), las fechas y los enums quedan intactos, y los acentos también (`Londres, París y Roma`).
 
 Conviene repetirlo cada tanto: un backup que nunca se restauró es una hipótesis, no un backup.
 
@@ -1187,7 +1615,6 @@ Las transiciones son explícitas (`BORRADOR → ABIERTO → CERRADO → FINALIZA
 
 | Pendiente | Detalle |
 |---|---|
-| Probar la restauración completa de base + Auth | Requiere Docker. La parte de Storage sí se probó de punta a punta; ver [§Backups](#backups). |
 | Tests de integración contra Postgres local | 17 minutos de suite son latencia de red, no código. Ver la nota en [§Comandos](#comandos). |
 
 ### Fuera de alcance

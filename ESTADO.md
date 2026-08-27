@@ -81,15 +81,17 @@ El checklist para desplegarlo está en [DEPLOY.md](DEPLOY.md), con una sección 
 
 **Por qué no se hizo:** hoy 17 minutos es tolerable. Con el doble de tests no lo va a ser. Si te encontrás evitando correr la suite porque tarda, ese es el momento.
 
-### La restauración completa del backup no se probó
+### ~~La restauración completa del backup no se probó~~ · RESUELTA el 27/08/2026
 
-El backup guarda tres piezas: los datos, las cuentas de Supabase Auth (con las contraseñas) y los archivos del Storage.
+El backup guarda tres piezas, y **las tres están verificadas**:
 
-- ✅ **Storage: probado de punta a punta.** Se subieron objetos al bucket real, se respaldaron, se borraron, se restauraron y se volvieron a bajar para comparar: idénticos byte a byte.
-- ✅ **Datos (`public.sql`): probado** en la fase 2 contra un Postgres 17 en Docker, con los mismos flags.
-- ⏳ **Cuentas de Auth: NO probado.** Se verificó que las tablas se pueden leer y que el enfoque es correcto, pero nunca se restauraron contra una base limpia ni se probó iniciar sesión después.
+- ✅ **Storage.** Se subieron objetos al bucket real, se respaldaron, se borraron, se restauraron y se volvieron a bajar para comparar: idénticos byte a byte.
+- ✅ **Datos (`public.sql`).** Restaurados contra un Postgres 17 limpio en Docker: 22 tablas, cero errores.
+- ✅ **Cuentas de Auth.** Restauradas con el paso 4 del procedimiento: 6 de 6 usuarios, con el mail confirmado, con los `id` cruzando contra `public."User"`, y con los hashes de contraseña **idénticos al origen** (mismo `md5()` de todos concatenados). Correr el paso dos veces no duplica nada.
 
-> **Cómo marcar esto como resuelto:** correr el procedimiento completo de [README §Backups](README.md#cómo-restaurar) contra un Postgres limpio, incluido el paso 4 (`auth.sql`), y confirmar que se puede **iniciar sesión** con un usuario restaurado. Cuando eso pase, cambiá el ⏳ por ✅ y borrá este recuadro.
+Queda una sola cosa que no se puede probar fuera de Supabase: **el inicio de sesión de punta a punta**, porque lo resuelve GoTrue y GoTrue solo corre dentro de Supabase. Lo que sí está demostrado es todo lo que el login necesita para funcionar.
+
+La prueba dejó al descubierto algo que conviene saber antes de una emergencia: **un Postgres pelado no tiene el schema `auth`** —lo crea Supabase—, y el dump de cuentas es `--data-only`. Restaurar contra algo que no sea un proyecto Supabase falla con `relation "auth.users" does not exist`. El detalle está en [README §Backups](README.md#la-restauración-completa-probada).
 
 ### Sin dominio propio, los mails pueden caer en spam
 
