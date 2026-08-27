@@ -519,7 +519,12 @@
     "noProof": "Sin comprobante",
     "transferredOn": "Transferido el {date}",
     "reviewedOn": "Revisado el {date}",
-    "pendingProofOnOverdue": "Vencida, con un comprobante en revisión"
+    "pendingProofOnOverdue": "Vencida, con un comprobante en revisión",
+    "fxSource": {
+      "SUGERIDO": "cotización del día",
+      "INGRESADO": "tipo de cambio del extracto"
+    },
+    "fxSourceLegacy": "sin registro de procedencia"
   },
   "myPayments": {
     "title": "Mis pagos",
@@ -609,6 +614,10 @@
     "refundDate": "Fecha",
     "refundReason": "Motivo",
     "refundSubmit": "Registrar reembolso",
-    "paymentsOf": "Pagos de {name}"
+    "paymentsOf": "Pagos de {name}",
+    "expectedHelp": "Suma de los planes activos. No incluye cancelados.",
+    "expectedPartial": "No incluye a {count, plural, =1 {1 pasajero sin plan} other {# pasajeros sin plan}}.",
+    "cancelledNote": "{count, plural, =1 {1 pasajero cancelado} other {# pasajeros cancelados}} con plan · {amount} recibidos, fuera del total.",
+    "reviewFxTouched": "Vas a guardar este TC como tomado del extracto."
   }
 }

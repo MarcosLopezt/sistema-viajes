@@ -32,7 +32,13 @@ import {
   type FxSnapshot,
 } from "@/lib/domain/fx";
 import { toDecimal, ZERO, roundToCents, sum } from "@/lib/domain/money";
-import { toBusinessDate, toIsoDate } from "@/lib/validation/trip";
+import {
+  calendarDateIn,
+  fromCalendarDate,
+  toCalendarDate,
+  type CalendarDate,
+} from "@/lib/domain/calendar";
+import { toIsoDate } from "@/lib/validation/trip";
 import type {
   ConfirmPaymentInput,
   DeclarePaymentInput,
@@ -58,6 +64,13 @@ import type {
  *
  * Los estados de las cuotas NO se leen de la base: se derivan con
  * `derivePlan()`, la misma función pura que usa el listado y la ficha.
+ *
+ * ── Dónde se decide qué día es "hoy" ──────────────────────────────────────
+ *
+ * Acá, y en un solo lugar: `calendarDateIn(now, trip.timezone)`. Las
+ * funciones públicas reciben un `now: Date` porque en el borde del sistema lo
+ * que hay es un instante, pero ese instante se convierte a fecha de
+ * calendario antes de tocar el dominio. El motor no acepta instantes.
  */
 
 export class PaymentError extends Error {
@@ -110,6 +123,7 @@ const PLAN_SELECT = {
       amount: true,
       currency: true,
       fxRateUsed: true,
+      fxRateSource: true,
       amountInTripCurrency: true,
       transferDate: true,
       method: true,
@@ -131,6 +145,8 @@ export interface PaymentRecord {
   amount: string;
   currency: Currency;
   fxRateUsed: string | null;
+  /** Si ese TC lo tipeó el coordinador o quedó el sugerido. */
+  fxRateSource: "SUGERIDO" | "INGRESADO" | null;
   /** Importe imputado, en la moneda del viaje. */
   amountInTripCurrency: string;
   transferDate: Date;
@@ -144,7 +160,8 @@ export interface PaymentRecord {
 export interface SerializedInstallment {
   id: string;
   number: number;
-  dueDate: Date;
+  /** Fecha de calendario ("2026-08-26"). `formatDate()` la acepta tal cual. */
+  dueDate: CalendarDate;
   amount: string;
   paid: string;
   underReview: string;
@@ -268,6 +285,7 @@ function buildPlanView(
       amount: { toString(): string };
       currency: Currency;
       fxRateUsed: { toString(): string } | null;
+      fxRateSource: "SUGERIDO" | "INGRESADO" | null;
       amountInTripCurrency: { toString(): string };
       transferDate: Date;
       method: string;
@@ -289,11 +307,13 @@ function buildPlanView(
     installments: plan.installments.map((i) => ({
       id: i.id,
       number: i.number,
-      dueDate: i.dueDate,
+      dueDate: toCalendarDate(i.dueDate),
       amount: i.amount.toString(),
     })),
     payments: toPaymentInputs(plan.payments),
-    today: now,
+    // El instante se convierte a día ACÁ, en la zona del viaje. Es la única
+    // vez que este archivo mira un reloj.
+    today: calendarDateIn(now, passenger.trip.timezone),
     frozen,
     tolerance: passenger.trip.paymentToleranceAmount,
   });
@@ -331,6 +351,7 @@ function buildPlanView(
       amount: p.amount.toString(),
       currency: p.currency,
       fxRateUsed: p.fxRateUsed?.toString() ?? null,
+      fxRateSource: p.fxRateSource,
       amountInTripCurrency: p.amountInTripCurrency.toString(),
       transferDate: p.transferDate,
       method: p.method,
@@ -408,7 +429,7 @@ export async function previewPaymentPlan(
   const amounts = splitIntoInstallments(total, installmentCount);
   const dates = suggestDueDates(
     installmentCount,
-    now,
+    calendarDateIn(now, passenger.trip.timezone),
     passenger.trip.startDate,
   );
 
@@ -427,7 +448,7 @@ export async function previewPaymentPlan(
     currency: passenger.trip.currency,
     installments: dates.map((d, index) => ({
       number: d.number,
-      dueDate: toIsoDate(d.dueDate),
+      dueDate: d.dueDate,
       amount: amounts[index]!.toFixed(2),
       afterDeparture: d.afterDeparture,
     })),
@@ -542,7 +563,7 @@ export async function generatePaymentPlan(
 
   const installmentData = input.installments.map((cuota, index) => ({
     number: cuota.number,
-    dueDate: toBusinessDate(cuota.dueDate),
+    dueDate: fromCalendarDate(cuota.dueDate),
     amount: amounts[index]!.toFixed(2),
   }));
 
@@ -581,7 +602,10 @@ export async function generatePaymentPlan(
   });
 
   const late = lateDueDates(
-    installmentData.map((i) => ({ number: i.number, dueDate: i.dueDate })),
+    input.installments.map((i) => ({
+      number: i.number,
+      dueDate: i.dueDate,
+    })),
     passenger.trip.startDate,
   );
 
@@ -689,6 +713,8 @@ export async function declarePayment(
   let provisionalRate: string | null = null;
   let amountInTripCurrency = toDecimal(input.amount).toFixed(2);
 
+  // La conversión que se guarda ahora es, por definición, la sugerida: nadie
+  // miró todavía ningún extracto.
   if (input.currency !== tripCurrency) {
     const { snapshot } = await getFxSnapshot();
     provisionalRate = deriveRate(snapshot, input.currency, tripCurrency)
@@ -710,8 +736,9 @@ export async function declarePayment(
       amount: input.amount,
       currency: input.currency,
       fxRateUsed: provisionalRate,
+      fxRateSource: provisionalRate === null ? null : "SUGERIDO",
       amountInTripCurrency,
-      transferDate: toBusinessDate(input.transferDate),
+      transferDate: fromCalendarDate(input.transferDate),
       method: METHOD_TRANSFER,
       proofFileId: proofPath,
       status: "EN_REVISION",
@@ -730,7 +757,7 @@ export interface PendingReview {
   passengerName: string | null;
   installmentNumber: number | null;
   installmentAmount: string | null;
-  installmentDueDate: Date | null;
+  installmentDueDate: CalendarDate | null;
   amount: string;
   currency: Currency;
   tripCurrency: Currency;
@@ -792,7 +819,9 @@ export async function listPendingReviews(
     passengerName: nameOf.get(p.plan.passengerId) ?? null,
     installmentNumber: p.installment?.number ?? null,
     installmentAmount: p.installment?.amount.toString() ?? null,
-    installmentDueDate: p.installment?.dueDate ?? null,
+    installmentDueDate: p.installment
+      ? toCalendarDate(p.installment.dueDate)
+      : null,
     amount: p.amount.toString(),
     currency: p.currency as Currency,
     tripCurrency: trip.currency as Currency,
@@ -826,6 +855,7 @@ async function paymentContext(paymentId: string) {
       amount: true,
       currency: true,
       fxRateUsed: true,
+      fxRateSource: true,
       amountInTripCurrency: true,
       installmentId: true,
       plan: { select: { id: true, passengerId: true, currency: true } },
@@ -886,8 +916,10 @@ export async function confirmPayment(
     );
   }
 
-  const fxRateUsed =
-    paymentCurrency === tripCurrency ? null : input.fxRateUsed;
+  const converts = paymentCurrency !== tripCurrency;
+  const fxRateUsed = converts ? input.fxRateUsed : null;
+  // Sin conversión no hay procedencia que registrar.
+  const fxRateSource = converts ? input.fxRateSource : null;
   const imputed = impute(
     payment.amount.toString(),
     paymentCurrency,
@@ -900,6 +932,7 @@ export async function confirmPayment(
     data: {
       status: "CONFIRMADO",
       fxRateUsed,
+      fxRateSource,
       amountInTripCurrency: imputed.toFixed(2),
       reviewedById: viewer.userId,
       reviewedAt: new Date(),
@@ -925,6 +958,13 @@ export async function confirmPayment(
       field: "fxRateUsed",
       oldValue: auditMoney(payment.fxRateUsed),
       newValue: auditMoney(fxRateUsed),
+    },
+    {
+      entity: "Payment",
+      entityId: payment.id,
+      field: "fxRateSource",
+      oldValue: payment.fxRateSource,
+      newValue: fxRateSource,
     },
     {
       entity: "Payment",
@@ -1025,6 +1065,9 @@ export async function revertPayment(
     data: {
       status: "EN_REVISION",
       fxRateUsed: provisionalRate,
+      // Se deshizo la decisión del coordinador: el TC vuelve a ser el
+      // sugerido, porque el del extracto era parte de lo que se revirtió.
+      fxRateSource: provisionalRate === null ? null : "SUGERIDO",
       amountInTripCurrency: toDecimal(provisional).toFixed(2),
       reviewedById: null,
       reviewedAt: null,
@@ -1094,7 +1137,7 @@ export async function registerRefund(
       amount: input.amount,
       currency: plan.currency,
       amountInTripCurrency: toDecimal(input.amount).toFixed(2),
-      transferDate: toBusinessDate(input.transferDate),
+      transferDate: fromCalendarDate(input.transferDate),
       method: METHOD_TRANSFER,
       status: "CONFIRMADO",
       reviewedById: viewer.userId,
@@ -1131,20 +1174,44 @@ export interface TripPaymentRow {
   underReviewTotal: string;
   credit: string;
   overdueCount: number;
-  nextDueDate: Date | null;
+  nextDueDate: CalendarDate | null;
   nextInstallmentNumber: number | null;
+  /** El pasajero está CANCELADO: queda fuera de los totales del viaje. */
+  cancelled: boolean;
 }
 
 export interface TripPaymentsOverview {
   currency: Currency;
   rows: TripPaymentRow[];
-  /** Suma de lo confirmado en todo el viaje. */
-  collected: string;
-  /** Suma de los totales de los planes generados. */
+  /**
+   * Suma de `totalAmount` de los planes ACTIVOS: excluye a los pasajeros
+   * cancelados, cuyo plan está congelado y no se va a cobrar.
+   *
+   * Es un número parcial y no lo disimula: cuenta lo que se espera de los
+   * planes que EXISTEN. Los pasajeros que todavía no tienen plan no suman
+   * nada acá —no hay un total que sumar— y por eso se informan aparte en
+   * `passengersWithoutPlan`. Un "esperado" que se presenta como el total del
+   * viaje ignorando a los que faltan es un número que engaña hacia arriba en
+   * el porcentaje de cobranza.
+   */
   expected: string;
-  /** Plata esperando revisión. */
+  /** Confirmado de esos mismos planes activos. */
+  collected: string;
+  /** Plata esperando revisión, en planes activos. */
   underReview: string;
+  /**
+   * Pasajeros no cancelados sin plan generado. Mientras sea > 0, `expected`
+   * NO es el total del viaje y la pantalla tiene que decirlo.
+   */
   passengersWithoutPlan: number;
+  /** Cancelados que tienen plan: sus números quedan fuera de los totales. */
+  cancelledWithPlan: number;
+  /**
+   * Plata que efectivamente entró de pasajeros cancelados. Está fuera de
+   * `collected`, pero es plata real que probablemente haya que devolver, así
+   * que no se esconde.
+   */
+  collectedFromCancelled: string;
   light: PaymentLight;
   pendingReviewCount: number;
 }
@@ -1165,7 +1232,11 @@ export async function getTripPaymentsOverview(
   const [trip, passengers] = await Promise.all([
     prisma.trip.findUniqueOrThrow({
       where: { id: tripId },
-      select: { currency: true, paymentToleranceAmount: true },
+      select: {
+        currency: true,
+        paymentToleranceAmount: true,
+        timezone: true,
+      },
     }),
     listPassengersForPayments(tripId),
   ]);
@@ -1193,6 +1264,10 @@ export async function getTripPaymentsOverview(
 
   const planOf = new Map(plans.map((p) => [p.passengerId, p]));
   const tolerance = trip.paymentToleranceAmount.toString();
+  // Un solo "hoy" para todo el listado, en la zona del viaje: si cada fila
+  // resolviera el suyo, una corrida a las 23:59:59 podría partir el listado
+  // en dos días distintos.
+  const today = calendarDateIn(now, trip.timezone);
 
   const rows: TripPaymentRow[] = passengers.map((passenger) => {
     const plan = planOf.get(passenger.id);
@@ -1212,6 +1287,7 @@ export async function getTripPaymentsOverview(
         overdueCount: 0,
         nextDueDate: null,
         nextInstallmentNumber: null,
+        cancelled: passenger.status === "CANCELADO",
       };
     }
 
@@ -1220,11 +1296,11 @@ export async function getTripPaymentsOverview(
       installments: plan.installments.map((i) => ({
         id: i.id,
         number: i.number,
-        dueDate: i.dueDate,
+        dueDate: toCalendarDate(i.dueDate),
         amount: i.amount.toString(),
       })),
       payments: toPaymentInputs(plan.payments),
-      today: now,
+      today,
       frozen: passenger.status === "CANCELADO",
       tolerance,
     });
@@ -1243,24 +1319,35 @@ export async function getTripPaymentsOverview(
       overdueCount: derived.overdueCount,
       nextDueDate: derived.nextInstallment?.dueDate ?? null,
       nextInstallmentNumber: derived.nextInstallment?.number ?? null,
+      cancelled: passenger.status === "CANCELADO",
     };
   });
 
-  const withPlan = rows.filter((r) => r.hasPlan);
+  // Los totales del viaje se calculan sobre los planes ACTIVOS. Un plan
+  // congelado no se va a cobrar: sumarlo al esperado infla una deuda que
+  // nadie va a pagar.
+  const active = rows.filter((r) => r.hasPlan && !r.cancelled);
+  const cancelledWithPlan = rows.filter((r) => r.hasPlan && r.cancelled);
 
   return {
     currency: trip.currency as Currency,
     rows,
-    collected: roundToCents(sum(withPlan.map((r) => r.paidTotal))).toFixed(2),
-    expected: roundToCents(sum(withPlan.map((r) => r.totalAmount))).toFixed(2),
+    expected: roundToCents(sum(active.map((r) => r.totalAmount))).toFixed(2),
+    collected: roundToCents(sum(active.map((r) => r.paidTotal))).toFixed(2),
     underReview: roundToCents(
-      sum(withPlan.map((r) => r.underReviewTotal)),
+      sum(active.map((r) => r.underReviewTotal)),
     ).toFixed(2),
-    passengersWithoutPlan: rows.filter(
-      (r) => !r.hasPlan && r.status !== "CANCELADO",
-    ).length,
-    light: worstLight(withPlan.map((r) => r.light)),
-    pendingReviewCount: withPlan.filter((r) =>
+    passengersWithoutPlan: rows.filter((r) => !r.hasPlan && !r.cancelled)
+      .length,
+    cancelledWithPlan: cancelledWithPlan.length,
+    collectedFromCancelled: roundToCents(
+      sum(cancelledWithPlan.map((r) => r.paidTotal)),
+    ).toFixed(2),
+    // El semáforo del viaje también mira solo los activos: un cancelado está
+    // en NEUTRO y no aporta nada, pero dejarlo entrar volvería NEUTRO un viaje
+    // que en realidad está verde.
+    light: worstLight(active.map((r) => r.light)),
+    pendingReviewCount: active.filter((r) =>
       toDecimal(r.underReviewTotal).greaterThan(ZERO),
     ).length,
   };

@@ -1,5 +1,5 @@
 import { getLocale, getTranslations } from "next-intl/server";
-import { ArrowLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, ChevronRight, TriangleAlert } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { requireCapability } from "@/lib/auth/guards";
 import { prisma } from "@/lib/db/prisma";
@@ -8,6 +8,7 @@ import {
   listPendingReviews,
 } from "@/lib/services/payments";
 import { formatDate, formatMoney, type LocaleCode } from "@/lib/format";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -94,9 +95,32 @@ export default async function TripPaymentsPage({
         <SummaryCard
           label={t("expected")}
           value={money(overview.expected)}
-          detail={t("withoutPlan", { count: overview.passengersWithoutPlan })}
+          detail={t("expectedHelp")}
         />
       </div>
+
+      {/* El esperado es la suma de los planes ACTIVOS. Mientras falten planes
+          por generar no es el total del viaje, y decirlo al lado del número es
+          lo único que evita leer el porcentaje de cobranza al revés. */}
+      {overview.passengersWithoutPlan > 0 ? (
+        <Alert>
+          <TriangleAlert className="size-5" aria-hidden="true" />
+          <AlertDescription className="text-base">
+            {t("expectedPartial", { count: overview.passengersWithoutPlan })}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {/* Plata de pasajeros cancelados: fuera del total, pero entró de verdad
+          y probablemente haya que devolverla. No se esconde. */}
+      {overview.cancelledWithPlan > 0 ? (
+        <p className="text-muted-foreground text-sm">
+          {t("cancelledNote", {
+            count: overview.cancelledWithPlan,
+            amount: money(overview.collectedFromCancelled),
+          })}
+        </p>
+      ) : null}
 
       <Tabs defaultValue="overview">
         <TabsList>

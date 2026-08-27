@@ -38,8 +38,13 @@ export default defineConfig({
           // Los tests comparten un pool de una sola conexión y crean datos
           // con nombres propios: corriendo en paralelo se pisarían.
           fileParallelism: false,
-          testTimeout: 30_000,
-          hookTimeout: 60_000,
+          // Generoso a propósito. Con `max: 1` en el pool, las consultas de un
+          // mismo test se serializan contra el pooler de Supabase: un caso que
+          // arma un viaje, un pasajero, un plan y un pago hace varias decenas
+          // de round trips. Lo que se está midiendo es la latencia de red, no
+          // el código, y un timeout corto acá solo produce fallos falsos.
+          testTimeout: 90_000,
+          hookTimeout: 90_000,
         },
       },
     ],

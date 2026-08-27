@@ -91,6 +91,14 @@ function ReviewCard({
 
   const needsRate = item.currency !== item.tripCurrency;
   const [fxRate, setFxRate] = useState(item.suggestedFxRate ?? "");
+  /**
+   * ¿El coordinador TOCÓ el campo del TC, o confirmó dejando la sugerencia?
+   *
+   * Es la única forma de saberlo: tipear exactamente la cotización sugerida es
+   * legítimo, así que comparar los números en el servidor no distingue nada.
+   * Se declara desde acá y se guarda en `Payment.fxRateSource`.
+   */
+  const [rateTouched, setRateTouched] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
@@ -114,6 +122,7 @@ function ReviewCard({
     const result = await confirmPaymentAction(tripId, {
       paymentId: item.paymentId,
       fxRateUsed: needsRate ? fxRate.trim() : null,
+      fxRateSource: rateTouched ? "INGRESADO" : "SUGERIDO",
       notes: null,
     });
 
@@ -208,15 +217,20 @@ function ReviewCard({
                   {...props}
                   inputMode="decimal"
                   value={fxRate}
-                  onChange={(event) => setFxRate(event.target.value)}
+                  onChange={(event) => {
+                    setFxRate(event.target.value);
+                    setRateTouched(true);
+                  }}
                 />
               )}
             </Field>
             <div className="space-y-1 self-start pt-7">
               <p className="text-muted-foreground text-sm">
-                {t("reviewFxSuggested", {
-                  rate: item.suggestedFxRate ?? "—",
-                })}
+                {rateTouched
+                  ? t("reviewFxTouched")
+                  : t("reviewFxSuggested", {
+                      rate: item.suggestedFxRate ?? "—",
+                    })}
               </p>
               <p className="text-base font-medium tabular-nums">
                 {computed === null

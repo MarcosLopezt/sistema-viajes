@@ -155,6 +155,19 @@ export default async function PassengerPaymentsPage({
                             {payment.fxRateUsed
                               ? ` · ${payment.fxRateUsed}`
                               : ""}
+                            {/* De dónde salió ese TC. Sin esto no se puede
+                                saber si el número es de mercado o del banco,
+                                y al conciliar la diferencia importa. Los
+                                pagos anteriores al campo no lo tienen. */}
+                            {payment.fxRateUsed
+                              ? ` (${
+                                  payment.fxRateSource
+                                    ? tPayments(
+                                        `fxSource.${payment.fxRateSource}`,
+                                      )
+                                    : tPayments("fxSourceLegacy")
+                                })`
+                              : ""}
                           </span>
                         ) : null}
                       </span>

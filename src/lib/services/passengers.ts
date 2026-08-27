@@ -21,6 +21,7 @@ import {
   type PersonCompleteness,
 } from "@/lib/domain/person";
 import type { PassengerMixInput } from "@/lib/domain/pricing";
+import { toCalendarDate, type CalendarDate } from "@/lib/domain/calendar";
 import type { PersonDraftInput } from "@/lib/validation/person";
 import type { PassengerStatus, RoomType } from "@/generated/prisma/enums";
 
@@ -806,10 +807,13 @@ export interface PassengerForPayments {
     id: string;
     name: string;
     currency: "GBP" | "USD" | "EUR";
-    startDate: Date;
+    /** Fecha de calendario: el módulo de pagos no razona con instantes. */
+    startDate: CalendarDate;
     priceDouble: string | null;
     priceSingle: string | null;
     paymentToleranceAmount: string;
+    /** Zona en la que se decide qué día es "hoy". Ver lib/domain/calendar.ts. */
+    timezone: string;
   };
   /** El viewer es este mismo pasajero. */
   isOwnRecord: boolean;
@@ -839,6 +843,7 @@ export async function getPassengerForPayments(
           priceDouble: true,
           priceSingle: true,
           paymentToleranceAmount: true,
+          timezone: true,
         },
       },
     },
@@ -859,10 +864,11 @@ export async function getPassengerForPayments(
       id: row.trip.id,
       name: row.trip.name,
       currency: row.trip.currency,
-      startDate: row.trip.startDate,
+      startDate: toCalendarDate(row.trip.startDate),
       priceDouble: row.trip.priceDouble?.toString() ?? null,
       priceSingle: row.trip.priceSingle?.toString() ?? null,
       paymentToleranceAmount: row.trip.paymentToleranceAmount.toString(),
+      timezone: row.trip.timezone,
     },
     isOwnRecord: viewer.ownPassengerId === row.id,
   };

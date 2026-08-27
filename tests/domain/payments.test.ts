@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  daysBetween,
   derivePlan,
   impute,
   lateDueDates,
@@ -25,7 +24,12 @@ import { sum, toDecimal } from "@/lib/domain/money";
  *     pagada y vencida, cancelada.
  */
 
-const day = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
+/**
+ * Las fechas de este test son `CalendarDate`: días, no instantes. El motor no
+ * acepta otra cosa, justamente para que ningún huso pueda correr un
+ * vencimiento. Ver src/lib/domain/calendar.ts y tests/domain/calendar.test.ts.
+ */
+const day = (iso: string) => iso;
 
 // ------------------------- Reparto de las cuotas ---------------------------
 
@@ -115,7 +119,7 @@ describe("suggestDueDates", () => {
 
   it("reparte las cuotas entre hoy y una semana antes de la salida", () => {
     const dates = suggestDueDates(3, today, departure);
-    expect(dates.map((d) => d.dueDate.toISOString().slice(0, 10))).toEqual([
+    expect(dates.map((d) => d.dueDate)).toEqual([
       "2026-11-17",
       "2027-02-09",
       "2027-05-03",
@@ -126,7 +130,7 @@ describe("suggestDueDates", () => {
     for (let n = 1; n <= MAX_INSTALLMENTS; n += 1) {
       const dates = suggestDueDates(n, today, departure);
       const last = dates[dates.length - 1]!;
-      expect(last.dueDate.getTime()).toBeLessThan(departure.getTime());
+      expect(last.dueDate < departure).toBe(true);
       expect(last.afterDeparture).toBe(false);
     }
   });
@@ -135,9 +139,7 @@ describe("suggestDueDates", () => {
     for (let n = 1; n <= MAX_INSTALLMENTS; n += 1) {
       const dates = suggestDueDates(n, today, departure);
       for (let i = 1; i < dates.length; i += 1) {
-        expect(dates[i]!.dueDate.getTime()).toBeGreaterThan(
-          dates[i - 1]!.dueDate.getTime(),
-        );
+        expect(dates[i]!.dueDate > dates[i - 1]!.dueDate).toBe(true);
       }
     }
   });
@@ -145,7 +147,7 @@ describe("suggestDueDates", () => {
   it("ninguna cuota vence hoy o antes: la primera es siempre a futuro", () => {
     const dates = suggestDueDates(6, today, departure);
     for (const d of dates) {
-      expect(d.dueDate.getTime()).toBeGreaterThan(today.getTime());
+      expect(d.dueDate > today).toBe(true);
     }
   });
 
@@ -161,7 +163,7 @@ describe("suggestDueDates", () => {
     expect(dates.some((d) => d.afterDeparture)).toBe(true);
     expect(lateDueDates(dates, soon).length).toBeGreaterThan(0);
     // Siguen siendo seis fechas distintas.
-    expect(new Set(dates.map((d) => d.dueDate.getTime())).size).toBe(6);
+    expect(new Set(dates.map((d) => d.dueDate)).size).toBe(6);
   });
 
   it("lateDueDates devuelve los números de las cuotas tardías", () => {
@@ -173,20 +175,6 @@ describe("suggestDueDates", () => {
   });
 });
 
-describe("daysBetween", () => {
-  it("cuenta días enteros en UTC", () => {
-    expect(daysBetween(day("2026-08-26"), day("2026-08-27"))).toBe(1);
-    expect(daysBetween(day("2026-08-26"), day("2026-08-26"))).toBe(0);
-    expect(daysBetween(day("2026-08-26"), day("2026-08-25"))).toBe(-1);
-  });
-
-  it("no se corre con el cambio de horario de verano", () => {
-    // El último domingo de marzo, Europa adelanta una hora. Contando en horas
-    // locales esto daría 30,958 días y redondearía mal.
-    expect(daysBetween(day("2027-03-01"), day("2027-04-01"))).toBe(31);
-  });
-});
-
 // ------------------------- Derivación del estado ---------------------------
 
 const TODAY = day("2026-08-26");
@@ -195,7 +183,7 @@ interface Fixture {
   amounts?: string[];
   dueDates?: string[];
   payments?: Partial<PaymentInput>[];
-  today?: Date;
+  today?: string;
   frozen?: boolean;
   tolerance?: string;
   total?: string;

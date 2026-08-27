@@ -519,7 +519,12 @@
     "noProof": "No receipt",
     "transferredOn": "Transferred on {date}",
     "reviewedOn": "Reviewed on {date}",
-    "pendingProofOnOverdue": "Overdue, with a receipt under review"
+    "pendingProofOnOverdue": "Overdue, with a receipt under review",
+    "fxSource": {
+      "SUGERIDO": "market rate of the day",
+      "INGRESADO": "rate from the bank statement"
+    },
+    "fxSourceLegacy": "no provenance recorded"
   },
   "myPayments": {
     "title": "My payments",
@@ -609,6 +614,10 @@
     "refundDate": "Date",
     "refundReason": "Reason",
     "refundSubmit": "Record refund",
-    "paymentsOf": "Payments for {name}"
+    "paymentsOf": "Payments for {name}",
+    "expectedHelp": "Sum of active plans. Cancelled passengers excluded.",
+    "expectedPartial": "Excludes {count, plural, =1 {1 passenger without a plan} other {# passengers without a plan}}.",
+    "cancelledNote": "{count, plural, =1 {1 cancelled passenger} other {# cancelled passengers}} with a plan · {amount} received, outside the total.",
+    "reviewFxTouched": "This rate will be saved as taken from the statement."
   }
 }

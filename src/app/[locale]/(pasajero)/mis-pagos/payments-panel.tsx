@@ -27,7 +27,6 @@ export interface InstallmentView {
   state: "PAGADA" | "VENCIDA" | "EN_REVISION" | "PENDIENTE" | "CONGELADA";
   hasPendingProof: boolean;
   dueDateLabel: string;
-  dueDateIso: string;
 }
 
 export function PaymentsPanel({

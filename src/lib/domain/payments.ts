@@ -6,6 +6,12 @@ import {
   type Decimal,
   type MoneyInput,
 } from "./money";
+import {
+  addCalendarDays,
+  daysBetweenCalendarDates,
+  maxCalendarDate,
+  type CalendarDate,
+} from "./calendar";
 import type { Currency } from "./fx";
 
 /**
@@ -31,6 +37,17 @@ import type { Currency } from "./fx";
  *
  * Lo único que sí se persiste sobre el paso del tiempo es `SentReminder`, y
  * solo responde "¿ya mandamos este aviso?", nunca "¿está vencida?".
+ *
+ * ── Nada de instantes: fechas de calendario ───────────────────────────────
+ *
+ * "Hoy" entra a este módulo como una `CalendarDate` ("2026-08-26"), nunca
+ * como un `Date`. Quien llama es el responsable de resolver qué día es en la
+ * zona horaria del viaje, con `calendarDateIn()` de ./calendar.ts.
+ *
+ * No es una formalidad. Con instantes, una pasajera en Buenos Aires a las
+ * 22:00 vería su cuota vencida tres horas antes de que termine su día, porque
+ * el servidor de Vercel razona en UTC. Al aceptar solo fechas de calendario,
+ * este módulo no puede cometer ese error: no tiene con qué.
  */
 
 // --------------------------- Armado del plan -------------------------------
@@ -40,26 +57,6 @@ export const MAX_INSTALLMENTS = 6;
 
 /** Días antes de la salida en que vence, por default, la última cuota. */
 const DAYS_BEFORE_DEPARTURE = 7;
-
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
-/** Normaliza a medianoche UTC: las fechas de negocio no tienen hora. */
-export function atUtcMidnight(date: Date): Date {
-  return new Date(
-    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
-  );
-}
-
-function addDaysUtc(date: Date, days: number): Date {
-  return new Date(atUtcMidnight(date).getTime() + days * MS_PER_DAY);
-}
-
-/** Días enteros de `from` a `to`. Negativo si `to` ya pasó. */
-export function daysBetween(from: Date, to: Date): number {
-  return Math.round(
-    (atUtcMidnight(to).getTime() - atUtcMidnight(from).getTime()) / MS_PER_DAY,
-  );
-}
 
 export class PaymentPlanError extends Error {
   constructor(
@@ -123,7 +120,7 @@ export function splitIntoInstallments(
 
 export interface SuggestedDueDate {
   number: number;
-  dueDate: Date;
+  dueDate: CalendarDate;
   /** La cuota vence después de que el viaje ya arrancó. */
   afterDeparture: boolean;
 }
@@ -142,8 +139,8 @@ export interface SuggestedDueDate {
  */
 export function suggestDueDates(
   count: number,
-  today: Date,
-  tripStartDate: Date,
+  today: CalendarDate,
+  tripStartDate: CalendarDate,
 ): SuggestedDueDate[] {
   if (!Number.isInteger(count) || count < MIN_INSTALLMENTS || count > MAX_INSTALLMENTS) {
     throw new PaymentPlanError(
@@ -152,25 +149,23 @@ export function suggestDueDates(
     );
   }
 
-  const from = atUtcMidnight(today);
-  const start = atUtcMidnight(tripStartDate);
-  const target = addDaysUtc(start, -DAYS_BEFORE_DEPARTURE);
+  const target = addCalendarDays(tripStartDate, -DAYS_BEFORE_DEPARTURE);
 
   // Ancho útil de la ventana. Si el viaje ya salió o sale pasado mañana, es 0
   // y todas las cuotas caen consecutivas a partir de mañana.
-  const span = Math.max(0, daysBetween(from, target));
+  const span = Math.max(0, daysBetweenCalendarDates(today, target));
 
-  const dates: Date[] = [];
-  let previous = from;
+  const dates: CalendarDate[] = [];
+  let previous = today;
 
   for (let i = 1; i <= count; i += 1) {
     const offset = Math.round((span * i) / count);
-    let candidate = addDaysUtc(from, offset);
     // Dos cuotas el mismo día no son dos cuotas. Con la ventana apretada se
     // separan un día, aun a costa de pasarse de la salida: eso se advierte.
-    if (candidate.getTime() <= previous.getTime()) {
-      candidate = addDaysUtc(previous, 1);
-    }
+    const candidate = maxCalendarDate(
+      addCalendarDays(today, offset),
+      addCalendarDays(previous, 1),
+    );
     dates.push(candidate);
     previous = candidate;
   }
@@ -178,18 +173,17 @@ export function suggestDueDates(
   return dates.map((dueDate, index) => ({
     number: index + 1,
     dueDate,
-    afterDeparture: dueDate.getTime() >= start.getTime(),
+    afterDeparture: dueDate >= tripStartDate,
   }));
 }
 
 /** Cuotas cuyo vencimiento cae después de la salida. Alimenta la advertencia. */
 export function lateDueDates(
-  dueDates: readonly { number: number; dueDate: Date }[],
-  tripStartDate: Date,
+  dueDates: readonly { number: number; dueDate: CalendarDate }[],
+  tripStartDate: CalendarDate,
 ): number[] {
-  const start = atUtcMidnight(tripStartDate);
   return dueDates
-    .filter((d) => atUtcMidnight(d.dueDate).getTime() >= start.getTime())
+    .filter((d) => d.dueDate >= tripStartDate)
     .map((d) => d.number);
 }
 
@@ -214,7 +208,7 @@ export const DEFAULT_TOLERANCE = "1.00";
 export interface InstallmentInput {
   id: string;
   number: number;
-  dueDate: Date;
+  dueDate: CalendarDate;
   amount: MoneyInput;
 }
 
@@ -230,7 +224,7 @@ export interface PaymentInput {
 export interface DerivedInstallment {
   id: string;
   number: number;
-  dueDate: Date;
+  dueDate: CalendarDate;
   amount: Decimal;
   /** Suma de pagos CONFIRMADOS imputados a esta cuota. */
   paid: Decimal;
@@ -253,8 +247,11 @@ export interface DerivePlanInput {
   totalAmount: MoneyInput;
   installments: readonly InstallmentInput[];
   payments: readonly PaymentInput[];
-  /** Hoy. Se inyecta para poder testear los bordes. */
-  today: Date;
+  /**
+   * Qué día es HOY en la zona horaria del viaje, ya resuelto por quien llama
+   * con `calendarDateIn()`. Nunca un instante: ver la nota de arriba.
+   */
+  today: CalendarDate;
   /**
    * El plan de un pasajero CANCELADO se congela: no genera vencidas ni
    * recordatorios. La plata que ya entró se sigue viendo.
@@ -315,7 +312,6 @@ export function derivePlan(input: DerivePlanInput): DerivedPlan {
 
   const totalAmount = roundToCents(input.totalAmount);
   const slack = toDecimal(tolerance);
-  const todayUtc = atUtcMidnight(today);
 
   const confirmedPayments = payments.filter(
     (p) => p.kind === "PAGO" && p.status === "CONFIRMADO",
@@ -338,10 +334,13 @@ export function derivePlan(input: DerivePlanInput): DerivedPlan {
       );
 
       const covered = paid.greaterThanOrEqualTo(amount.minus(slack));
-      const daysUntilDue = daysBetween(todayUtc, installment.dueDate);
+      const daysUntilDue = daysBetweenCalendarDates(today, installment.dueDate);
       // La definición, tal cual: sin pago confirmado que la cubra Y vencida.
       // Un comprobante en revisión NO la limpia: todavía no entró la plata.
-      const overdue = !covered && !frozen && daysUntilDue < 0;
+      //
+      // La comparación es entre DÍAS DE CALENDARIO en la zona del viaje. Una
+      // cuota que vence hoy no está vencida hoy: el pasajero tiene todo el día.
+      const overdue = !covered && !frozen && installment.dueDate < today;
       const hasPendingProof = underReview.greaterThan(0);
 
       const state: InstallmentState = covered
@@ -357,7 +356,7 @@ export function derivePlan(input: DerivePlanInput): DerivedPlan {
       return {
         id: installment.id,
         number: installment.number,
-        dueDate: atUtcMidnight(installment.dueDate),
+        dueDate: installment.dueDate,
         amount,
         paid: roundToCents(paid),
         underReview: roundToCents(underReview),

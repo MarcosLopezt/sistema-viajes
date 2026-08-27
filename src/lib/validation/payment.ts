@@ -126,6 +126,18 @@ export const confirmPaymentSchema = z.object({
     .refine((v) => Number(v) > 0, "El tipo de cambio tiene que ser mayor a cero.")
     .nullable()
     .default(null),
+  /**
+   * De dónde salió ese TC.
+   *
+   * Es PROCEDENCIA, no un control: solo el formulario sabe si el coordinador
+   * tocó el campo o confirmó dejando la sugerencia, y el servidor no tiene
+   * forma de verificarlo (tipear exactamente la cotización sugerida es
+   * legítimo). Por eso el default es SUGERIDO: la afirmación fuerte —"esto lo
+   * saqué del extracto"— tiene que declararse explícitamente, no asumirse.
+   *
+   * Lo que el servidor SÍ decide es que sea `null` cuando no hubo conversión.
+   */
+  fxRateSource: z.enum(["SUGERIDO", "INGRESADO"]).default("SUGERIDO"),
   notes: z.string().trim().max(500).nullable().default(null),
 });
 

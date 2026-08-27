@@ -92,6 +92,20 @@ enum PaymentKind {
   REEMBOLSO
 }
 
+/// De dónde salió el tipo de cambio con que se imputó un pago.
+///
+/// SUGERIDO  el coordinador confirmó dejando la cotización del día que el
+///           sistema precargó. Es un número de mercado.
+/// INGRESADO el coordinador lo tipeó mirando el extracto bancario. Es lo que
+///           el banco efectivamente liquidó.
+///
+/// No son lo mismo y la diferencia importa al conciliar: un pago imputado con
+/// la cotización de mercado puede no cerrar contra la cuenta.
+enum FxRateSource {
+  SUGERIDO
+  INGRESADO
+}
+
 enum CommunicationAudience {
   TODOS
   SELECCION
@@ -180,6 +194,16 @@ model Trip {
   /// debe tener `passportValidityMonths` de validez después del regreso.
   /// Se activa para destinos que lo exigen a la entrada (ej. Schengen).
   requireFullPassportValidity Boolean @default(false)
+
+  /// Zona horaria de referencia del viaje.
+  ///
+  /// Define qué día es "hoy" al decidir si una cuota está vencida y a quién
+  /// notificar. NO es la zona del destino: es aquella en la que el grupo
+  /// piensa y reclama los vencimientos.
+  ///
+  /// Sin esto, el proceso de Vercel razona en UTC y una pasajera en Buenos
+  /// Aires vería su cuota vencida a las 21:00 de su propio día de pago.
+  timezone String @default("America/Argentina/Buenos_Aires")
 
   /// Cuánto puede faltar para dar una cuota por cubierta. Existe por las
   /// comisiones de los bancos intermediarios: de una cuota de £1.330 llegan
@@ -418,14 +442,17 @@ model Payment {
   /// Obligatorio para kind=PAGO, nulo para kind=REEMBOLSO (decisión 6).
   installmentId String? @db.Uuid
 
-  kind                 PaymentKind @default(PAGO)
-  amount               Decimal     @db.Decimal(12, 2)
+  kind                 PaymentKind   @default(PAGO)
+  amount               Decimal       @db.Decimal(12, 2)
   currency             Currency
   /// TC usado si la moneda del pago difiere de la del viaje. Lo ingresa el
   /// coordinador al confirmar, con la cotización del día como sugerencia.
-  fxRateUsed           Decimal?    @db.Decimal(18, 8)
+  fxRateUsed           Decimal?      @db.Decimal(18, 8)
+  /// Si ese TC lo tipeó el coordinador o quedó el sugerido. Nulo cuando el
+  /// pago está en la moneda del viaje y no hay conversión.
+  fxRateSource         FxRateSource?
   /// Importe imputado, siempre en la moneda del viaje.
-  amountInTripCurrency Decimal     @db.Decimal(12, 2)
+  amountInTripCurrency Decimal       @db.Decimal(12, 2)
 
   /// Fecha en que el pasajero hizo la transferencia. La declara él y NO es
   /// createdAt: se puede cargar el comprobante días después de transferir, y

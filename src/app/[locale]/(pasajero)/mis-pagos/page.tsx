@@ -54,7 +54,6 @@ export default async function MyPaymentsPage() {
     state: cuota.state as InstallmentView["state"],
     hasPendingProof: cuota.hasPendingProof,
     dueDateLabel: formatDate(cuota.dueDate),
-    dueDateIso: cuota.dueDate.toISOString().slice(0, 10),
   }));
 
   const next = plan.nextInstallment;

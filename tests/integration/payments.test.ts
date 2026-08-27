@@ -332,7 +332,7 @@ describe("el plan es inmutable si tiene un pago confirmado", () => {
     const { paymentId } = await declare(anaId, cuota1.id, cuota1.amount);
 
     actAs(coty);
-    await confirmPayment({ paymentId, fxRateUsed: null, notes: null });
+    await confirmPayment({ paymentId, fxRateUsed: null, fxRateSource: "SUGERIDO", notes: null });
 
     await expect(makePlan(anaId, 4)).rejects.toMatchObject({
       reason: "PLAN_INMUTABLE",
@@ -406,8 +406,8 @@ describe("idempotencia de la confirmación", () => {
     // Doble click, o dos coordinadores a la vez. El UPDATE condicionado hace
     // que la segunda no encuentre fila.
     const [a, b] = await Promise.all([
-      confirmPayment({ paymentId, fxRateUsed: null, notes: null }),
-      confirmPayment({ paymentId, fxRateUsed: null, notes: null }),
+      confirmPayment({ paymentId, fxRateUsed: null, fxRateSource: "SUGERIDO", notes: null }),
+      confirmPayment({ paymentId, fxRateUsed: null, fxRateSource: "SUGERIDO", notes: null }),
     ]);
 
     expect([a, b].filter((r) => r === "APLICADO")).toHaveLength(1);
@@ -452,6 +452,7 @@ describe("idempotencia de la confirmación", () => {
     const outcome = await confirmPayment({
       paymentId,
       fxRateUsed: null,
+      fxRateSource: "SUGERIDO",
       notes: null,
     });
     expect(outcome).toBe("YA_RESUELTO");
@@ -488,9 +489,11 @@ describe("el tipo de cambio se congela", () => {
     );
 
     // TC del extracto: distinto de la cotización del día (0.8/0.9 = 0.888…).
+    // El coordinador lo tipeó mirando el extracto: eso se registra.
     await confirmPayment({
       paymentId,
       fxRateUsed: "0.86373391",
+      fxRateSource: "INGRESADO",
       notes: null,
     });
 
@@ -538,7 +541,12 @@ describe("el tipo de cambio se congela", () => {
     );
 
     await expect(
-      confirmPayment({ paymentId, fxRateUsed: null, notes: null }),
+      confirmPayment({
+        paymentId,
+        fxRateUsed: null,
+        fxRateSource: "SUGERIDO",
+        notes: null,
+      }),
     ).rejects.toMatchObject({ reason: "TC_FALTANTE" });
   });
 
@@ -596,7 +604,7 @@ describe("deshacer una confirmación", () => {
     const cuota = plan!.installments[0]!;
     const { paymentId } = await declare(passengerId, cuota.id, cuota.amount);
 
-    await confirmPayment({ paymentId, fxRateUsed: null, notes: null });
+    await confirmPayment({ paymentId, fxRateUsed: null, fxRateSource: "SUGERIDO", notes: null });
     expect((await getPaymentPlan(passengerId))!.paidTotal).toBe(cuota.amount);
 
     const outcome = await revertPayment({
@@ -641,7 +649,7 @@ describe("deshacer una confirmación", () => {
       plan!.installments[0]!.id,
       "100.00",
     );
-    await confirmPayment({ paymentId, fxRateUsed: null, notes: null });
+    await confirmPayment({ paymentId, fxRateUsed: null, fxRateSource: "SUGERIDO", notes: null });
 
     actAs(ana);
     await expect(
@@ -663,7 +671,7 @@ describe("reembolso", () => {
     const plan = await getPaymentPlan(passengerId);
     const cuota = plan!.installments[0]!;
     const { paymentId } = await declare(passengerId, cuota.id, cuota.amount);
-    await confirmPayment({ paymentId, fxRateUsed: null, notes: null });
+    await confirmPayment({ paymentId, fxRateUsed: null, fxRateSource: "SUGERIDO", notes: null });
 
     const before = await getPaymentPlan(passengerId);
 
@@ -781,7 +789,7 @@ describe("un pasajero no ve pagos de otro · por servicio", () => {
 
     actAs(ana);
     await expect(
-      confirmPayment({ paymentId, fxRateUsed: null, notes: null }),
+      confirmPayment({ paymentId, fxRateUsed: null, fxRateSource: "SUGERIDO", notes: null }),
     ).rejects.toBeInstanceOf(ForbiddenError);
     await expect(
       rejectPayment({ paymentId, reason: "No me gusta este pago." }),
@@ -912,5 +920,251 @@ describe("un pasajero no ve comprobantes de otro · por HTTP", () => {
     actAsAnonymous();
     const response = await request(anaProofPaymentId);
     expect(response.status).toBe(401);
+  });
+});
+
+
+// ------------------------ Arreglos previos a la fase 5 ---------------------
+
+describe("procedencia del tipo de cambio", () => {
+  async function paidInEuros(name: string, source: "SUGERIDO" | "INGRESADO") {
+    const passengerId = await join(tripA, await createActor(name), "PASAJERO");
+
+    actAs(coty);
+    await makePlan(passengerId, 1);
+    const plan = await getPaymentPlan(passengerId);
+    const { paymentId } = await declare(
+      passengerId,
+      plan!.installments[0]!.id,
+      "1000.00",
+      "EUR",
+    );
+
+    await confirmPayment({
+      paymentId,
+      fxRateUsed: "0.86373391",
+      fxRateSource: source,
+      notes: null,
+    });
+
+    return prisma.payment.findUniqueOrThrow({
+      where: { id: paymentId },
+      select: { fxRateSource: true, fxRateUsed: true },
+    });
+  }
+
+  it("mientras está en revisión, el TC es el sugerido", async () => {
+    const passengerId = await join(
+      tripA,
+      await createActor("bruna"),
+      "PASAJERO",
+    );
+
+    actAs(coty);
+    await makePlan(passengerId, 1);
+    const plan = await getPaymentPlan(passengerId);
+    const { paymentId } = await declare(
+      passengerId,
+      plan!.installments[0]!.id,
+      "500.00",
+      "EUR",
+    );
+
+    const payment = await prisma.payment.findUniqueOrThrow({
+      where: { id: paymentId },
+      select: { fxRateSource: true },
+    });
+    // Nadie miró todavía ningún extracto.
+    expect(payment.fxRateSource).toBe("SUGERIDO");
+  });
+
+  it("distingue el TC tipeado del extracto del que quedó sugerido", async () => {
+    expect((await paidInEuros("celia", "INGRESADO")).fxRateSource).toBe(
+      "INGRESADO",
+    );
+    expect((await paidInEuros("dora", "SUGERIDO")).fxRateSource).toBe(
+      "SUGERIDO",
+    );
+  });
+
+  it("en la moneda del viaje no hay procedencia que registrar", async () => {
+    const passengerId = await join(
+      tripA,
+      await createActor("emma"),
+      "PASAJERO",
+    );
+
+    actAs(coty);
+    await makePlan(passengerId, 1);
+    const plan = await getPaymentPlan(passengerId);
+    const { paymentId } = await declare(
+      passengerId,
+      plan!.installments[0]!.id,
+      "100.00",
+    );
+
+    // El cliente declara INGRESADO, pero no hubo conversión: manda la moneda
+    // real del pago, no lo que diga el formulario.
+    await confirmPayment({
+      paymentId,
+      fxRateUsed: null,
+      fxRateSource: "INGRESADO",
+      notes: null,
+    });
+
+    const payment = await prisma.payment.findUniqueOrThrow({
+      where: { id: paymentId },
+      select: { fxRateUsed: true, fxRateSource: true },
+    });
+    expect(payment.fxRateUsed).toBeNull();
+    expect(payment.fxRateSource).toBeNull();
+  });
+
+  it("deshacer la confirmación devuelve el TC a SUGERIDO", async () => {
+    const passengerId = await join(
+      tripA,
+      await createActor("flor"),
+      "PASAJERO",
+    );
+
+    actAs(coty);
+    await makePlan(passengerId, 1);
+    const plan = await getPaymentPlan(passengerId);
+    const { paymentId } = await declare(
+      passengerId,
+      plan!.installments[0]!.id,
+      "1000.00",
+      "EUR",
+    );
+
+    await confirmPayment({
+      paymentId,
+      fxRateUsed: "0.86373391",
+      fxRateSource: "INGRESADO",
+      notes: null,
+    });
+    await revertPayment({ paymentId, reason: "Me equivoqué de comprobante." });
+
+    const payment = await prisma.payment.findUniqueOrThrow({
+      where: { id: paymentId },
+      select: { fxRateSource: true },
+    });
+    // El TC del extracto era parte de la decisión que se deshizo.
+    expect(payment.fxRateSource).toBe("SUGERIDO");
+  });
+});
+
+describe("total esperado del viaje", () => {
+  it("suma solo los planes activos y declara lo que deja afuera", async () => {
+    const tripId = await createTrip("Esperado");
+    await join(tripId, coty, "COORDINADOR");
+
+    const activo = await join(tripId, await createActor("gina"), "PASAJERO");
+    const cancelado = await join(tripId, await createActor("hebe"), "PASAJERO");
+    // Sin plan: no suma nada al esperado, pero tiene que contarse aparte.
+    await join(tripId, await createActor("iris"), "PASAJERO");
+
+    actAs(coty);
+    await makePlan(activo, 1);
+    await makePlan(cancelado, 1);
+
+    // El cancelado alcanzó a pagar antes de darse de baja.
+    const planCancelado = await getPaymentPlan(cancelado);
+    const { paymentId } = await declare(
+      cancelado,
+      planCancelado!.installments[0]!.id,
+      "1000.00",
+    );
+    await confirmPayment({
+      paymentId,
+      fxRateUsed: null,
+      fxRateSource: "SUGERIDO",
+      notes: null,
+    });
+
+    await cancelPassenger(cancelado);
+
+    const overview = await getTripPaymentsOverview(tripId);
+
+    // Un solo plan activo: el esperado es su total, no el de los dos.
+    expect(overview.expected).toBe("3499.43");
+    expect(overview.collected).toBe("0.00");
+
+    // Y lo que queda afuera se dice, no se esconde.
+    expect(overview.passengersWithoutPlan).toBe(1);
+    expect(overview.cancelledWithPlan).toBe(1);
+    expect(overview.collectedFromCancelled).toBe("1000.00");
+  });
+});
+
+describe("zona horaria del viaje", () => {
+  /**
+   * El mismo instante y la misma cuota, con dos zonas distintas, dan dos
+   * respuestas distintas. Es exactamente el bug que motivó Trip.timezone, acá
+   * verificado de punta a punta contra la base.
+   */
+  it("una cuota no vence antes de que termine el día del pasajero", async () => {
+    const tripId = await createTrip("Husos");
+    await join(tripId, coty, "COORDINADOR");
+    const passengerId = await join(
+      tripId,
+      await createActor("juli"),
+      "PASAJERO",
+    );
+
+    actAs(coty);
+    await makePlan(passengerId, 1);
+
+    // La cuota vence el 26/08/2026.
+    await prisma.installment.updateMany({
+      where: { plan: { passengerId } },
+      data: { dueDate: new Date("2026-08-26T00:00:00.000Z") },
+    });
+
+    // 23:59 del 26 en Buenos Aires = 02:59 del 27 en UTC.
+    const instant = new Date("2026-08-27T02:59:00.000Z");
+
+    const enHora = await getPaymentPlan(passengerId, instant);
+    expect(enHora!.installments[0]!.overdue).toBe(false);
+    expect(enHora!.light).toBe("AMARILLO");
+
+    // El mismo viaje declarado en UTC sí la da por vencida: la diferencia no
+    // es teórica, la decide el campo.
+    await prisma.trip.update({
+      where: { id: tripId },
+      data: { timezone: "UTC" },
+    });
+
+    const enUtc = await getPaymentPlan(passengerId, instant);
+    expect(enUtc!.installments[0]!.overdue).toBe(true);
+    expect(enUtc!.light).toBe("ROJO");
+  });
+
+  it("una zona con typo no rompe la pantalla: cae al default", async () => {
+    const tripId = await createTrip("Huso roto");
+    await join(tripId, coty, "COORDINADOR");
+    const passengerId = await join(
+      tripId,
+      await createActor("kira"),
+      "PASAJERO",
+    );
+
+    actAs(coty);
+    await makePlan(passengerId, 1);
+    await prisma.installment.updateMany({
+      where: { plan: { passengerId } },
+      data: { dueDate: new Date("2026-08-26T00:00:00.000Z") },
+    });
+    await prisma.trip.update({
+      where: { id: tripId },
+      data: { timezone: "America/Buenos_Aires_" },
+    });
+
+    const plan = await getPaymentPlan(
+      passengerId,
+      new Date("2026-08-27T02:59:00.000Z"),
+    );
+    // Se comporta como el default (hora argentina), no como UTC.
+    expect(plan!.installments[0]!.overdue).toBe(false);
   });
 });
