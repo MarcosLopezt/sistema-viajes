@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PassportBadge } from "@/components/passenger/passport-alert";
+import { PaymentLightBadge } from "@/components/payments/payment-badges";
 import { cn } from "@/lib/utils";
 import { confirmPassengerAction } from "./actions";
 import type { PassengerRow } from "./types";
@@ -49,6 +50,7 @@ export function PassengerTable({
     (!row.isComplete ||
       row.passportLevel === "BLOQUEANTE" ||
       row.passportLevel === "SIN_DATO" ||
+      row.paymentLight === "ROJO" ||
       row.needsRoommate);
 
   const rows = useMemo(() => {
@@ -142,9 +144,16 @@ export function PassengerTable({
                     })}
                   />
                   <PassportBadge level={row.passportLevel} />
-                  {/* Los pagos llegan en la fase 4: por ahora el tercer
-                      indicador dice lo único cierto, que no hay plan. */}
-                  <StatusChip ok={false} pendingLabel={t("paymentsPending")} />
+                  {/* Tercer indicador: pagos. Sale del mismo derivePlan() que
+                      la vista de pagos y que lo que ve el pasajero. Al
+                      coordinador no se le muestra: no genera plan, y decirle
+                      "sin plan de pagos" sería señalar un problema que no
+                      existe. */}
+                  {row.isCoordinator ? null : row.hasPaymentPlan ? (
+                    <PaymentLightBadge light={row.paymentLight} />
+                  ) : (
+                    <StatusChip ok={false} pendingLabel={t("paymentsPending")} />
+                  )}
                   {row.needsRoommate ? (
                     <span className="text-status-warning border-status-warning/40 bg-status-warning-surface inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-sm">
                       <BedDouble className="size-4" aria-hidden="true" />

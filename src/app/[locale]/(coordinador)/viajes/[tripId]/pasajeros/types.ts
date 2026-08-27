@@ -1,4 +1,5 @@
 import type { PassportAlertLevel } from "@/lib/domain/passport";
+import type { PaymentLight } from "@/lib/domain/payments";
 
 /**
  * Fila de pasajero tal como la recibe el cliente: todo primitivo, sin Date ni
@@ -18,6 +19,12 @@ export interface PassengerRow {
   completionPercentage: number;
   isComplete: boolean;
   needsRoommate: boolean;
+  /**
+   * Semáforo de pagos, derivado con la misma función que la ficha y la vista
+   * de pagos. NEUTRO significa "todavía no tiene plan".
+   */
+  paymentLight: PaymentLight;
+  hasPaymentPlan: boolean;
 }
 
 export interface InvitationRow {

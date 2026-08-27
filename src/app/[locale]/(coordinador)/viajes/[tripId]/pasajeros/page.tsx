@@ -4,6 +4,7 @@ import { Link } from "@/i18n/navigation";
 import { requireCapability } from "@/lib/auth/guards";
 import { prisma } from "@/lib/db/prisma";
 import { listPassengers, listRooms } from "@/lib/services/passengers";
+import { getTripPaymentsOverview } from "@/lib/services/payments";
 import { listInvitations } from "@/lib/services/invitations";
 import { toIsoDate } from "@/lib/validation/trip";
 import { Button } from "@/components/ui/button";
@@ -25,16 +26,22 @@ export default async function PassengersPage({
   const { tripId } = await params;
   await requireCapability(tripId, "passenger:viewAll");
 
-  const [trip, passengers, invitations, rooms, t] = await Promise.all([
-    prisma.trip.findUniqueOrThrow({
-      where: { id: tripId },
-      select: { id: true, name: true, currency: true, status: true },
-    }),
-    listPassengers(tripId),
-    listInvitations(tripId),
-    listRooms(tripId),
-    getTranslations("passengers"),
-  ]);
+  const [trip, passengers, invitations, rooms, payments, t] =
+    await Promise.all([
+      prisma.trip.findUniqueOrThrow({
+        where: { id: tripId },
+        select: { id: true, name: true, currency: true, status: true },
+      }),
+      listPassengers(tripId),
+      listInvitations(tripId),
+      listRooms(tripId),
+      getTripPaymentsOverview(tripId),
+      getTranslations("passengers"),
+    ]);
+
+  // El semáforo de pagos NO se recalcula acá: se toma de la misma vista que
+  // alimenta la pantalla de pagos, que a su vez sale de derivePlan().
+  const paymentOf = new Map(payments.rows.map((row) => [row.passengerId, row]));
 
   // Las fechas y los objetos de dominio se serializan antes de cruzar al
   // cliente: ningún Date ni Decimal viaja como tal.
@@ -51,6 +58,8 @@ export default async function PassengersPage({
     completionPercentage: passenger.completeness.completionPercentage,
     isComplete: passenger.completeness.complete,
     needsRoommate: passenger.needsRoommate,
+    paymentLight: paymentOf.get(passenger.id)?.light ?? "NEUTRO",
+    hasPaymentPlan: paymentOf.get(passenger.id)?.hasPlan ?? false,
   }));
 
   return (

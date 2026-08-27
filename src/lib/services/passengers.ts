@@ -775,3 +775,141 @@ export async function countPassengersByStatus(
     grouped.map((row) => [row.status, row._count._all]),
   );
 }
+
+// --------------------------- Datos para pagos ------------------------------
+
+/**
+ * Lo que el módulo de pagos necesita saber de un pasajero y su viaje.
+ *
+ * Existe porque `lib/services/payments.ts` NO puede consultar `prisma.passenger`
+ * ni `prisma.person`: ese es el invariante que hace que el aislamiento entre
+ * pasajeros dependa de un solo archivo y no de que cada consulta nueva se
+ * acuerde de acotarse. En vez de abrir una excepción "chica" —que es como
+ * empiezan todas— el módulo de pagos pide acá lo que necesita, y lo que
+ * necesita es esto y nada más: ningún dato personal, ninguno de salud.
+ *
+ * La autorización es de LECTURA: un coordinador pasa, y el pasajero pasa solo
+ * para sí mismo. Las operaciones de escritura suman su propia capability en
+ * el servicio de pagos.
+ */
+export interface PassengerForPayments {
+  id: string;
+  tripId: string;
+  status: PassengerStatus;
+  isCoordinator: boolean;
+  roomType: RoomType;
+  /** Precio pactado que pisa el de lista. String o null. */
+  priceOverride: string | null;
+  fullName: string | null;
+  preferredLanguage: "ES" | "EN";
+  trip: {
+    id: string;
+    name: string;
+    currency: "GBP" | "USD" | "EUR";
+    startDate: Date;
+    priceDouble: string | null;
+    priceSingle: string | null;
+    paymentToleranceAmount: string;
+  };
+  /** El viewer es este mismo pasajero. */
+  isOwnRecord: boolean;
+}
+
+export async function getPassengerForPayments(
+  passengerId: string,
+): Promise<PassengerForPayments> {
+  const { viewer } = await requirePassengerAccess(passengerId, "view");
+
+  const row = await prisma.passenger.findUnique({
+    where: { id: passengerId },
+    select: {
+      id: true,
+      tripId: true,
+      status: true,
+      isCoordinator: true,
+      roomType: true,
+      priceOverride: true,
+      person: { select: { fullName: true, preferredLanguage: true } },
+      trip: {
+        select: {
+          id: true,
+          name: true,
+          currency: true,
+          startDate: true,
+          priceDouble: true,
+          priceSingle: true,
+          paymentToleranceAmount: true,
+        },
+      },
+    },
+  });
+
+  if (!row) throw new ForbiddenError();
+
+  return {
+    id: row.id,
+    tripId: row.tripId,
+    status: row.status,
+    isCoordinator: row.isCoordinator,
+    roomType: row.roomType,
+    priceOverride: row.priceOverride?.toString() ?? null,
+    fullName: row.person.fullName,
+    preferredLanguage: row.person.preferredLanguage,
+    trip: {
+      id: row.trip.id,
+      name: row.trip.name,
+      currency: row.trip.currency,
+      startDate: row.trip.startDate,
+      priceDouble: row.trip.priceDouble?.toString() ?? null,
+      priceSingle: row.trip.priceSingle?.toString() ?? null,
+      paymentToleranceAmount: row.trip.paymentToleranceAmount.toString(),
+    },
+    isOwnRecord: viewer.ownPassengerId === row.id,
+  };
+}
+
+export interface PassengerForPaymentsList {
+  id: string;
+  fullName: string | null;
+  status: PassengerStatus;
+  roomType: RoomType;
+}
+
+/**
+ * Pasajeros facturables de un viaje, para la vista de pagos del coordinador.
+ *
+ * Excluye a los coordinadores porque no generan plan (decisión 2). El alcance
+ * lo sigue imponiendo `passengerVisibilityFilter`: si esto lo llamara un
+ * pasajero, se vería solo a sí mismo en vez de a todo el viaje.
+ */
+export async function listPassengersForPayments(
+  tripId: string,
+): Promise<PassengerForPaymentsList[]> {
+  const viewer = await getTripViewer(tripId);
+
+  if (viewer.tripRole === null && viewer.globalRole !== "ADMIN") {
+    throw new ForbiddenError();
+  }
+
+  const rows = await prisma.passenger.findMany({
+    where: {
+      tripId,
+      isCoordinator: false,
+      ...passengerVisibilityFilter(viewer),
+    },
+    orderBy: { person: { fullName: "asc" } },
+    select: {
+      id: true,
+      status: true,
+      roomType: true,
+      person: { select: { fullName: true } },
+    },
+  });
+
+  return rows.map((row) => ({
+    id: row.id,
+    fullName: row.person.fullName,
+    status: row.status,
+    roomType: row.roomType,
+  }));
+}

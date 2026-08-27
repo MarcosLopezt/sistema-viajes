@@ -81,13 +81,6 @@ enum IndirectCostType {
   OTRO
 }
 
-enum InstallmentStatus {
-  PENDIENTE
-  EN_REVISION
-  PAGADA
-  VENCIDA
-}
-
 enum PaymentStatus {
   EN_REVISION
   CONFIRMADO
@@ -166,8 +159,8 @@ model Trip {
   endDate   DateTime @db.Date
   currency  Currency
 
-  minPassengers Int
-  maxPassengers Int
+  minPassengers      Int
+  maxPassengers      Int
   /// Divisor de los costos indirectos. Cuenta SOLO pasajeros facturables:
   /// NO incluye a los coordinadores (decisión 1).
   budgetedPassengers Int
@@ -182,11 +175,17 @@ model Trip {
 
   /// Ventana de advertencia amarilla del pasaporte, en meses posteriores al
   /// fin del viaje.
-  passportValidityMonths Int @default(3)
+  passportValidityMonths      Int     @default(3)
   /// Si es true, la advertencia amarilla pasa a ser bloqueante: el pasaporte
   /// debe tener `passportValidityMonths` de validez después del regreso.
   /// Se activa para destinos que lo exigen a la entrada (ej. Schengen).
   requireFullPassportValidity Boolean @default(false)
+
+  /// Cuánto puede faltar para dar una cuota por cubierta. Existe por las
+  /// comisiones de los bancos intermediarios: de una cuota de £1.330 llegan
+  /// £1.329,20 y perseguir esos 80 peniques cuesta más de lo que valen.
+  /// Aplica SOLO por defecto; lo que entra de más es crédito, exacto.
+  paymentToleranceAmount Decimal @default(1.00) @db.Decimal(12, 2)
 
   /// Offsets en días para los recordatorios de cuota, relativos al vencimiento.
   /// Negativo = antes del vencimiento. Default: 7 días antes y 1 día después.
@@ -228,8 +227,8 @@ model Accommodation {
   id     String @id @default(uuid()) @db.Uuid
   stopId String @db.Uuid
 
-  hotelName String
-  nights    Int
+  hotelName           String
+  nights              Int
   /// Precio por noche POR PERSONA en habitación doble.
   pricePerNightDouble Decimal @db.Decimal(12, 2)
   /// Precio por noche POR PERSONA en habitación single.
@@ -306,7 +305,7 @@ model Person {
   hasMobilityRestrictions    Boolean @default(false)
   mobilityRestrictionsDetail String?
   /// Único campo verdaderamente opcional del formulario.
-  otherHealthNotes String?
+  otherHealthNotes           String?
 
   // Paso 3 — documentos
   /// Path interna en el bucket privado de Supabase Storage. NUNCA una URL.
@@ -388,38 +387,54 @@ model PaymentPlan {
   payments     Payment[]
 }
 
+/// Una cuota NO tiene columna de estado, y eso es deliberado.
+///
+/// PAGADA, VENCIDA, EN_REVISION y PENDIENTE se derivan al leer, en
+/// derivePlan() (src/lib/domain/payments.ts), a partir del vencimiento y de
+/// los pagos confirmados. Un campo persistido dependería de que un cron lo
+/// haya actualizado, y la ventana de Vercel Cron es de ~1 hora: el semáforo
+/// mentiría justo el día del vencimiento, que es el único que importa.
+///
+/// Lo único que se persiste sobre el paso del tiempo es SentReminder, y
+/// contesta "¿ya mandamos este aviso?", nunca "¿está vencida?".
 model Installment {
-  id      String            @id @default(uuid()) @db.Uuid
-  planId  String            @db.Uuid
+  id      String   @id @default(uuid()) @db.Uuid
+  planId  String   @db.Uuid
   number  Int
-  dueDate DateTime          @db.Date
-  amount  Decimal           @db.Decimal(12, 2)
-  status  InstallmentStatus @default(PENDIENTE)
+  dueDate DateTime @db.Date
+  amount  Decimal  @db.Decimal(12, 2)
 
   plan      PaymentPlan    @relation(fields: [planId], references: [id], onDelete: Cascade)
   payments  Payment[]
   reminders SentReminder[]
 
   @@unique([planId, number])
-  @@index([status, dueDate])
+  @@index([dueDate])
 }
 
 model Payment {
-  id     String @id @default(uuid()) @db.Uuid
-  planId String @db.Uuid
+  id            String  @id @default(uuid()) @db.Uuid
+  planId        String  @db.Uuid
   /// Obligatorio para kind=PAGO, nulo para kind=REEMBOLSO (decisión 6).
   installmentId String? @db.Uuid
 
-  kind     PaymentKind @default(PAGO)
-  amount   Decimal     @db.Decimal(12, 2)
-  currency Currency
+  kind                 PaymentKind @default(PAGO)
+  amount               Decimal     @db.Decimal(12, 2)
+  currency             Currency
   /// TC usado si la moneda del pago difiere de la del viaje. Lo ingresa el
   /// coordinador al confirmar, con la cotización del día como sugerencia.
-  fxRateUsed Decimal? @db.Decimal(18, 8)
+  fxRateUsed           Decimal?    @db.Decimal(18, 8)
   /// Importe imputado, siempre en la moneda del viaje.
-  amountInTripCurrency Decimal @db.Decimal(12, 2)
+  amountInTripCurrency Decimal     @db.Decimal(12, 2)
 
-  method String
+  /// Fecha en que el pasajero hizo la transferencia. La declara él y NO es
+  /// createdAt: se puede cargar el comprobante días después de transferir, y
+  /// la que vale para conciliar contra el extracto es esta.
+  transferDate DateTime @db.Date
+
+  /// Código del medio de pago. Hoy siempre TRANSFERENCIA; se traduce en la
+  /// interfaz, así que nunca se guarda acá texto que el usuario vaya a leer.
+  method      String  @default("TRANSFERENCIA")
   /// Path interna en el bucket privado. NUNCA una URL.
   proofFileId String?
 

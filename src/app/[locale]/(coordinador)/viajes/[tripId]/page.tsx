@@ -1,13 +1,15 @@
 import { getLocale, getTranslations } from "next-intl/server";
-import { CalendarRange, Pencil, Users } from "lucide-react";
+import { CalendarRange, Pencil, Receipt, Users } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { getTripBudget } from "@/lib/services/trip";
 import { countPassengersByStatus } from "@/lib/services/passengers";
+import { getTripPaymentsOverview } from "@/lib/services/payments";
 import { formatDate, formatMoney, type LocaleCode } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PaymentLightBadge } from "@/components/payments/payment-badges";
 
 /**
  * Detalle del viaje.
@@ -22,9 +24,10 @@ export default async function TripDetailPage({
   const { tripId } = await params;
   const locale = (await getLocale()) as LocaleCode;
 
-  const [{ trip, breakdown, margin }, counts] = await Promise.all([
+  const [{ trip, breakdown, margin }, counts, payments] = await Promise.all([
     getTripBudget(tripId),
     countPassengersByStatus(tripId),
+    getTripPaymentsOverview(tripId),
   ]);
 
   const t = await getTranslations("budget.detail");
@@ -32,6 +35,7 @@ export default async function TripDetailPage({
   const tPrices = await getTranslations("budget.prices");
   const tStatus = await getTranslations("tripStatus");
   const tPassengers = await getTranslations("passengers");
+  const tPaymentsAdmin = await getTranslations("paymentsAdmin");
 
   const money = (value: string) => formatMoney(value, trip.currency, locale);
   const confirmed = counts["CONFIRMADO"] ?? 0;
@@ -168,15 +172,33 @@ export default async function TripDetailPage({
           </Card>
         </TabsContent>
 
-        {["payments", "communications"].map((tab) => (
-          <TabsContent key={tab} value={tab} className="pt-5">
-            <Card>
-              <CardContent className="text-muted-foreground py-12 text-center text-base">
-                {t("comingSoon")}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        ))}
+        <TabsContent value="payments" className="space-y-4 pt-5">
+          <Card>
+            <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
+              <Receipt className="text-muted-foreground size-8" aria-hidden="true" />
+              <p className="text-base tabular-nums">
+                {tPaymentsAdmin("collectedOf", {
+                  collected: money(payments.collected),
+                  expected: money(payments.expected),
+                })}
+              </p>
+              <PaymentLightBadge light={payments.light} />
+              <Button asChild size="lg">
+                <Link href={`/viajes/${trip.id}/pagos`}>
+                  {tPaymentsAdmin("title")}
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="communications" className="pt-5">
+          <Card>
+            <CardContent className="text-muted-foreground py-12 text-center text-base">
+              {t("comingSoon")}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
     </div>
   );

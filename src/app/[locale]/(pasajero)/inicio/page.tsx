@@ -13,12 +13,14 @@ import {
   getMyActivePassenger,
   getRecentCoordinatorEdits,
 } from "@/lib/services/passengers";
+import { getPaymentPlan } from "@/lib/services/payments";
 import { toIsoDate } from "@/lib/validation/trip";
-import { formatMoney, type LocaleCode } from "@/lib/format";
+import { formatDate, formatMoney, type LocaleCode } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PassportAlert } from "@/components/passenger/passport-alert";
 import { CoordinatorEditNotice } from "@/components/passenger/coordinator-edit-notice";
+import { PaymentLightBadge } from "@/components/payments/payment-badges";
 
 /**
  * Home del pasajero: exactamente tres tarjetas, nada más.
@@ -46,7 +48,10 @@ export default async function PassengerHomePage() {
     );
   }
 
-  const edits = await getRecentCoordinatorEdits(passenger.id);
+  const [edits, plan] = await Promise.all([
+    getRecentCoordinatorEdits(passenger.id),
+    getPaymentPlan(passenger.id),
+  ]);
   const person = passenger.person;
   const firstName = person.fullName?.split(" ")[0] ?? "";
   const missingPercent = 100 - passenger.completeness.completionPercentage;
@@ -157,19 +162,43 @@ export default async function PassengerHomePage() {
             {t("myPaymentsTitle")}
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          {passenger.priceOverride ? (
-            <p className="text-2xl font-semibold">
-              {formatMoney(
-                passenger.priceOverride,
-                passenger.trip.currency,
-                locale,
-              )}
-            </p>
-          ) : (
+        <CardContent className="space-y-3">
+          {plan === null ? (
             <p className="text-muted-foreground text-base">
               {t("myPaymentsEmpty")}
             </p>
+          ) : (
+            <>
+              {/* El número grande es lo que DEBE, no lo que ya pagó: es la
+                  pregunta que trae a alguien a esta tarjeta. */}
+              <p className="text-3xl font-semibold tabular-nums">
+                {formatMoney(plan.balance, plan.currency, locale)}
+              </p>
+              <p className="text-muted-foreground text-base">
+                {t("myPaymentsSummary", {
+                  paid: formatMoney(plan.paidTotal, plan.currency, locale),
+                  total: formatMoney(plan.totalAmount, plan.currency, locale),
+                })}
+              </p>
+              {plan.nextInstallment ? (
+                <p className="flex flex-wrap items-center gap-2 text-base">
+                  <PaymentLightBadge light={plan.light} />
+                  {t("myPaymentsNext", {
+                    label: `${formatMoney(plan.nextInstallment.remaining, plan.currency, locale)} · ${formatDate(plan.nextInstallment.dueDate)}`,
+                  })}
+                </p>
+              ) : (
+                <p className="text-status-ok text-base">
+                  {t("myPaymentsSettled")}
+                </p>
+              )}
+              <Button asChild size="lg" className="w-full">
+                <Link href="/mis-pagos">
+                  {t("myPaymentsAction")}
+                  <ChevronRight aria-hidden="true" />
+                </Link>
+              </Button>
+            </>
           )}
         </CardContent>
       </Card>

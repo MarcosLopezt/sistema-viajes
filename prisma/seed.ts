@@ -151,9 +151,26 @@ async function main() {
   // Borrar el viaje arrastra en cascada itinerario, costos, pasajeros, planes,
   // cuotas, pagos, invitaciones y comunicaciones.
   await prisma.trip.deleteMany({ where: { id: SEED_TRIP_ID } });
-  await prisma.person.deleteMany({
-    where: { user: { email: { endsWith: "@ejemplo.test" } } },
+
+  // Los User se borran ANTES que las Person y por su propio email.
+  //
+  // User.personId es onDelete: SetNull, así que borrar la Person deja viva la
+  // fila de User con personId en null — y como User.email es unique, la
+  // siembra siguiente moría con una violación de unicidad. Además, después de
+  // borrar los User el filtro `where: { user: ... }` de Person ya no matchea
+  // nada, así que hay que quedarse con los ids primero.
+  const seedUsers = await prisma.user.findMany({
+    where: { email: { endsWith: "@ejemplo.test" } },
+    select: { id: true, personId: true },
   });
+  const seedPersonIds = seedUsers
+    .map((u) => u.personId)
+    .filter((id): id is string => id !== null);
+
+  await prisma.user.deleteMany({
+    where: { id: { in: seedUsers.map((u) => u.id) } },
+  });
+  await prisma.person.deleteMany({ where: { id: { in: seedPersonIds } } });
 
   // ------------------------------------------------------------------- viaje
   const trip = await prisma.trip.create({
@@ -381,11 +398,14 @@ async function main() {
       installmentCount: 3,
       fxSnapshot,
       fxSnapshotDate: new Date("2026-08-24T00:00:00.000Z"),
+      // Sin columna de estado: PAGADA / VENCIDA / PENDIENTE se derivan de
+      // estos vencimientos y de los pagos de abajo. La cuota 1 tiene pago
+      // confirmado, la 2 venció sin pagarse y la 3 todavía no vence.
       installments: {
         create: [
-          { number: 1, dueDate: new Date("2026-07-15T00:00:00.000Z"), amount: "1330.00", status: "PAGADA" },
-          { number: 2, dueDate: new Date("2026-08-15T00:00:00.000Z"), amount: "1330.00", status: "VENCIDA" },
-          { number: 3, dueDate: new Date("2026-11-15T00:00:00.000Z"), amount: "1330.00", status: "PENDIENTE" },
+          { number: 1, dueDate: new Date("2026-07-15T00:00:00.000Z"), amount: "1330.00" },
+          { number: 2, dueDate: new Date("2026-08-15T00:00:00.000Z"), amount: "1330.00" },
+          { number: 3, dueDate: new Date("2026-11-15T00:00:00.000Z"), amount: "1330.00" },
         ],
       },
     },
@@ -402,8 +422,10 @@ async function main() {
       amount: "1330.00",
       currency: "GBP",
       amountInTripCurrency: "1330.00",
-      method: "Transferencia bancaria",
-      proofFileId: `${trip.id}/comprobantes/ana-cuota-1.pdf`,
+      transferDate: new Date("2026-07-14T00:00:00.000Z"),
+      method: "TRANSFERENCIA",
+      // La path sigue el prefijo que exige storage.ts: tripId/passengerId/...
+      proofFileId: `${trip.id}/${ids["ana"]!.passengerId}/comprobante-pago-seed-ana-1.pdf`,
       status: "CONFIRMADO",
       reviewedById: coordUser?.id ?? null,
       reviewedAt: new Date("2026-07-16T14:20:00.000Z"),
@@ -421,8 +443,8 @@ async function main() {
       fxSnapshotDate: new Date("2026-08-24T00:00:00.000Z"),
       installments: {
         create: [
-          { number: 1, dueDate: new Date("2026-08-10T00:00:00.000Z"), amount: "1995.00", status: "EN_REVISION" },
-          { number: 2, dueDate: new Date("2026-12-10T00:00:00.000Z"), amount: "1995.00", status: "PENDIENTE" },
+          { number: 1, dueDate: new Date("2026-08-10T00:00:00.000Z"), amount: "1995.00" },
+          { number: 2, dueDate: new Date("2026-12-10T00:00:00.000Z"), amount: "1995.00" },
         ],
       },
     },
@@ -440,8 +462,9 @@ async function main() {
       currency: "EUR",
       fxRateUsed: "0.86373391",
       amountInTripCurrency: "2012.50",
-      method: "Transferencia bancaria",
-      proofFileId: `${trip.id}/comprobantes/beto-cuota-1.pdf`,
+      transferDate: new Date("2026-08-09T00:00:00.000Z"),
+      method: "TRANSFERENCIA",
+      proofFileId: `${trip.id}/${ids["beto"]!.passengerId}/comprobante-pago-seed-beto-1.pdf`,
       status: "EN_REVISION",
     },
   });

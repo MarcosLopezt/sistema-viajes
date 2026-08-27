@@ -2,7 +2,7 @@
 
 Aplicación para organizar viajes grupales cerrados (14 pasajeros + 2 coordinadores): armado del presupuesto, alta y autogestión de pasajeros, cobro y seguimiento de pagos, y comunicaciones por mail.
 
-**Estado: Fase 3 (pasajeros e invitaciones) terminada.** Ver [Qué hay hecho](#qué-hay-hecho-y-qué-no).
+**Estado: Fase 4 (pagos) terminada.** Ver [Qué hay hecho](#qué-hay-hecho-y-qué-no).
 
 ---
 
@@ -94,7 +94,7 @@ El seed crea estos usuarios. Si `SUPABASE_SERVICE_ROLE_KEY` está configurada, t
 |---|---|---|
 | `admin@ejemplo.test` | ADMIN | Ve todos los viajes y el panel de administración |
 | `coordinador@ejemplo.test` | Coordinador | Panel del viaje de ejemplo |
-| `ana@ejemplo.test` | Pasajera | Datos completos, pasaporte 🟢, plan de 3 cuotas (una pagada, una vencida, una pendiente) |
+| `ana@ejemplo.test` | Pasajera | Datos completos, pasaporte 🟢, plan de 3 cuotas: una con pago confirmado, una vencida sin pagar y una a futuro |
 | `beto@ejemplo.test` | Pasajero | Pasaporte 🟡 (vence dentro de los 3 meses posteriores), pago en revisión, interfaz en inglés |
 | `carla@ejemplo.test` | Pasajera | Pasaporte 🔴: el sistema **no** deja confirmarla |
 | `diego@ejemplo.test` | Pasajero | Datos a medio cargar: sirve para ver el % de completitud |
@@ -299,6 +299,16 @@ COORDINADOR es naturalmente un rol *por viaje*: quien coordina el viaje A no deb
 
 Si colgaran de una cuota, un monto negativo bajaría la suma imputada y la cuota se "des-pagaría" sola. Además, si el pasajero canceló habiendo pagado tres cuotas, no hay una cuota a la que asociar el reembolso.
 
+### 7. `Installment` no tiene columna de estado
+
+Agregada en la fase 4, y es la decisión más importante del módulo de pagos: **`PAGADA`, `VENCIDA`, `EN_REVISION` y `PENDIENTE` se derivan al leer**, en [`derivePlan()`](src/lib/domain/payments.ts), a partir del vencimiento de la cuota y de los pagos confirmados que la cubren.
+
+El enum `InstallmentStatus` y la columna `Installment.status` que existían desde la fase 1 se eliminaron en la migración `pagos_fase4`.
+
+El motivo no es purismo. Un campo persistido depende de que un cron lo haya actualizado, y **Vercel Cron tiene una ventana de ejecución de ~1 hora**: el día en que una cuota vence —el único día en que el semáforo realmente importa— el campo diría `PENDIENTE` durante un rato indeterminado. Un semáforo que miente justo cuando hace falta es peor que no tener semáforo. Derivado no puede desincronizarse, porque no hay nada que sincronizar.
+
+Lo único que sí se persiste sobre el paso del tiempo es `SentReminder`, y contesta «¿ya mandamos este aviso?», nunca «¿está vencida?».
+
 ### Entidades agregadas al modelo original
 
 | Entidad | Por qué |
@@ -307,6 +317,8 @@ Si colgaran de una cuota, un monto negativo bajaría la suma imputada y la cuota
 | `Room` | Ver decisión 4. |
 | `SentReminder` | Sin un `@@unique([installmentId, offsetDays])` no se puede cumplir "nunca más de un recordatorio del mismo tipo por cuota". Es lo que hace idempotente al cron. |
 | `CommunicationRecipient` | Reemplaza al `recipientIds[]` del diseño original. El envío masivo no puede ser un `for` dentro de un request (Vercel Hobby corta a los ~10 s, Brevo permite 300/día): se encola una fila por destinatario y el cron las procesa por lotes. De paso queda trazabilidad de quién recibió qué. |
+| `Trip.paymentToleranceAmount` | Cuánto puede faltar para dar una cuota por cubierta. Existe por las comisiones de los bancos intermediarios: de una cuota de £1.330 llegan £1.329,20 y perseguir esos 80 peniques cuesta más de lo que valen. Aplica **solo por defecto**; lo que entra de más es crédito, exacto. |
+| `Payment.transferDate` | La fecha en que el pasajero transfirió, que **no** es `createdAt`: el comprobante se puede subir días después, y la que sirve para conciliar contra el extracto es esta. |
 | `RateLimitHit` | El rate limiting tiene que vivir en la base: en Vercel cada request puede caer en una instancia distinta, así que un contador en memoria no limita nada. Ver la nota sobre su purga abajo. |
 
 #### `RateLimitHit`: la tabla que crece sola
@@ -379,6 +391,95 @@ El porcentaje es **sobre el precio de venta** (`(precio − costo) / precio`), q
 - **Los cruces GBP↔EUR se derivan** de las dos tasas contra el dólar en el momento de usarlas. No se guardan precalculados: duplicar la fuente de verdad abre la puerta a que ida y vuelta queden inconsistentes.
 - El redondeo se aplica **una sola vez, al importe final**. Redondear el tipo de cambio antes de multiplicar introduce un error que crece con el importe.
 - La leyenda «cotización del DD/MM/AAAA» usa `date` —el día hábil que reporta el BCE— y no `fetchedAt`. Un sábado la API devuelve el viernes, y eso es lo que hay que mostrar.
+
+## Pagos
+
+El motor puro está en [`src/lib/domain/payments.ts`](src/lib/domain/payments.ts); la lógica con autorización, en [`src/lib/services/payments.ts`](src/lib/services/payments.ts).
+
+### El estado de una cuota se deriva, no se guarda
+
+Ver [decisión 7](#7-installment-no-tiene-columna-de-estado). La regla, tal cual:
+
+> Una cuota está **vencida** si no tiene pago confirmado que la cubra **y** su vencimiento ya pasó.
+
+Dos consecuencias que se testean en los bordes:
+
+- **Vence hoy y no está pagada → todavía NO está vencida.** El pasajero tiene todo el día para pagar; marcarla en rojo a las 00:00 es cobrarle un día antes de lo que se le dijo.
+- **Un comprobante en revisión NO limpia una cuota vencida.** La plata todavía no entró. Pero la cuota expone `hasPendingProof` por separado, y la pantalla dice «vencida, con un comprobante en revisión»: es la verdad completa, y el pasajero ya hizo su parte.
+
+### El reparto en cuotas: la última absorbe la diferencia
+
+£3.499,43 en 3 cuotas da 1.166,476666… Ninguna forma de redondear las tres por igual suma el total: 1.166,48 × 3 se pasa un centavo, 1.166,47 × 3 queda dos abajo.
+
+`splitIntoInstallments()` calcula las primeras N−1 al centavo y **despeja la última**: `total − base × (N−1)`. Así el error no se acumula y la suma cierra por construcción. Absorbe la última porque es la más lejana en el tiempo y la más fácil de ajustar; que la diferencia caiga en la primera —la que se paga ahora, la que se compara con lo que dijo el coordinador— sería peor.
+
+El test recorre 14 montos feos × N de 1 a 6 y verifica que la suma sea **exactamente** el total, comparando con `Decimal.equals` y no con strings.
+
+### Qué se congela al crear el plan
+
+`totalAmount` y `fxSnapshot`. Si el coordinador sube el precio del viaje después, a quien ya tiene plan **no se le reescribe la deuda**: pactó un precio y ese es el suyo. Lo mismo con la cotización — un saldo que cambia solo porque se movió el euro es un saldo en el que nadie confía.
+
+### Idempotencia de la confirmación
+
+Doble click, o dos coordinadores mirando la misma cola. Se resuelve **en la base**, con un `UPDATE` condicionado al estado anterior:
+
+```sql
+UPDATE "Payment" SET status='CONFIRMADO' WHERE id = ? AND status = 'EN_REVISION'
+```
+
+Postgres serializa las dos ejecuciones sobre la fila: la segunda reevalúa el `WHERE` después de que la primera commiteó, no encuentra nada y afecta 0 filas. No hace falta lock explícito ni un `SELECT` previo — que sería justamente el que tiene la ventana de carrera.
+
+Y hay una segunda razón por la que esto no puede duplicar plata: lo pagado de una cuota **no es un contador que se incrementa**, es la suma de los pagos confirmados, recalculada al leer. Aunque el `UPDATE` corriera dos veces, el conjunto de pagos confirmados sería el mismo. El CAS existe para que no se duplique el `AuditLog` ni se "desrechace" un pago ya rechazado.
+
+El test lo verifica con dos `confirmPayment()` en `Promise.all`: exactamente uno devuelve `APLICADO` y el otro `YA_RESUELTO`, hay un solo `Payment` confirmado y una sola entrada de auditoría.
+
+### Tolerancia y excedente no son simétricos
+
+- **Tolerancia** (`Trip.paymentToleranceAmount`, default 1 unidad): aplica **por defecto**. Existe porque el banco intermediario se come una comisión y de una cuota de £1.330 llegan £1.329,20.
+- **Excedente**: se cuenta **exacto**, hasta el último centavo, y queda como crédito visible. **No se imputa automáticamente a la cuota siguiente**: esa decisión es del coordinador, no del sistema.
+
+### Deshacer una confirmación
+
+Decisión tomada: el coordinador **puede** deshacer una confirmación hecha por error, con **motivo obligatorio** y `AuditLog`. El pago vuelve a `EN_REVISION` —o sea, a la cola, donde alguien lo tiene que resolver— y se limpian `fxRateUsed` y el importe imputado.
+
+La alternativa purista —dejar la confirmación quieta y compensar con un asiento inverso— es más limpia contablemente, pero le pide a alguien que apretó el botón equivocado a las once de la noche que entienda partida doble para arreglarlo. La reversión también es idempotente, con el mismo `UPDATE` condicionado.
+
+### El pasajero no ingresa el tipo de cambio
+
+Declara importe, moneda, fecha y comprobante. El TC lo carga el **coordinador** al revisar, con el número del extracto bancario y con la cotización del día **precargada como sugerencia** — son valores distintos, y el que vale para imputar es el del banco.
+
+Mientras el pago está en revisión igual hace falta un `amountInTripCurrency`, porque es lo que muestra el renglón «en revisión». Se calcula con la cotización del día como **provisorio** y el coordinador lo pisa al confirmar; ese cambio queda auditado.
+
+### El semáforo
+
+Una sola función (`derivePlan().light`) alimenta las tres pantallas: la tarjeta del pasajero, el listado de pasajeros y la vista de pagos del coordinador. Si fueran tres cálculos, tarde o temprano uno mostraría verde donde otro muestra rojo.
+
+| Luz | Cuándo |
+|---|---|
+| 🟢 | Sin vencidas, sin comprobantes en revisión y sin nada que venza en ≤ 7 días |
+| 🟡 | Algún comprobante en revisión, **o** alguna cuota que vence en ≤ 7 días |
+| 🔴 | Alguna cuota vencida |
+| ⚪ | Plan congelado (pasajero cancelado) o sin plan |
+
+### Plan congelado
+
+Un `Passenger` en `CANCELADO` **no genera plan**, y si ya lo tenía el plan se congela: no produce cuotas vencidas ni recordatorios. Lo que ya pagó se sigue viendo, porque hay que devolvérselo.
+
+### Cuándo se puede regenerar un plan
+
+| Situación | Qué pasa |
+|---|---|
+| Tiene un pago **confirmado** | Inmutable. Reescribir las cuotas debajo de plata que ya entró deja una imputación sin sentido. |
+| Tiene un comprobante **en revisión** | Tampoco: al borrar las cuotas ese pago quedaría colgado de la nada. Hay que resolverlo primero. |
+| Sin pagos | Se puede, con **confirmación explícita** («se van a reemplazar 4 cuotas») y `AuditLog`. |
+
+Los pagos **rechazados** sobreviven a la regeneración con `installmentId` en null (`onDelete: SetNull`): conservan la historia y no afectan ninguna derivación, porque `RECHAZADO` no cuenta para nada.
+
+### Los comprobantes se sirven por un Route Handler
+
+[`/api/comprobantes/[paymentId]`](src/app/api/comprobantes/[paymentId]/route.ts) firma la URL **en el momento de pedirla** y devuelve un 307. Si el servidor incrustara la URL firmada en el HTML, quedaría en el cache del navegador y en el historial, y como el HTML se regenera en cualquier momento una URL ya vencida rompería el link.
+
+El handler **no decide nada**: toda la autorización está en `createSignedDownloadUrl`, que exige acceso de lectura al pasajero dueño del archivo y verifica que la path caiga dentro de su carpeta. Un pasajero pidiendo el comprobante de otro recibe **404, no 403** — un 403 le confirmaría que ese pago existe.
 
 ## Invitaciones y registro
 
@@ -606,6 +707,19 @@ Las transiciones son explícitas (`BORRADOR → ABIERTO → CERRADO → FINALIZA
 
 ## Qué hay hecho y qué no
 
+### Fase 4 — terminada
+
+- **`Installment.status` eliminado**: el estado de la cuota se deriva al leer. Migración `pagos_fase4`.
+- Motor de pagos puro (`payments.ts`): reparto en 1..6 cuotas con la última absorbiendo el redondeo, fechas sugeridas entre hoy y una semana antes de la salida, derivación del estado, semáforo e imputación con TC. 130 tests unitarios.
+- Generación del plan con precio y `fxSnapshot` congelados, advertencia de cuotas posteriores a la salida, e inmutabilidad con pagos confirmados.
+- Carga de comprobantes por el pasajero (mismo circuito de archivos de la fase 3) sin campo de tipo de cambio.
+- Revisión por el coordinador con TC del extracto y cotización del día precargada; confirmación **idempotente en la base**; rechazo con motivo obligatorio.
+- Reversión de una confirmación con motivo obligatorio y `AuditLog`.
+- Pagos parciales con tolerancia configurable, excedente como crédito sin imputación automática, y reembolsos que no alteran cuotas.
+- Vista «Mis pagos» del pasajero y vista de pagos del viaje con cola de revisión y recaudado vs. esperado.
+- Route Handler de comprobantes con autorización delegada al servicio.
+- 35 tests de integración nuevos, incluidos los de aislamiento **por servicio y por HTTP**.
+
 ### Fase 3 — terminada
 
 - Invitaciones con token hasheado, vencimiento de 14 días, un solo uso, revocación al reenviar y rate limiting en el canje. Botón de copiar link como acción de primer nivel.
@@ -614,7 +728,7 @@ Las transiciones son explícitas (`BORRADOR → ABIERTO → CERRADO → FINALIZA
 - Alerta de pasaporte visible para las dos partes, con `requireFullPassportValidity`.
 - Transiciones de estado validadas en el servicio.
 - Habitaciones con tope de dos y alerta de "sin compañero"; `priceOverride` con motivo y auditoría.
-- Listado del coordinador con semáforo y filtros; ficha editable con `AuditLog` y aviso al pasajero.
+- Listado del coordinador con semáforo y filtros; ficha editable con `AuditLog` y aviso al pasajero. *(El tercer indicador —pagos— quedó cableado en la fase 4.)*
 - Plantilla de mail de invitación en es/en.
 - 81 tests de integración (37 nuevos) y 148 unitarios (21 nuevos).
 
@@ -644,8 +758,7 @@ Las transiciones son explícitas (`BORRADOR → ABIERTO → CERRADO → FINALIZA
 
 | Fase | Qué falta |
 |---|---|
-| 4 | Planes de 1 a 6 cuotas, congelamiento de TC, revisión de comprobantes, dashboard con semáforo. |
-| 5 | Editor bilingüe, envío masivo, endpoint de cron, plantillas de mail. |
+| 5 | Editor bilingüe, envío masivo, endpoint de cron, plantillas de mail. **Recordatorios automáticos de cuota** (`SentReminder` y `Trip.reminderOffsetsDays` ya están en el modelo). |
 | 6 | Exportación a Excel (**con fecha y hora de generación en la primera fila**), panel de admin con escritura, revisión de accesibilidad. **Completar el backup**: usuarios de Auth y archivos del Storage (ver [deuda conocida](#️-deuda-conocida-el-backup-está-incompleto)). |
 
 ### Fuera de alcance
