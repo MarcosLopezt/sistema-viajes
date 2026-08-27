@@ -2,7 +2,7 @@
 
 Aplicación para organizar viajes grupales cerrados (14 pasajeros + 2 coordinadores): armado del presupuesto, alta y autogestión de pasajeros, cobro y seguimiento de pagos, y comunicaciones por mail.
 
-**Estado: Fase 4 (pagos) terminada.** Ver [Qué hay hecho](#qué-hay-hecho-y-qué-no).
+**Estado: Fase 5 (comunicaciones y automatización) terminada.** Ver [Qué hay hecho](#qué-hay-hecho-y-qué-no).
 
 ---
 
@@ -299,7 +299,17 @@ COORDINADOR es naturalmente un rol *por viaje*: quien coordina el viaje A no deb
 
 Si colgaran de una cuota, un monto negativo bajaría la suma imputada y la cuota se "des-pagaría" sola. Además, si el pasajero canceló habiendo pagado tres cuotas, no hay una cuota a la que asociar el reembolso.
 
-### 7. `Installment` no tiene columna de estado
+### 7. `Trip.timezone`: los vencimientos son días, no instantes
+
+`derivePlan()` comparaba `dueDate` contra `new Date()`. En Vercel el proceso corre en UTC: a las 22:00 del 26 de agosto en Buenos Aires ya es el 27 en UTC, así que la cuota del 26 aparecía **vencida tres horas antes de que terminara el día del pasajero**. Un cartel rojo, un mail de reclamo y una llamada al coordinador por algo que todavía no pasó.
+
+La solución no fue sumar tres horas: fue dejar de trabajar con instantes. [`src/lib/domain/calendar.ts`](src/lib/domain/calendar.ts) define el tipo `CalendarDate` —`"2026-08-26"`, un día sin hora y sin huso— y **`derivePlan()` y `suggestDueDates()` ya no aceptan `Date`**. El instante se convierte a día UNA vez, en la capa de servicios, con `calendarDateIn(now, trip.timezone)`.
+
+Que el motor no acepte instantes no es formalidad: es la única forma de que el error no se pueda volver a cometer. No tiene con qué.
+
+En ese formato el orden lexicográfico es el cronológico, así que comparar dos fechas es `a < b` y no hay hora que se cuele. Una zona con typo cae al **default**, nunca a UTC: un error de tipeo es molesto, empezar a contar los días en Greenwich sin que nadie se entere es el bug original de vuelta.
+
+### 8. `Installment` no tiene columna de estado
 
 Agregada en la fase 4, y es la decisión más importante del módulo de pagos: **`PAGADA`, `VENCIDA`, `EN_REVISION` y `PENDIENTE` se derivan al leer**, en [`derivePlan()`](src/lib/domain/payments.ts), a partir del vencimiento de la cuota y de los pagos confirmados que la cubren.
 
@@ -319,6 +329,8 @@ Lo único que sí se persiste sobre el paso del tiempo es `SentReminder`, y cont
 | `CommunicationRecipient` | Reemplaza al `recipientIds[]` del diseño original. El envío masivo no puede ser un `for` dentro de un request (Vercel Hobby corta a los ~10 s, Brevo permite 300/día): se encola una fila por destinatario y el cron las procesa por lotes. De paso queda trazabilidad de quién recibió qué. |
 | `Trip.paymentToleranceAmount` | Cuánto puede faltar para dar una cuota por cubierta. Existe por las comisiones de los bancos intermediarios: de una cuota de £1.330 llegan £1.329,20 y perseguir esos 80 peniques cuesta más de lo que valen. Aplica **solo por defecto**; lo que entra de más es crédito, exacto. |
 | `Payment.transferDate` | La fecha en que el pasajero transfirió, que **no** es `createdAt`: el comprobante se puede subir días después, y la que sirve para conciliar contra el extracto es esta. |
+| `Payment.fxRateSource` | `SUGERIDO` \| `INGRESADO`: si el coordinador tipeó el TC del extracto o confirmó dejando la cotización del día. Es **procedencia declarada por el formulario**, no un control — tipear exactamente la sugerencia es legítimo y el servidor no puede distinguirlo. Lo que el servidor sí decide es que sea `null` cuando no hubo conversión. Las filas anteriores al campo quedan en `null` con `fxRateUsed` no nulo, y se leen como «sin registro de procedencia». |
+| `SentNotification` | Idempotencia de los avisos automáticos que **no** cuelgan de una cuota (hoy, las alertas de pasaporte). Los recordatorios de pago siguen en `SentReminder`, que tiene una FK real a `Installment` y hereda el borrado en cascada; estos apuntan a un `Passenger`, así que van en su propia tabla con su propia FK en vez de forzar una tabla polimórfica sin integridad referencial. Mismo mecanismo —un unique compuesto—, dos tablas, cada una con su FK. |
 | `RateLimitHit` | El rate limiting tiene que vivir en la base: en Vercel cada request puede caer en una instancia distinta, así que un contador en memoria no limita nada. Ver la nota sobre su purga abajo. |
 
 #### `RateLimitHit`: la tabla que crece sola
@@ -334,7 +346,7 @@ Es la única tabla que escribe **tráfico no autenticado** (cada intento de logi
 
 Se guarda el **SHA-256** de `acción + identificador`, no el identificador en claro: la clave incluye el email o la IP, y esos son datos personales. Con el hash alcanza para contar intentos.
 
-**La purga va en el cron diario de la fase 5.** La función ya está escrita —`purgeExpiredRateLimitHits()` en [`src/lib/auth/rate-limit.ts`](src/lib/auth/rate-limit.ts)— y borra todo lo anterior a la ventana más larga configurada; solo falta el endpoint que la llame. Mientras el cron no exista, la tabla crece: con el volumen de este sistema no es un problema a corto plazo, pero no hay que olvidarlo.
+**La purga corre en el cron diario** (tarea `rateLimit`), con `purgeExpiredRateLimitHits()` en [`src/lib/auth/rate-limit.ts`](src/lib/auth/rate-limit.ts): borra todo lo anterior a la ventana más larga configurada. Deuda de la fase 1, saldada en la fase 5.
 
 ### Otras decisiones que quedaron en el código
 
@@ -480,6 +492,121 @@ Los pagos **rechazados** sobreviven a la regeneración con `installmentId` en nu
 [`/api/comprobantes/[paymentId]`](src/app/api/comprobantes/[paymentId]/route.ts) firma la URL **en el momento de pedirla** y devuelve un 307. Si el servidor incrustara la URL firmada en el HTML, quedaría en el cache del navegador y en el historial, y como el HTML se regenera en cualquier momento una URL ya vencida rompería el link.
 
 El handler **no decide nada**: toda la autorización está en `createSignedDownloadUrl`, que exige acceso de lectura al pasajero dueño del archivo y verifica que la path caiga dentro de su carpeta. Un pasajero pidiendo el comprobante de otro recibe **404, no 403** — un 403 le confirmaría que ese pago existe.
+
+## Comunicaciones y automatización
+
+### El endpoint de cron
+
+`POST /api/cron/daily`, protegido por `Authorization: Bearer <CRON_SECRET>`, comparado en **tiempo constante** (`timingSafeEqual`). Sin cabecera o con un secreto que no coincide, 401 y no se toca nada. Es la única autorización de todo el camino: las tareas corren sin sesión y no vuelven a preguntar quién las llamó.
+
+**Sin `CRON_SECRET` configurado el endpoint se cierra, no se abre.** Un cron sin proteger es un botón de «mandar mails a todos» publicado en internet.
+
+Es POST y no GET a propósito: manda mails y escribe en la base. Un GET es cacheable, lo dispara un prefetch del navegador y aparece entero —con el secreto— en cualquier log de accesos que registre la URL.
+
+Cinco tareas, en este orden, **cada una en su propio try/catch**:
+
+| # | Tarea | Qué hace |
+|---|---|---|
+| 1 | `cotizaciones` | Refresca `FxRate` del día |
+| 2 | `recordatorios` | Recordatorios de cuota |
+| 3 | `pasaportes` | Alertas de pasaporte |
+| 4 | `comunicaciones` | Programadas cuya fecha llegó, y las que quedaron a medio mandar |
+| 5 | `rateLimit` | `purgeExpiredRateLimitHits()` — deuda de la fase 1, ya estaba escrita |
+
+Si la API de cotizaciones está caída, los recordatorios salen igual. La respuesta trae un resumen por tarea, y devuelve **200 aunque alguna falle**: un 500 haría que Vercel reintente la corrida entera, incluidas las tareas que sí anduvieron.
+
+`vercel.json` declara **un** cron diario. Hobby permite dos, diarios, con una ventana de disparo de ~1 hora — la misma ventana que es la razón de que el estado de las cuotas no se persista.
+
+### Corte y retome
+
+Vercel Hobby corta las funciones a los ~10 s. Ninguna tarea asume que termina: cada una recibe un presupuesto de mails y un instante límite, y devuelve `remaining: true` si dejó cosas sin hacer. Lo pendiente no se pierde — al no haberse escrito su marca, la corrida siguiente lo vuelve a encontrar.
+
+### Idempotencia: marcar primero, mandar después
+
+Dos corridas el mismo día no pueden mandar dos veces el mismo aviso. La garantía es un índice unique —`SentReminder(installmentId, offsetDays)` y `SentNotification(kind, passengerId, tag)`— **y el orden de las operaciones**:
+
+1. Se **inserta** la marca. Si choca contra el unique, ya se mandó: se saltea.
+2. Recién entonces se manda el mail.
+3. Si el envío falla, se **borra** la marca para que la próxima corrida reintente.
+
+El orden importa. Mandando primero y marcando después, un fallo entre las dos operaciones manda el mail otra vez mañana. Marcando primero, dos ejecuciones simultáneas chocan en el `INSERT` y solo una manda — que es exactamente lo que pide una ventana de disparo de una hora, donde un reintento de la plataforma puede solaparse con la corrida original.
+
+El paso 3 admite un duplicado en un caso raro: si el proveedor mandó el mail pero la respuesta se perdió, se borra la marca y mañana se reintenta. **Un recordatorio repetido es molesto; uno que nunca sale hace que alguien pierda el viaje.** La elección es deliberada.
+
+### Recordatorios
+
+Offsets por viaje (`Trip.reminderOffsetsDays`, default `[-7, 1]`): negativo es antes del vencimiento, positivo después.
+
+La condición de disparo es **`hoy >= vencimiento + offset`**, no `hoy ==`. Con la igualdad, un día que el cron no corrió pierde ese recordatorio para siempre. Con `>=` la corrida siguiente lo manda igual —tarde, pero mandado— y el unique impide que salga dos veces. La deuda sigue existiendo aunque el cron haya tenido un mal día.
+
+Nunca a un pasajero `CANCELADO`, nunca a un coordinador, nunca sobre una cuota ya cubierta. Siempre en el idioma del destinatario.
+
+### Las alertas de pasaporte se mandan una vez por nivel
+
+El `tag` de `SentNotification` es `BLOQUEANTE` o `ADVERTENCIA`. Sin eso, alguien con el pasaporte vencido recibiría el mismo mail todos los días hasta renovarlo, que es la forma más rápida de que empiece a ignorar los mails del viaje. Si el pasaporte **empeora** —de amarillo a rojo— sí se vuelve a avisar: es otro `tag` y la situación cambió.
+
+### Las plantillas
+
+Seis, todas en `es` y `en`: invitación, recordatorio de pago, pago confirmado, pago rechazado, alerta de pasaporte y comunicación del coordinador. Se arman con bloques y salen por [`renderEmail()`](src/lib/email/layout.ts), así que el HTML y **la versión de texto plano** se generan de la misma fuente y no pueden desincronizarse.
+
+**El HTML es feo a propósito.** Los clientes de mail no son navegadores: Outlook de escritorio renderiza con el motor de Word y Gmail borra la etiqueta `<style>` en algunas vistas. Entonces, sin excepciones: maquetación con `<table>`, estilos **inline** en cada elemento, ancho máximo 600px, colores en hex de 6 dígitos, nada de `flex`, `grid`, `var(--…)` ni `oklch()`. Hay tests que lo verifican, porque es la clase de regla que se rompe sola la primera vez que alguien copia un snippet.
+
+**Todos llevan `text/plain`.** No es cortesía: un mail sin versión de texto puntúa peor en los filtros de spam y es lo que ven los lectores de pantalla. `EmailMessage.text` es obligatorio en el tipo — la única forma de que nadie se olvide.
+
+**Nada de lo que escribe una persona sale sin escapar.** El cuerpo de una comunicación, el nombre del pasajero y el motivo de un rechazo pasan por `escapeHtml`. Los `href` pasan por `safeUrl()`, que además **rechaza todo lo que no sea http/https**: los clientes modernos bloquean `javascript:`, pero no todos, y no es algo que convenga delegar.
+
+El pie identifica el viaje y **a quién responder** — el primer coordinador, o `EMAIL_REPLY_TO`. Que sea una persona y no `no-reply@` es deliberado: quien recibe «tu pago fue rechazado» tiene una pregunta, y la va a hacer apretando responder.
+
+Para verlas en un cliente de verdad:
+
+```bash
+npm run email:test -- vos@tu-casilla.com              # todas
+npm run email:test -- vos@tu-casilla.com rechazado --texto
+```
+
+Con `EMAIL_PROVIDER=console` (el default) no envía nada. Para probar Brevo:
+
+```bash
+EMAIL_PROVIDER=brevo BREVO_API_KEY=xkeysib-... \
+EMAIL_FROM_ADDRESS=una-casilla-verificada@tu-dominio.com \
+npm run email:test -- vos@tu-casilla.com
+```
+
+El remitente **tiene que estar verificado en Brevo**; si no, la API responde 400 y el mensaje lo dice. Ese mismo texto es el que termina en `CommunicationRecipient.error` y el que el coordinador lee en pantalla, por eso el adaptador extrae el `message` de la respuesta en vez de quedarse con «HTTP 400». Lo que **no** incluye nunca es el destinatario, aunque Brevo lo repita: ese texto va a la base y a los logs.
+
+### El envío masivo no es un `for` dentro del request
+
+Vercel Hobby corta a los ~10 s y Brevo permite 300 mails/día en el free tier. Un envío hecho en el request se cae a la mitad y deja a media lista sin el mail **y sin forma de saber a quiénes**.
+
+En cambio se materializa una fila de `CommunicationRecipient` por destinatario, con su idioma ya resuelto. Mandar es drenar filas `PENDIENTE`: lo hace el request si le da el tiempo y lo termina el cron si no. Esa tabla es además la respuesta a «¿le llegó a Ana?», que es la pregunta que se hace de verdad.
+
+**Un fallo individual no aborta el lote.** Se marca esa fila como `FALLIDO` con el error del proveedor y se sigue. Trece enviados y uno fallido es un resultado; cero enviados porque el primero tenía la casilla mal escrita, no. Hay un botón para reintentar **solo** los fallidos.
+
+Los destinatarios se congelan **al enviar**, no al escribir el borrador: entre una cosa y la otra pueden entrar pasajeros nuevos, y quien escribió «todos» quiso decir todos los de ese momento. El idioma se guarda en la fila porque si se recalculara al mandar cada mail, alguien que cambia su preferencia a mitad del lote recibiría un idioma distinto del que dice la fila.
+
+### La regla del inglés
+
+Hay versión en inglés **solo si el asunto Y el cuerpo están completos**. Media traducción es peor que ninguna: un mail con el asunto en inglés y el cuerpo en español parece un error del sistema. Si falta cualquiera de los dos, todos reciben la versión en español.
+
+La regla **no** está en el schema Zod: si el schema exigiera los dos campos juntos, el autoguardado de un borrador a medio escribir fallaría. Vive en `hasEnglishVersion()`, que es también lo que decide el idioma de cada destinatario — una sola definición.
+
+### Vista previa y prueba
+
+Están **antes** del botón de enviar y no escondidas en un menú. Nadie aprieta «enviar a catorce personas» sin haber visto qué sale, y si la pantalla no ofrece cómo verlo, lo que pasa es que no se manda nunca.
+
+La vista previa se renderiza con las **mismas** funciones que el envío real —si difiriera, no serviría para nada— y se muestra en un `<iframe sandbox="">`: sin scripts, sin formularios, sin navegación. El cuerpo ya está escapado, pero una vista previa que ejecuta lo que le pasan es exactamente el lugar donde no conviene confiar.
+
+El destinatario de la prueba sale de la **sesión**, no de un campo. Si se pudiera elegir, esto sería un relay abierto: cualquiera con acceso al panel podría mandar mails con el remitente del viaje a donde quisiera.
+
+### El cron no tiene sesión
+
+`listPassengersForSystemJob()` es la única función de `passengers.ts` sin viewer ni filtro de visibilidad. No es un agujero, y por tres motivos:
+
+1. Vive en ese archivo, que sigue siendo el único que consulta `Passenger` y `Person`.
+2. El nombre dice qué es: nadie la va a llamar desde una página creyendo que filtra algo.
+3. Su único llamador legítimo es el endpoint de cron, que se autentica con `CRON_SECRET` **antes** de tocar nada.
+
+La alternativa —fingir un `ViewerContext` «de sistema»— habría metido en la matriz de permisos un actor que puede todo, y esa es exactamente la clase de excepción que después alguien reutiliza desde una pantalla.
 
 ## Invitaciones y registro
 
@@ -630,14 +757,22 @@ El `ConsoleEmailProvider` imprime el mail completo **solo en desarrollo**. En cu
 
 ---
 
-## Cron (fase 5)
+## Cron
 
-El endpoint `POST /api/cron/daily` todavía no existe. Cuando se construya:
+El detalle está en [Comunicaciones y automatización](#comunicaciones-y-automatización). En resumen:
 
-- **Disparador primario: Vercel Cron.** El plan Hobby permite **2 cron jobs, con frecuencia diaria y una ventana de disparo de ~1 hora** (no garantiza la hora exacta). Se declara en `vercel.json` y se protege con `CRON_SECRET`.
-- **GitHub Actions queda como respaldo opcional**, apuntando al mismo endpoint.
-- El endpoint tiene que ser **idempotente**: dos invocaciones el mismo día no pueden mandar dos recordatorios. Eso ya está resuelto en el modelo por el `@@unique([installmentId, offsetDays])` de `SentReminder`.
-- Responsabilidades: recordatorios de pago, marcado de cuotas vencidas, alertas de pasaporte, refresco del `FxRate` del día, procesamiento por lotes de `CommunicationRecipient`, purga de `RateLimitHit` y keep-alive de Supabase.
+- **Disparador: Vercel Cron.** Hobby permite 2 cron jobs, diarios, con una ventana de disparo de ~1 hora (no garantiza la hora exacta). Se declara en `vercel.json` —hoy hay **uno**— y se protege con `CRON_SECRET`.
+- **GitHub Actions queda como respaldo opcional**, apuntando al mismo endpoint con el mismo secreto.
+- Es **idempotente** por índice unique, no por buena voluntad: `SentReminder(installmentId, offsetDays)` y `SentNotification(kind, passengerId, tag)`.
+- El keep-alive de Supabase sale gratis: la corrida diaria consulta la base, y eso cuenta como actividad.
+
+Para probarlo a mano contra el servidor de desarrollo:
+
+```bash
+curl -X POST http://localhost:3000/api/cron/daily   -H "Authorization: Bearer $CRON_SECRET"
+```
+
+Devuelve un resumen por tarea. Sin la cabecera, 401.
 
 ---
 
@@ -707,6 +842,21 @@ Las transiciones son explícitas (`BORRADOR → ABIERTO → CERRADO → FINALIZA
 
 ## Qué hay hecho y qué no
 
+### Fase 5 — terminada
+
+- **`Trip.timezone`** y `lib/domain/calendar.ts`: los vencimientos se comparan como fechas de calendario en la zona del viaje, nunca como instantes. `derivePlan()` y `suggestDueDates()` ya no aceptan `Date`.
+- **`Payment.fxRateSource`**: distingue el TC tipeado del extracto del que quedó sugerido.
+- El **total esperado** pasa a ser la suma de los planes activos; los pasajeros sin plan y la plata de cancelados se informan aparte.
+- Endpoint `POST /api/cron/daily` con `CRON_SECRET` comparado en tiempo constante, cinco tareas aisladas, presupuesto de mails y corte con retome. `vercel.json` con un cron diario.
+- Recordatorios de cuota con offsets por viaje, idempotentes por índice unique, nunca a cancelados ni a coordinadores ni sobre cuotas pagadas.
+- Alertas de pasaporte, una vez por nivel.
+- Seis plantillas en es/en con HTML de tablas, estilos inline, 600px y versión de texto plano. Invitación unificada al sistema nuevo.
+- Adaptador de Brevo real, con `replyTo`, `textContent`, timeout y error legible que llega hasta la pantalla del coordinador.
+- Editor de comunicaciones con pestañas ES/EN, audiencia, exclusión de cancelados, vista previa en iframe con `sandbox`, envío de prueba a la propia casilla, envío inmediato o programado, y reintento de los fallidos.
+- Tarjeta «Novedades» del pasajero, con lo que efectivamente le llegó y en su idioma.
+- `npm run email:test` para ver las plantillas en un cliente de mail real.
+- 374 tests unitarios (73 nuevos: calendario y plantillas) y 152 de integración (29 nuevos: cron y comunicaciones).
+
 ### Fase 4 — terminada
 
 - **`Installment.status` eliminado**: el estado de la cuota se deriva al leer. Migración `pagos_fase4`.
@@ -758,7 +908,6 @@ Las transiciones son explícitas (`BORRADOR → ABIERTO → CERRADO → FINALIZA
 
 | Fase | Qué falta |
 |---|---|
-| 5 | Editor bilingüe, envío masivo, endpoint de cron, plantillas de mail. **Recordatorios automáticos de cuota** (`SentReminder` y `Trip.reminderOffsetsDays` ya están en el modelo). |
 | 6 | Exportación a Excel (**con fecha y hora de generación en la primera fila**), panel de admin con escritura, revisión de accesibilidad. **Completar el backup**: usuarios de Auth y archivos del Storage (ver [deuda conocida](#️-deuda-conocida-el-backup-está-incompleto)). |
 
 ### Fuera de alcance
@@ -778,6 +927,7 @@ npm run test:db        # tests de integración (necesitan DATABASE_URL)
 npm run test:watch     # unitarios en modo watch
 npm run check:i18n     # paridad de traducciones
 npm run check:db       # diagnóstico de conexión y pooling
+npm run email:test     # manda las plantillas a una casilla real
 npm run typecheck      # solo tsc
 npm run lint           # solo eslint
 ```

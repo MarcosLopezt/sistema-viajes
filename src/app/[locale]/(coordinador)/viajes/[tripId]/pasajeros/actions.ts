@@ -4,8 +4,12 @@ import { revalidatePath } from "next/cache";
 import { getLocale } from "next-intl/server";
 import { z } from "zod";
 import { ForbiddenError, UnauthorizedError } from "@/lib/auth/errors";
-import { getEmailProvider } from "@/lib/email";
-import { invitationEmail } from "@/lib/email/templates/invitation";
+import { invitationEmail } from "@/lib/email/templates";
+import {
+  footerFor,
+  tripEmailContext,
+  tryDeliver,
+} from "@/lib/services/notifications";
 import {
   createInvitation,
   InvitationError,
@@ -182,24 +186,29 @@ async function deliverInvitation(
   locale: string,
 ): Promise<boolean> {
   try {
-    const { prisma } = await import("@/lib/db/prisma");
-    const trip = await prisma.trip.findUnique({
-      where: { id: tripId },
-      select: { name: true },
-    });
+    const context = await tripEmailContext(tripId);
 
+    // Único mail del sistema en el que el idioma NO sale de
+    // `Person.preferredLanguage`: todavía no hay Person. Se usa el locale en
+    // el que está navegando el coordinador, que es la mejor pista disponible,
+    // y el pasajero elige el suyo en el primer paso del registro.
     const lang = locale === "en" ? "en" : "es";
-    const { subject, html } = invitationEmail(lang, {
-      tripName: trip?.name ?? "",
+
+    const rendered = invitationEmail(lang, {
+      tripName: context.tripName,
       url,
       expiresAt,
+      coordinatorName: context.replyTo?.name ?? null,
+      footer: footerFor(context),
     });
 
-    await getEmailProvider().send(email, subject, html, lang);
-    return true;
+    return tryDeliver({ to: email, lang, rendered, context });
   } catch (error) {
     // No se loguea el destinatario: es un dato personal.
-    console.error("[pasajeros] no se pudo enviar la invitación", (error as Error).message);
+    console.error(
+      "[pasajeros] no se pudo enviar la invitación",
+      (error as Error).message,
+    );
     return false;
   }
 }

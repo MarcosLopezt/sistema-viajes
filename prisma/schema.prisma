@@ -125,6 +125,18 @@ enum RecipientStatus {
   FALLIDO
 }
 
+/// Avisos automáticos que NO cuelgan de una cuota.
+///
+/// Los recordatorios de pago tienen su propia tabla (SentReminder) porque
+/// pueden apuntar a un Installment con una FK real, y esa FK les da el borrado
+/// en cascada gratis. Los de acá refieren a un Passenger, así que van
+/// separados en vez de forzar una tabla polimórfica sin integridad
+/// referencial. Mismo mecanismo —un unique compuesto—, dos tablas, cada una
+/// con su FK.
+enum NotificationKind {
+  ALERTA_PASAPORTE
+}
+
 // ------------------------- Identidad y acceso ------------------------------
 
 /// Espejo de auth.users de Supabase. El id ES el uuid de Supabase Auth.
@@ -383,6 +395,7 @@ model Passenger {
   room                 Room?                    @relation(fields: [roomId], references: [id], onDelete: SetNull)
   paymentPlan          PaymentPlan?
   communicationTargets CommunicationRecipient[]
+  sentNotifications    SentNotification[]
 
   @@unique([tripId, personId])
   @@index([tripId, status])
@@ -485,6 +498,24 @@ model Payment {
   @@index([status])
 }
 
+/// Garantiza "nunca más de un aviso del mismo tipo por pasajero".
+///
+/// `tag` discrimina dentro del `kind`: para ALERTA_PASAPORTE es el nivel
+/// (BLOQUEANTE, ADVERTENCIA), así que a alguien se le avisa una vez por nivel
+/// y no todos los días hasta que renueve el pasaporte.
+model SentNotification {
+  id          String           @id @default(uuid()) @db.Uuid
+  kind        NotificationKind
+  passengerId String           @db.Uuid
+  tag         String
+  sentAt      DateTime         @default(now())
+
+  passenger Passenger @relation(fields: [passengerId], references: [id], onDelete: Cascade)
+
+  @@unique([kind, passengerId, tag])
+  @@index([passengerId])
+}
+
 /// Garantiza "nunca más de un recordatorio del mismo tipo por cuota".
 /// El "tipo" es el offset en días configurado en Trip.reminderOffsetsDays.
 /// El unique compuesto hace idempotente al cron.
@@ -514,6 +545,12 @@ model Communication {
   sentAt       DateTime?
   audience     CommunicationAudience @default(TODOS)
   status       CommunicationStatus   @default(BORRADOR)
+
+  /// Los pasajeros CANCELADOS quedan afuera salvo que se pida lo contrario.
+  /// Es una decisión explícita del coordinador, no un default silencioso:
+  /// mandarle "cargá tus datos" a alguien que se bajó del viaje es peor que
+  /// no mandarle nada.
+  includeCancelled Boolean @default(false)
 
   createdById String?  @db.Uuid
   createdAt   DateTime @default(now())

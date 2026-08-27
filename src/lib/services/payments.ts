@@ -39,6 +39,18 @@ import {
   type CalendarDate,
 } from "@/lib/domain/calendar";
 import { toIsoDate } from "@/lib/validation/trip";
+import { formatMoney } from "@/lib/format";
+import {
+  paymentConfirmedEmail,
+  paymentRejectedEmail,
+} from "@/lib/email/templates";
+import {
+  appUrl,
+  footerFor,
+  langOf,
+  tripEmailContext,
+  tryDeliver,
+} from "./notifications";
 import type {
   ConfirmPaymentInput,
   DeclarePaymentInput,
@@ -975,6 +987,14 @@ export async function confirmPayment(
     },
   ]);
 
+  await notifyPaymentReviewed(passenger, {
+    kind: "CONFIRMADO",
+    amount: payment.amount.toString(),
+    currency: paymentCurrency,
+    imputed: converts ? imputed.toFixed(2) : null,
+    installmentNumber: await installmentNumberOf(payment.installmentId),
+  });
+
   return "APLICADO";
 }
 
@@ -1020,7 +1040,98 @@ export async function rejectPayment(
     },
   ]);
 
+  await notifyPaymentReviewed(passenger, {
+    kind: "RECHAZADO",
+    amount: payment.amount.toString(),
+    currency: payment.currency as Currency,
+    imputed: null,
+    installmentNumber: await installmentNumberOf(payment.installmentId),
+    reason: input.reason,
+  });
+
   return "APLICADO";
+}
+
+/** Número de la cuota a la que se imputó un pago, si se imputó a alguna. */
+async function installmentNumberOf(
+  installmentId: string | null,
+): Promise<number | null> {
+  if (installmentId === null) return null;
+  const installment = await prisma.installment.findUnique({
+    where: { id: installmentId },
+    select: { number: true },
+  });
+  return installment?.number ?? null;
+}
+
+interface ReviewNotice {
+  kind: "CONFIRMADO" | "RECHAZADO";
+  amount: string;
+  currency: Currency;
+  /** Imputado en la moneda del viaje, solo si hubo conversión. */
+  imputed: string | null;
+  installmentNumber: number | null;
+  reason?: string;
+}
+
+/**
+ * Le avisa al pasajero cómo salió la revisión de su comprobante.
+ *
+ * Se manda DESPUÉS de que la decisión ya está guardada, y con `tryDeliver`:
+ * un proveedor de mail caído no puede hacer fallar una confirmación que ya
+ * ocurrió. Si el mail no sale queda en los logs y el pago igual está bien.
+ *
+ * El idioma sale de `preferredLanguage` del destinatario, no del locale del
+ * coordinador que apretó el botón.
+ */
+async function notifyPaymentReviewed(
+  passenger: PassengerForPayments,
+  notice: ReviewNotice,
+): Promise<void> {
+  if (!passenger.email) return;
+
+  const lang = langOf(passenger.preferredLanguage);
+  const context = await tripEmailContext(passenger.tripId);
+  const url = appUrl("/mis-pagos", lang);
+  const declaredAmount = formatMoney(notice.amount, notice.currency, lang);
+
+  if (notice.kind === "RECHAZADO") {
+    const rendered = paymentRejectedEmail(lang, {
+      tripName: context.tripName,
+      passengerName: passenger.fullName,
+      declaredAmount,
+      installmentNumber: notice.installmentNumber,
+      reason: notice.reason ?? "",
+      url,
+      footer: footerFor(context),
+    });
+    await tryDeliver({ to: passenger.email, lang, rendered, context });
+    return;
+  }
+
+  // El saldo se relee DESPUÉS de imputar: es el número que el pasajero quiere
+  // ver, y calcularlo antes mostraría la deuda vieja.
+  const plan = await getPaymentPlan(passenger.id);
+
+  const rendered = paymentConfirmedEmail(lang, {
+    tripName: context.tripName,
+    passengerName: passenger.fullName,
+    declaredAmount,
+    imputedAmount:
+      notice.imputed === null
+        ? null
+        : formatMoney(notice.imputed, passenger.trip.currency, lang),
+    installmentNumber: notice.installmentNumber,
+    balance: formatMoney(
+      plan?.balance ?? "0.00",
+      passenger.trip.currency,
+      lang,
+    ),
+    url,
+    footer: footerFor(context),
+  });
+
+  await tryDeliver({ to: passenger.email, lang, rendered, context });
 }
 
 /**

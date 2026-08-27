@@ -497,10 +497,15 @@ async function main() {
   const communication = await prisma.communication.create({
     data: {
       tripId: trip.id,
+      // El cuerpo es TEXTO PLANO, no HTML: lo escribe el coordinador en un
+      // textarea y la plantilla lo escapa antes de meterlo en el mail. Los
+      // saltos de línea se respetan; el marcado se muestra literal.
       subjectEs: "Ya salieron los horarios de los vuelos",
-      bodyEs: "<p>Hola, buenas noticias: ya tenemos los horarios confirmados.</p>",
+      bodyEs:
+        "Hola a todos.\n\nBuenas noticias: ya tenemos los horarios confirmados. Salimos el 10 de mayo a las 22:15 y volvemos el 24 por la mañana.\n\nCualquier cosa, respondan este mail.",
       subjectEn: "Flight times are confirmed",
-      bodyEn: "<p>Hello, good news: we now have the confirmed flight times.</p>",
+      bodyEn:
+        "Hello everyone.\n\nGood news: the flight times are confirmed. We leave on 10 May at 22:15 and return on the morning of the 24th.\n\nIf anything is unclear, just reply to this email.",
       audience: "TODOS",
       status: "ENVIADA",
       sentAt: new Date("2026-08-20T10:00:00.000Z"),

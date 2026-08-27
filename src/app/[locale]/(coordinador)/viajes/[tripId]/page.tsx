@@ -1,9 +1,10 @@
 import { getLocale, getTranslations } from "next-intl/server";
-import { CalendarRange, Pencil, Receipt, Users } from "lucide-react";
+import { CalendarRange, Megaphone, Pencil, Receipt, Users } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { getTripBudget } from "@/lib/services/trip";
 import { countPassengersByStatus } from "@/lib/services/passengers";
 import { getTripPaymentsOverview } from "@/lib/services/payments";
+import { listCommunications } from "@/lib/services/communications";
 import { formatDate, formatMoney, type LocaleCode } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,11 +25,13 @@ export default async function TripDetailPage({
   const { tripId } = await params;
   const locale = (await getLocale()) as LocaleCode;
 
-  const [{ trip, breakdown, margin }, counts, payments] = await Promise.all([
-    getTripBudget(tripId),
-    countPassengersByStatus(tripId),
-    getTripPaymentsOverview(tripId),
-  ]);
+  const [{ trip, breakdown, margin }, counts, payments, communications] =
+    await Promise.all([
+      getTripBudget(tripId),
+      countPassengersByStatus(tripId),
+      getTripPaymentsOverview(tripId),
+      listCommunications(tripId),
+    ]);
 
   const t = await getTranslations("budget.detail");
   const tPanel = await getTranslations("budget.panel");
@@ -36,6 +39,7 @@ export default async function TripDetailPage({
   const tStatus = await getTranslations("tripStatus");
   const tPassengers = await getTranslations("passengers");
   const tPaymentsAdmin = await getTranslations("paymentsAdmin");
+  const tCommunications = await getTranslations("communications");
 
   const money = (value: string) => formatMoney(value, trip.currency, locale);
   const confirmed = counts["CONFIRMADO"] ?? 0;
@@ -194,8 +198,23 @@ export default async function TripDetailPage({
 
         <TabsContent value="communications" className="pt-5">
           <Card>
-            <CardContent className="text-muted-foreground py-12 text-center text-base">
-              {t("comingSoon")}
+            <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
+              <Megaphone
+                className="text-muted-foreground size-8"
+                aria-hidden="true"
+              />
+              <p className="text-base">
+                {tCommunications("counts", {
+                  sent: communications.filter((c) => c.status === "ENVIADA")
+                    .length,
+                  total: communications.length,
+                })}
+              </p>
+              <Button asChild size="lg">
+                <Link href={`/viajes/${trip.id}/comunicaciones`}>
+                  {tCommunications("title")}
+                </Link>
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>

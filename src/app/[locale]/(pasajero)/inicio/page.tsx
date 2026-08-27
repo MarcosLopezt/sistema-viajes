@@ -14,6 +14,7 @@ import {
   getRecentCoordinatorEdits,
 } from "@/lib/services/passengers";
 import { getPaymentPlan } from "@/lib/services/payments";
+import { listCommunicationsForPassenger } from "@/lib/services/communications";
 import { toIsoDate } from "@/lib/validation/trip";
 import { formatDate, formatMoney, type LocaleCode } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,7 @@ export default async function PassengerHomePage() {
   const locale = (await getLocale()) as LocaleCode;
   const t = await getTranslations("passengerHome");
   const tRooms = await getTranslations("roomTypes");
+  const tNews = await getTranslations("news");
 
   const passenger = await getMyActivePassenger();
 
@@ -48,9 +50,10 @@ export default async function PassengerHomePage() {
     );
   }
 
-  const [edits, plan] = await Promise.all([
+  const [edits, plan, news] = await Promise.all([
     getRecentCoordinatorEdits(passenger.id),
     getPaymentPlan(passenger.id),
+    listCommunicationsForPassenger(passenger.id),
   ]);
   const person = passenger.person;
   const firstName = person.fullName?.split(" ")[0] ?? "";
@@ -211,8 +214,33 @@ export default async function PassengerHomePage() {
             {t("newsTitle")}
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <p className="text-muted-foreground text-base">{t("newsEmpty")}</p>
+        <CardContent className="space-y-3">
+          {news.length === 0 ? (
+            <p className="text-muted-foreground text-base">{t("newsEmpty")}</p>
+          ) : (
+            <>
+              {/* Solo las tres últimas: la home son tres tarjetas y esta no
+                  puede crecer sin fin. El resto está en /novedades. */}
+              <ul className="divide-border divide-y">
+                {news.slice(0, 3).map((item, index) => (
+                  <li key={`${item.id}-${index}`} className="space-y-0.5 py-2">
+                    <p className="text-base font-medium">{item.subject}</p>
+                    <p className="text-muted-foreground text-sm">
+                      {tNews("receivedOn", {
+                        date: formatDate(item.sentAt),
+                      })}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+              <Button asChild variant="outline" className="w-full">
+                <Link href="/novedades">
+                  {tNews("seeAll")}
+                  <ChevronRight aria-hidden="true" />
+                </Link>
+              </Button>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>

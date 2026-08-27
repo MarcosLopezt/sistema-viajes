@@ -1,4 +1,4 @@
-import type { EmailLang, EmailProvider, EmailSendResult } from "./types";
+import type { EmailMessage, EmailProvider, EmailSendResult } from "./types";
 
 /**
  * Proveedor de desarrollo: no envía nada, imprime el mail en consola.
@@ -16,31 +16,33 @@ import type { EmailLang, EmailProvider, EmailSendResult } from "./types";
 export class ConsoleEmailProvider implements EmailProvider {
   readonly name = "console";
 
-  async send(
-    to: string,
-    subject: string,
-    html: string,
-    lang: EmailLang,
-  ): Promise<EmailSendResult> {
+  async send(message: EmailMessage): Promise<EmailSendResult> {
     const isDev = process.env.NODE_ENV === "development";
 
     if (isDev) {
+      // Se imprime la versión de TEXTO, no el HTML: en una terminal, cien
+      // líneas de tablas con estilos inline tapan el contenido, que es
+      // justamente lo que uno está tratando de leer. El HTML se mira en la
+      // vista previa de la pantalla de comunicaciones, que para eso está.
       console.info(
         [
           "",
           "──────────────── MAIL (no enviado) ────────────────",
-          `Para    : ${to}`,
-          `Idioma  : ${lang}`,
-          `Asunto  : ${subject}`,
+          `Para        : ${message.to}`,
+          `Idioma      : ${message.lang}`,
+          ...(message.replyTo
+            ? [`Responder a : ${message.replyTo.email}`]
+            : []),
+          `Asunto      : ${message.subject}`,
           "───────────────────────────────────────────────────",
-          html,
+          message.text,
           "───────────────────────────────────────────────────",
           "",
         ].join("\n"),
       );
     } else {
       console.info(
-        `[email:console] enviado a ${maskEmail(to)} (lang=${lang}) — cuerpo omitido`,
+        `[email:console] enviado a ${maskEmail(message.to)} (lang=${message.lang}) — cuerpo omitido`,
       );
     }
 

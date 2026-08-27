@@ -803,6 +803,12 @@ export interface PassengerForPayments {
   priceOverride: string | null;
   fullName: string | null;
   preferredLanguage: "ES" | "EN";
+  /**
+   * Casilla a la que se le escribe. `null` si todavía no canjeó la
+   * invitación: hay Person pero no hay User, y por lo tanto no hay dónde
+   * mandarle nada.
+   */
+  email: string | null;
   trip: {
     id: string;
     name: string;
@@ -833,7 +839,13 @@ export async function getPassengerForPayments(
       isCoordinator: true,
       roomType: true,
       priceOverride: true,
-      person: { select: { fullName: true, preferredLanguage: true } },
+      person: {
+        select: {
+          fullName: true,
+          preferredLanguage: true,
+          user: { select: { email: true } },
+        },
+      },
       trip: {
         select: {
           id: true,
@@ -860,6 +872,7 @@ export async function getPassengerForPayments(
     priceOverride: row.priceOverride?.toString() ?? null,
     fullName: row.person.fullName,
     preferredLanguage: row.person.preferredLanguage,
+    email: row.person.user?.email ?? null,
     trip: {
       id: row.trip.id,
       name: row.trip.name,
@@ -917,5 +930,75 @@ export async function listPassengersForPayments(
     fullName: row.person.fullName,
     status: row.status,
     roomType: row.roomType,
+  }));
+}
+
+// ------------------------ Acceso del cron (sin sesión) ---------------------
+
+export interface PassengerForSystemJob {
+  id: string;
+  tripId: string;
+  fullName: string | null;
+  /** `null` si todavía no canjeó la invitación: no hay dónde escribirle. */
+  email: string | null;
+  preferredLanguage: "ES" | "EN";
+  status: PassengerStatus;
+  isCoordinator: boolean;
+  passportExpiryDate: Date | null;
+}
+
+/**
+ * Pasajeros de un viaje, PARA EL CRON. No hay viewer ni filtro de visibilidad.
+ *
+ * ── Por qué esta función existe y por qué no es un agujero ────────────────
+ *
+ * El cron no tiene sesión: no lo dispara una persona, lo dispara Vercel. No
+ * hay un `ViewerContext` que derivar, así que `passengerVisibilityFilter()` no
+ * tiene contra qué acotar. Fingir un viewer "de sistema" sería peor: metería
+ * en la matriz de permisos un actor que puede todo, y esa es exactamente la
+ * clase de excepción que después alguien reutiliza desde una pantalla.
+ *
+ * En cambio se aísla acá, con tres condiciones:
+ *
+ *  1. Vive en ESTE archivo, que sigue siendo el único que consulta Passenger
+ *     y Person. El invariante no se rompe.
+ *  2. El nombre dice qué es. Nadie la va a llamar desde una página creyendo
+ *     que filtra algo.
+ *  3. Su ÚNICO llamador legítimo es el endpoint de cron, que se autentica con
+ *     CRON_SECRET antes de tocar nada. La autorización está ahí, no acá.
+ *
+ * Devuelve lo mínimo para decidir a quién notificar: ningún dato de salud,
+ * ningún número de documento.
+ */
+export async function listPassengersForSystemJob(
+  tripId: string,
+): Promise<PassengerForSystemJob[]> {
+  const rows = await prisma.passenger.findMany({
+    where: { tripId },
+    select: {
+      id: true,
+      tripId: true,
+      status: true,
+      isCoordinator: true,
+      person: {
+        select: {
+          fullName: true,
+          preferredLanguage: true,
+          passportExpiryDate: true,
+          user: { select: { email: true } },
+        },
+      },
+    },
+  });
+
+  return rows.map((row) => ({
+    id: row.id,
+    tripId: row.tripId,
+    fullName: row.person.fullName,
+    email: row.person.user?.email ?? null,
+    preferredLanguage: row.person.preferredLanguage,
+    status: row.status,
+    isCoordinator: row.isCoordinator,
+    passportExpiryDate: row.person.passportExpiryDate,
   }));
 }
