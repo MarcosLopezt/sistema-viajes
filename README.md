@@ -10,6 +10,7 @@ Aplicación para organizar viajes grupales cerrados (14 pasajeros + 2 coordinado
 | **ponerlo en producción** | [DEPLOY.md](DEPLOY.md) — checklist paso a paso |
 | **desarrollarlo** | [Setup desde cero](#setup-desde-cero) y [Arquitectura](#arquitectura) |
 | **restaurar un backup** | [Backups](#backups) |
+| **entender en qué estado está** | [ESTADO.md](ESTADO.md) — qué falta verificar y qué no hay que "arreglar" |
 
 ---
 

@@ -112,7 +112,13 @@ export function PaymentsPanel({
                       total: installments.length,
                     })}
                   </p>
-                  <p className="text-muted-foreground text-sm">
+                  {/* 16px, a diferencia del resto del texto secundario de
+                      esta pantalla. Es el dato que alguien mira apurado y en
+                      movimiento —"¿cuándo vence?"— y no puede depender de
+                      frenarse a leer. Los badges, la nota de comprobante en
+                      revisión y las fechas de transferencia del historial se
+                      quedan en 14: son contexto, no la pregunta. */}
+                  <p className="text-muted-foreground text-base">
                     {cuota.state === "VENCIDA"
                       ? tPayments("overdueSince", { date: cuota.dueDateLabel })
                       : tPayments("dueOn", { date: cuota.dueDateLabel })}
