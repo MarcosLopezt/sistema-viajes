@@ -291,7 +291,6 @@ export function PaymentForm({
             <Button
               type="button"
               variant="ghost"
-              size="sm"
               onClick={() => inputRef.current?.click()}
             >
               {t("formProof")}

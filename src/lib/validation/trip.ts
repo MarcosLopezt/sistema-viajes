@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isRealIsoDate } from "./date";
+import { isRealIsoDate } from "@/lib/domain/date";
 
 /**
  * Validación del módulo de presupuesto.
@@ -34,7 +34,7 @@ const isoDate = (label: string) =>
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, `Elegí ${label}.`)
     // `isRealIsoDate` y no `!isNaN(new Date(...))`: JS desborda 31/02 a marzo
-    // en silencio en vez de rechazarla. Ver src/lib/validation/date.ts.
+    // en silencio en vez de rechazarla. Ver src/lib/domain/date.ts.
     .refine(isRealIsoDate, `${label} no es una fecha válida.`);
 
 export const currencySchema = z.enum(["GBP", "USD", "EUR"]);

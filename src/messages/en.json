@@ -81,7 +81,9 @@
     "myPaymentsEmpty": "Nothing to pay yet. Your coordinator will let you know when it is ready.",
     "myPaymentsSummary": "You paid {paid} of {total}",
     "myPaymentsNext": "Next instalment: {label}",
-    "myPaymentsSettled": "You have nothing left to pay."
+    "myPaymentsSettled": "You have nothing left to pay.",
+    "noTripTitle": "You are not on a trip yet",
+    "noTripBody": "When you get invited to one, we will email you a link to join."
   },
   "coordinatorHome": {
     "title": "My trips",
@@ -99,7 +101,38 @@
   "admin": {
     "title": "Administration",
     "userCount": "{count, plural, =0 {No users} one {# user} other {# users}}",
-    "tripCount": "{count, plural, =0 {no trips} one {# trip} other {# trips}}"
+    "tripCount": "{count, plural, =0 {no trips} one {# trip} other {# trips}}",
+    "genericError": "We couldn't complete the action. Please try again.",
+    "you": "You",
+    "roleUser": "User",
+    "roleAdmin": "Administrator",
+    "globalRoleFor": "Global role for {name}",
+    "tripRole": "Trip role",
+    "tripRoleCoordinator": "Coordinator",
+    "tripRolePassenger": "Passenger",
+    "noTrips": "Not part of any trip yet.",
+    "addToTrip": "Add to a trip",
+    "assign": "Assign",
+    "removeFrom": "Remove from {trip}",
+    "auditTab": "Audit log",
+    "auditCount": "{count, plural, =0 {No entries} one {# entry} other {# entries}}",
+    "auditEmpty": "No entries match this filter. Try widening the date range.",
+    "filterEntity": "Entity",
+    "filterActor": "Who",
+    "filterFrom": "From",
+    "filterTo": "To",
+    "filterAll": "All",
+    "filterApply": "Filter",
+    "filterClear": "Clear",
+    "colWhen": "When",
+    "colWho": "Who",
+    "colWhat": "What",
+    "colField": "Field",
+    "colChange": "Change",
+    "actorSystem": "System",
+    "prevPage": "Previous",
+    "nextPage": "Next",
+    "pageOf": "Page {page} of {total}"
   },
   "passport": {
     "okShort": "Passport OK",
@@ -438,7 +471,9 @@
     "priceOverride": "Agreed price",
     "priceOverrideReason": "Reason",
     "priceOverrideSave": "Save price",
-    "priceOverrideClear": "Back to list price"
+    "priceOverrideClear": "Back to list price",
+    "exportList": "Download list",
+    "exportRooming": "Download rooming"
   },
   "rooms": {
     "title": "Rooms",
@@ -618,7 +653,8 @@
     "expectedHelp": "Sum of active plans. Cancelled passengers excluded.",
     "expectedPartial": "Excludes {count, plural, =1 {1 passenger without a plan} other {# passengers without a plan}}.",
     "cancelledNote": "{count, plural, =1 {1 cancelled passenger} other {# cancelled passengers}} with a plan · {amount} received, outside the total.",
-    "reviewFxTouched": "This rate will be saved as taken from the statement."
+    "reviewFxTouched": "This rate will be saved as taken from the statement.",
+    "export": "Download payment status"
   },
   "communications": {
     "title": "Messages",

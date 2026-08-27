@@ -9,7 +9,12 @@ import {
 } from "@/lib/auth/guards";
 import { editRequiresAudit, passengerVisibilityFilter } from "@/lib/auth/policy";
 import { ForbiddenError } from "@/lib/auth/errors";
-import { auditValue, recordAudit, type AuditEntry } from "./audit";
+import {
+  auditMoney,
+  auditValue,
+  recordAudit,
+  type AuditEntry,
+} from "./audit";
 import { confirmUpload, removeFile } from "./storage";
 import {
   evaluatePassport,
@@ -24,6 +29,7 @@ import type { PassengerMixInput } from "@/lib/domain/pricing";
 import { toCalendarDate, type CalendarDate } from "@/lib/domain/calendar";
 import type { PersonDraftInput } from "@/lib/validation/person";
 import type { PassengerStatus, RoomType } from "@/generated/prisma/enums";
+import type { Prisma } from "@/generated/prisma/client";
 
 /**
  * ÚNICO punto de acceso a Passenger y Person.
@@ -519,6 +525,69 @@ export async function getRecentCoordinatorEdits(
   return logs.map((log) => ({ field: log.field, at: log.createdAt }));
 }
 
+// --------------------------- Alta desde la invitación -----------------------
+
+/**
+ * Las dos funciones de esta sección son las ÚNICAS de este módulo que no
+ * exigen una sesión, y eso es deliberado.
+ *
+ * Corren durante el canje de una invitación, que es el momento exacto en que
+ * todavía no hay Passenger contra el cual autorizar: la autorización de ese
+ * flujo es el token, que `invitations.ts` valida (vigente, no revocado, no
+ * usado) antes de llamar acá. Agregar un `requirePassengerAccess` sería pedir
+ * permiso sobre una fila que estamos por crear.
+ *
+ * Viven acá y no en `invitations.ts` porque Passenger y Person se tocan desde
+ * un solo módulo. Que el alta sea la excepción al guard no la convierte en
+ * excepción a esa regla.
+ */
+
+/**
+ * Crea una Person vacía y devuelve su id.
+ *
+ * Vacía a propósito: el pasajero completa sus datos después, en el formulario
+ * de tres pasos. Lo único que hace falta ahora es tener un id al que colgar
+ * el Passenger y el User.
+ */
+export async function createBlankPerson(): Promise<string> {
+  const person = await prisma.person.create({
+    data: {},
+    select: { id: true },
+  });
+  return person.id;
+}
+
+/**
+ * Da de alta el Passenger del canje, dentro de la transacción del llamador.
+ *
+ * Recibe el cliente transaccional en vez de abrir el suyo porque el canje es
+ * atómico de punta a punta: marcar la invitación como usada, crear el
+ * TripMember y crear el Passenger tienen que pasar juntos o no pasar. Con una
+ * transacción propia acá, un fallo posterior dejaría un Passenger huérfano de
+ * una invitación que quedó sin marcar.
+ *
+ * Es un `upsert` sobre (tripId, personId): reabrir un link ya canjeado no
+ * duplica al pasajero ni le pisa el estado.
+ */
+export async function enrollPassengerFromInvitation(
+  tx: Prisma.TransactionClient,
+  input: { tripId: string; personId: string; roomType: RoomType },
+): Promise<{ id: string }> {
+  return tx.passenger.upsert({
+    where: {
+      tripId_personId: { tripId: input.tripId, personId: input.personId },
+    },
+    update: {},
+    create: {
+      tripId: input.tripId,
+      personId: input.personId,
+      roomType: input.roomType,
+      status: "INVITADO",
+    },
+    select: { id: true },
+  });
+}
+
 // ----------------------------- Estados -------------------------------------
 
 const ALLOWED_TRANSITIONS: Readonly<
@@ -728,6 +797,69 @@ export async function assignRoom(
   ]);
 }
 
+// ------------------------------ Precio ------------------------------------
+
+/**
+ * Precio pactado para un pasajero puntual.
+ *
+ * Es lo que resuelve el caso del pasajero en base doble que se queda sin
+ * compañero: el sistema avisa, pero la decisión —y el precio— son del
+ * coordinador. También queda auditado.
+ *
+ * Vive acá, y no en el módulo de viajes, porque escribe sobre Passenger.
+ * Que el campo se llame "precio" no lo saca de esta tabla.
+ */
+export async function setPassengerPriceOverride(
+  passengerId: string,
+  priceOverride: string | null,
+  reason: string | null,
+): Promise<void> {
+  const passenger = await prisma.passenger.findUnique({
+    where: { id: passengerId },
+    select: { id: true, tripId: true, priceOverride: true },
+  });
+
+  if (!passenger) throw new ForbiddenError();
+
+  const viewer = await requireCapability(passenger.tripId, "payment:definePlan");
+
+  await prisma.passenger.update({
+    where: { id: passengerId },
+    data: { priceOverride, priceOverrideReason: reason },
+  });
+
+  await recordAudit(viewer.userId, [
+    {
+      entity: "Passenger",
+      entityId: passengerId,
+      field: "priceOverride",
+      oldValue: auditMoney(passenger.priceOverride),
+      newValue: auditMoney(priceOverride),
+    },
+  ]);
+}
+
+/**
+ * Cuántos pasajeros del viaje ya tienen un plan de pagos generado.
+ *
+ * Un plan congela su totalAmount y sus cuotas al crearse: cambiar el precio
+ * del viaje NO los toca. Eso es deliberado —nadie quiere que a alguien que ya
+ * pagó dos cuotas se le reescriba la deuda— pero es invisible si no se dice,
+ * así que este número alimenta la advertencia del paso de precios.
+ *
+ * Exige `trip:viewFinancials`, igual que getPassengerMix(): alimenta una
+ * pantalla que el pasajero no ve.
+ */
+export async function countPassengersWithActivePlan(
+  tripId: string,
+): Promise<number> {
+  await requireCapability(tripId, "trip:viewFinancials");
+
+  return prisma.passenger.count({
+    where: { tripId, isCoordinator: false, paymentPlan: { isNot: null } },
+  });
+}
+
 // ------------------------- Datos para el presupuesto -----------------------
 
 /**
@@ -931,6 +1063,140 @@ export async function listPassengersForPayments(
     status: row.status,
     roomType: row.roomType,
   }));
+}
+
+// ------------------------------ Exportación --------------------------------
+
+export interface PassengerExportRow {
+  fullName: string | null;
+  nationalityCountry: string | null;
+  documentNumber: string | null;
+  passportNumber: string | null;
+  passportExpiryDate: Date | null;
+  dietaryRestrictions: string | null;
+  mobilityRestrictions: string | null;
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
+  roomLabel: string | null;
+  roomType: RoomType;
+  status: PassengerStatus;
+  isCoordinator: boolean;
+}
+
+/**
+ * Los pasajeros del viaje con los datos que pide el hotel o el mayorista.
+ *
+ * Exige `passenger:viewAll` en vez de aplicar passengerVisibilityFilter():
+ * una exportación con el filtro de visibilidad le daría a un pasajero un
+ * archivo con una sola fila —la suya— en lugar de negarle el acceso, y eso es
+ * peor que fallar. Acá se falla.
+ *
+ * Los cancelados NO entran: la lista se manda al hotel y quien se bajó del
+ * viaje no tiene que aparecer en ella.
+ *
+ * Las restricciones se devuelven como el texto que escribió la persona, no
+ * como un booleano: al hotel le sirve "celíaca", no "true".
+ */
+export async function listPassengersForExport(
+  tripId: string,
+): Promise<PassengerExportRow[]> {
+  await requireCapability(tripId, "passenger:viewAll");
+
+  const rows = await prisma.passenger.findMany({
+    where: { tripId, status: { not: "CANCELADO" } },
+    orderBy: [{ isCoordinator: "desc" }, { person: { fullName: "asc" } }],
+    select: {
+      roomType: true,
+      status: true,
+      isCoordinator: true,
+      room: { select: { label: true } },
+      person: {
+        select: {
+          fullName: true,
+          nationalityCountry: true,
+          documentNumber: true,
+          passportNumber: true,
+          passportExpiryDate: true,
+          hasDietaryRestrictions: true,
+          dietaryRestrictionsDetail: true,
+          hasMobilityRestrictions: true,
+          mobilityRestrictionsDetail: true,
+          emergencyContactName: true,
+          emergencyContactPhone: true,
+        },
+      },
+    },
+  });
+
+  return rows.map((row) => ({
+    fullName: row.person.fullName,
+    nationalityCountry: row.person.nationalityCountry,
+    documentNumber: row.person.documentNumber,
+    passportNumber: row.person.passportNumber,
+    passportExpiryDate: row.person.passportExpiryDate,
+    // Marcada pero sin detalle: el hotel tiene que saber que hay algo, y
+    // "sí" es más útil que una celda vacía que parece un "no".
+    dietaryRestrictions: row.person.hasDietaryRestrictions
+      ? (row.person.dietaryRestrictionsDetail ?? "sí")
+      : null,
+    mobilityRestrictions: row.person.hasMobilityRestrictions
+      ? (row.person.mobilityRestrictionsDetail ?? "sí")
+      : null,
+    emergencyContactName: row.person.emergencyContactName,
+    emergencyContactPhone: row.person.emergencyContactPhone,
+    roomLabel: row.room?.label ?? null,
+    roomType: row.roomType,
+    status: row.status,
+    isCoordinator: row.isCoordinator,
+  }));
+}
+
+export interface RoomingRow {
+  roomLabel: string;
+  occupants: { fullName: string | null; roomType: RoomType }[];
+}
+
+/**
+ * La rooming list, armada desde Room — que es para lo que se creó la tabla.
+ *
+ * Incluye una fila final con los que todavía no tienen habitación asignada.
+ * Omitirlos daría una lista que parece completa y no lo está, y eso se
+ * descubre en el mostrador del hotel.
+ */
+export async function listRoomingForExport(
+  tripId: string,
+): Promise<{ rooms: RoomingRow[]; unassigned: PassengerExportRow[] }> {
+  await requireCapability(tripId, "passenger:viewAll");
+
+  const [rooms, all] = await Promise.all([
+    prisma.room.findMany({
+      where: { tripId },
+      orderBy: { label: "asc" },
+      select: {
+        label: true,
+        passengers: {
+          where: { status: { not: "CANCELADO" } },
+          orderBy: { person: { fullName: "asc" } },
+          select: {
+            roomType: true,
+            person: { select: { fullName: true } },
+          },
+        },
+      },
+    }),
+    listPassengersForExport(tripId),
+  ]);
+
+  return {
+    rooms: rooms.map((room) => ({
+      roomLabel: room.label,
+      occupants: room.passengers.map((passenger) => ({
+        fullName: passenger.person.fullName,
+        roomType: passenger.roomType,
+      })),
+    })),
+    unassigned: all.filter((row) => row.roomLabel === null),
+  };
 }
 
 // ------------------------ Acceso del cron (sin sesión) ---------------------

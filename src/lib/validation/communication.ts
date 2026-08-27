@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isRealIsoDate } from "./date";
+import { isRealIsoDate } from "@/lib/domain/date";
 
 /**
  * Validación de las comunicaciones del coordinador.

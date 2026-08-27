@@ -81,7 +81,9 @@
     "myPaymentsEmpty": "Todavía no hay nada para pagar. El coordinador te va a avisar cuando esté listo.",
     "myPaymentsSummary": "Pagaste {paid} de {total}",
     "myPaymentsNext": "Próxima cuota: {label}",
-    "myPaymentsSettled": "No te queda nada por pagar."
+    "myPaymentsSettled": "No te queda nada por pagar.",
+    "noTripTitle": "Todavía no estás en ningún viaje",
+    "noTripBody": "Cuando te inviten a uno, te va a llegar un mail con el link para entrar."
   },
   "coordinatorHome": {
     "title": "Mis viajes",
@@ -99,7 +101,38 @@
   "admin": {
     "title": "Administración",
     "userCount": "{count, plural, =0 {Sin usuarios} one {# usuario} other {# usuarios}}",
-    "tripCount": "{count, plural, =0 {sin viajes} one {# viaje} other {# viajes}}"
+    "tripCount": "{count, plural, =0 {sin viajes} one {# viaje} other {# viajes}}",
+    "genericError": "No se pudo completar la acción. Probá de nuevo.",
+    "you": "Vos",
+    "roleUser": "Usuario",
+    "roleAdmin": "Administrador",
+    "globalRoleFor": "Rol global de {name}",
+    "tripRole": "Rol en el viaje",
+    "tripRoleCoordinator": "Coordinador",
+    "tripRolePassenger": "Pasajero",
+    "noTrips": "Todavía no participa de ningún viaje.",
+    "addToTrip": "Agregar a un viaje",
+    "assign": "Asignar",
+    "removeFrom": "Sacar de {trip}",
+    "auditTab": "Auditoría",
+    "auditCount": "{count, plural, =0 {Sin movimientos} one {# movimiento} other {# movimientos}}",
+    "auditEmpty": "No hay movimientos que coincidan con el filtro. Probá ampliando el rango de fechas.",
+    "filterEntity": "Entidad",
+    "filterActor": "Quién",
+    "filterFrom": "Desde",
+    "filterTo": "Hasta",
+    "filterAll": "Todas",
+    "filterApply": "Filtrar",
+    "filterClear": "Limpiar",
+    "colWhen": "Cuándo",
+    "colWho": "Quién",
+    "colWhat": "Qué",
+    "colField": "Campo",
+    "colChange": "Cambio",
+    "actorSystem": "Sistema",
+    "prevPage": "Anteriores",
+    "nextPage": "Siguientes",
+    "pageOf": "Página {page} de {total}"
   },
   "passport": {
     "okShort": "Pasaporte OK",
@@ -438,7 +471,9 @@
     "priceOverride": "Precio acordado",
     "priceOverrideReason": "Motivo",
     "priceOverrideSave": "Guardar precio",
-    "priceOverrideClear": "Volver al precio de lista"
+    "priceOverrideClear": "Volver al precio de lista",
+    "exportList": "Descargar listado",
+    "exportRooming": "Descargar rooming"
   },
   "rooms": {
     "title": "Habitaciones",
@@ -618,7 +653,8 @@
     "expectedHelp": "Suma de los planes activos. No incluye cancelados.",
     "expectedPartial": "No incluye a {count, plural, =1 {1 pasajero sin plan} other {# pasajeros sin plan}}.",
     "cancelledNote": "{count, plural, =1 {1 pasajero cancelado} other {# pasajeros cancelados}} con plan · {amount} recibidos, fuera del total.",
-    "reviewFxTouched": "Vas a guardar este TC como tomado del extracto."
+    "reviewFxTouched": "Vas a guardar este TC como tomado del extracto.",
+    "export": "Descargar estado de pagos"
   },
   "communications": {
     "title": "Comunicaciones",

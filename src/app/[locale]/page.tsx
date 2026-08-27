@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/guards";
-import { prisma } from "@/lib/db/prisma";
+import { viewerCoordinatesAnyTrip } from "@/lib/services/trip";
 
 /**
  * Punto de entrada. No muestra nada: decide a qué panel corresponde mandar a
@@ -17,14 +17,5 @@ export default async function EntryPage() {
     redirect("/login");
   }
 
-  if (user.role === "ADMIN") {
-    redirect("/viajes");
-  }
-
-  const coordinates = await prisma.tripMember.findFirst({
-    where: { userId: user.id, role: "COORDINADOR" },
-    select: { id: true },
-  });
-
-  redirect(coordinates ? "/viajes" : "/inicio");
+  redirect((await viewerCoordinatesAnyTrip()) ? "/viajes" : "/inicio");
 }

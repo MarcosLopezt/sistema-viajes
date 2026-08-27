@@ -5,7 +5,6 @@ import { prisma, disconnectDb } from "@/lib/db/prisma";
 import {
   createTripDraft,
   getTripBudget,
-  setPassengerPriceOverride,
   setTripPrices,
   TripStateError,
   updateTripGeneral,
@@ -15,6 +14,7 @@ import {
   upsertIndirectCost,
   upsertItineraryStop,
 } from "@/lib/services/trip";
+import { setPassengerPriceOverride } from "@/lib/services/passengers";
 import { ForbiddenError } from "@/lib/auth/errors";
 
 /**

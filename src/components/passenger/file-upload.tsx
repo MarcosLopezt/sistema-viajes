@@ -141,13 +141,12 @@ export function MedicalFileUpload({
             {t("uploaded")}
           </p>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={openFile}>
+            <Button variant="outline" onClick={openFile}>
               <ExternalLink aria-hidden="true" />
               {t("view")}
             </Button>
             <Button
               variant="ghost"
-              size="sm"
               onClick={() => inputRef.current?.click()}
             >
               {t("replace")}

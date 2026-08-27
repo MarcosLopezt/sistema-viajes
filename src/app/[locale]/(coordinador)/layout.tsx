@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getSessionUser } from "@/lib/auth/guards";
-import { prisma } from "@/lib/db/prisma";
+import { viewerCoordinatesAnyTrip } from "@/lib/services/trip";
 import { CoordinatorNav } from "@/components/layout/coordinator-nav";
 import { UserMenu } from "@/components/layout/user-menu";
 
@@ -18,13 +18,7 @@ export default async function CoordinatorLayout({
   const user = await getSessionUser();
   if (!user) redirect("/login");
 
-  if (user.role !== "ADMIN") {
-    const membership = await prisma.tripMember.findFirst({
-      where: { userId: user.id, role: "COORDINADOR" },
-      select: { id: true },
-    });
-    if (!membership) redirect("/inicio");
-  }
+  if (!(await viewerCoordinatesAnyTrip())) redirect("/inicio");
 
   const t = await getTranslations("common");
 

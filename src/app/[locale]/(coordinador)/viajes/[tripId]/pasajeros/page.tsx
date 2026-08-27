@@ -1,10 +1,10 @@
 import { getTranslations } from "next-intl/server";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Download } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { requireCapability } from "@/lib/auth/guards";
-import { prisma } from "@/lib/db/prisma";
 import { listPassengers, listRooms } from "@/lib/services/passengers";
 import { getTripPaymentsOverview } from "@/lib/services/payments";
+import { getTripHeader } from "@/lib/services/trip";
 import { listInvitations } from "@/lib/services/invitations";
 import { toIsoDate } from "@/lib/validation/trip";
 import { Button } from "@/components/ui/button";
@@ -28,10 +28,7 @@ export default async function PassengersPage({
 
   const [trip, passengers, invitations, rooms, payments, t] =
     await Promise.all([
-      prisma.trip.findUniqueOrThrow({
-        where: { id: tripId },
-        select: { id: true, name: true, currency: true, status: true },
-      }),
+      getTripHeader(tripId),
       listPassengers(tripId),
       listInvitations(tripId),
       listRooms(tripId),
@@ -71,7 +68,26 @@ export default async function PassengersPage({
             {trip.name}
           </Link>
         </Button>
-        <h1 className="text-3xl font-semibold">{t("title")}</h1>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-3xl font-semibold">{t("title")}</h1>
+          {/* Descargas. Son links comunes: el archivo lo sirve un Route
+              Handler con Content-Disposition, y cada descarga queda en el
+              AuditLog del lado del servicio. */}
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline">
+              <a href={`/api/exportaciones/${trip.id}/pasajeros`}>
+                <Download aria-hidden="true" />
+                {t("exportList")}
+              </a>
+            </Button>
+            <Button asChild variant="outline">
+              <a href={`/api/exportaciones/${trip.id}/rooming`}>
+                <Download aria-hidden="true" />
+                {t("exportRooming")}
+              </a>
+            </Button>
+          </div>
+        </div>
       </div>
 
       <Tabs defaultValue="list">

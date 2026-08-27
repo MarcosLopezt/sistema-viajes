@@ -8,7 +8,10 @@ import {
 } from "@/lib/auth/guards";
 import { ForbiddenError } from "@/lib/auth/errors";
 import { auditMoney, auditValue, recordAudit } from "./audit";
-import { getPassengerMix } from "./passengers";
+import {
+  countPassengersWithActivePlan,
+  getPassengerMix,
+} from "./passengers";
 import {
   calculateTripCost,
   calculateTripMargin,
@@ -135,6 +138,52 @@ export async function listTripsForViewer(): Promise<TripListItem[]> {
     ...trip,
     passengerCount: _count.passengers,
   }));
+}
+
+/**
+ * ¿El usuario de la sesión coordina algún viaje?
+ *
+ * Es la pregunta que decide a qué panel entra alguien al abrir la aplicación.
+ * Vive acá y no en la página porque la respondían dos archivos distintos —el
+ * punto de entrada y el layout del coordinador— con la misma consulta escrita
+ * dos veces. Dos copias de una decisión de acceso divergen tarde o temprano.
+ *
+ * El ADMIN entra al panel de coordinador aunque no coordine ningún viaje.
+ */
+export async function viewerCoordinatesAnyTrip(): Promise<boolean> {
+  const user = await requireSessionUser();
+  if (user.role === "ADMIN") return true;
+
+  const membership = await prisma.tripMember.findFirst({
+    where: { userId: user.id, role: "COORDINADOR" },
+    select: { id: true },
+  });
+
+  return membership !== null;
+}
+
+export interface TripHeader {
+  id: string;
+  name: string;
+  currency: "GBP" | "USD" | "EUR";
+  status: TripStatus;
+}
+
+/**
+ * Los datos mínimos del viaje para encabezar una pantalla del coordinador:
+ * el nombre para el título y el migajón, la moneda para formatear importes.
+ *
+ * Existe para que las páginas no consulten `prisma` por su cuenta. La página
+ * ya decide con su propia capability si se muestra; esta función decide si
+ * ESTOS datos se entregan, y esa decisión vive en un solo lugar.
+ */
+export async function getTripHeader(tripId: string): Promise<TripHeader> {
+  await requireTripRole(tripId, "COORDINADOR");
+
+  return prisma.trip.findUniqueOrThrow({
+    where: { id: tripId },
+    select: { id: true, name: true, currency: true, status: true },
+  });
 }
 
 // ------------------------- Alta y datos generales --------------------------
@@ -293,43 +342,6 @@ export async function setTripPrices(
       field: "priceSingle",
       oldValue: auditMoney(before.priceSingle),
       newValue: auditMoney(input.priceSingle),
-    },
-  ]);
-}
-
-/**
- * Precio pactado para un pasajero puntual.
- *
- * Es lo que resuelve el caso del pasajero en base doble que se queda sin
- * compañero: el sistema avisa, pero la decisión —y el precio— son del
- * coordinador. También queda auditado.
- */
-export async function setPassengerPriceOverride(
-  passengerId: string,
-  priceOverride: string | null,
-  reason: string | null,
-): Promise<void> {
-  const passenger = await prisma.passenger.findUnique({
-    where: { id: passengerId },
-    select: { id: true, tripId: true, priceOverride: true },
-  });
-
-  if (!passenger) throw new ForbiddenError();
-
-  const viewer = await requireCapability(passenger.tripId, "payment:definePlan");
-
-  await prisma.passenger.update({
-    where: { id: passengerId },
-    data: { priceOverride, priceOverrideReason: reason },
-  });
-
-  await recordAudit(viewer.userId, [
-    {
-      entity: "Passenger",
-      entityId: passengerId,
-      field: "priceOverride",
-      oldValue: auditMoney(passenger.priceOverride),
-      newValue: auditMoney(priceOverride),
     },
   ]);
 }
@@ -601,9 +613,7 @@ export async function getTripBudget(tripId: string) {
   // del viaje NO los toca. Eso es deliberado —nadie quiere que a alguien que
   // ya pagó dos cuotas se le reescriba la deuda— pero es invisible si no se
   // dice, así que este número alimenta la advertencia del paso de precios.
-  const passengersWithActivePlan = await prisma.passenger.count({
-    where: { tripId, isCoordinator: false, paymentPlan: { isNot: null } },
-  });
+  const passengersWithActivePlan = await countPassengersWithActivePlan(tripId);
 
   return {
     trip: serializeTrip(trip),

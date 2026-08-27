@@ -64,7 +64,7 @@ export default async function MyDataPage() {
   return (
     <div className="space-y-6 py-2">
       <div className="space-y-2">
-        <Button asChild variant="ghost" size="sm">
+        <Button asChild variant="ghost">
           <Link href="/inicio">
             <ArrowLeft aria-hidden="true" />
             {passenger.trip.name}

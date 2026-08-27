@@ -1,8 +1,23 @@
-name: Backup semanal de la base
+name: Backup semanal
 
 # El free tier de Supabase no hace backups automáticos: si se pierde el
-# proyecto, se pierde todo. Esto corre un pg_dump completo, lo comprime, lo
-# cifra y lo guarda como artifact del repositorio.
+# proyecto, se pierde todo. Este workflow arma un backup COMPLETO —los tres
+# pedazos que hacen falta para volver a tener un sistema que funciona— y lo
+# guarda cifrado como artifact del repositorio.
+#
+#   1. schema `public`      los datos: viajes, pasajeros, pagos, todo.
+#   2. `auth.users` y
+#      `auth.identities`    las cuentas, CON las contraseñas.
+#   3. los objetos del
+#      Storage              los certificados médicos y los comprobantes.
+#
+# Hasta la fase 6 solo se guardaba el punto 1, y eso daba una base íntegra
+# donde nadie podía iniciar sesión y con paths apuntando a archivos que no
+# existían. Restaurar eso no es restaurar.
+#
+# ⚠️ EL ARTIFACT CONTIENE HASHES DE CONTRASEÑA. El cifrado con GPG no es una
+# precaución opcional: es lo único que separa a este archivo de una filtración
+# de credenciales. La passphrase no puede vivir solo en GitHub.
 #
 # ⚠️ Los workflows programados de GitHub SE DESACTIVAN SOLOS tras 60 días sin
 # actividad en el repositorio. Es exactamente por eso que el cron diario de la
@@ -11,15 +26,16 @@ name: Backup semanal de la base
 # mail antes de desactivarlo y alcanza con volver a habilitarlo desde la UI.
 #
 # Secretos necesarios (Settings → Secrets and variables → Actions):
-#   BACKUP_DATABASE_URL  la connection string DIRECTA de Supabase (puerto 5432,
-#                        NO el pooler: pg_dump no funciona contra pgbouncer).
-#   BACKUP_PASSPHRASE    frase larga para cifrar el dump. Guardala también
-#                        fuera de GitHub: sin ella el backup es irrecuperable.
+#   BACKUP_DATABASE_URL        connection string DIRECTA de Supabase (puerto
+#                              5432, NO el pooler: pg_dump no funciona contra
+#                              pgbouncer).
+#   BACKUP_PASSPHRASE          frase larga para cifrar. Guardala TAMBIÉN fuera
+#                              de GitHub: sin ella el backup es irrecuperable.
+#   BACKUP_SUPABASE_URL        https://<proyecto>.supabase.co
+#   BACKUP_SERVICE_ROLE_KEY    service role: el bucket es privado.
+#   BACKUP_STORAGE_BUCKET      opcional; por defecto "documentos".
 #
-# Restauración: ver README §Backups. Ojo con un detalle que solo aparece al
-# probarlo: el dump trae su propio `CREATE SCHEMA public`, así que en el
-# destino hay que correr `DROP SCHEMA IF EXISTS public CASCADE` ANTES de
-# restaurar, o psql aborta con "schema public already exists".
+# Restauración: ver README §Backups. El procedimiento está probado.
 
 on:
   schedule:
@@ -29,16 +45,29 @@ on:
   # actividad y retrasa la desactivación automática.
   workflow_dispatch:
 
-# Sin permisos sobre el contenido del repo: este job solo lee la base.
+# Sin permisos sobre el contenido del repo: este job solo lee.
 permissions:
   contents: read
 
 jobs:
   backup:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias
+        # Solo hace falta @supabase/supabase-js y tsx para el paso del
+        # Storage. `--ignore-scripts` saltea el `postinstall` que corre
+        # `prisma generate`, que acá no sirve para nada y tarda.
+        run: npm ci --ignore-scripts
+
       - name: Instalar pg_dump 17
         # El pg_dump de los repos de Ubuntu suele ir por detrás de la versión
         # de Postgres que corre Supabase, y un pg_dump viejo contra un servidor
@@ -54,31 +83,102 @@ jobs:
           sudo apt-get install -y --no-install-recommends postgresql-client-17
           pg_dump --version
 
-      - name: Generar, comprimir y cifrar el dump
+      - name: Verificar que estén los secretos
         env:
           PGCONN: ${{ secrets.BACKUP_DATABASE_URL }}
           PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+          SUPABASE_URL: ${{ secrets.BACKUP_SUPABASE_URL }}
+          SERVICE_KEY: ${{ secrets.BACKUP_SERVICE_ROLE_KEY }}
         run: |
-          set -euo pipefail
-
-          if [ -z "${PGCONN}" ] || [ -z "${PASSPHRASE}" ]; then
-            echo "::error::Faltan los secretos BACKUP_DATABASE_URL y/o BACKUP_PASSPHRASE."
+          missing=""
+          [ -z "${PGCONN}" ]       && missing="${missing} BACKUP_DATABASE_URL"
+          [ -z "${PASSPHRASE}" ]   && missing="${missing} BACKUP_PASSPHRASE"
+          [ -z "${SUPABASE_URL}" ] && missing="${missing} BACKUP_SUPABASE_URL"
+          [ -z "${SERVICE_KEY}" ]  && missing="${missing} BACKUP_SERVICE_ROLE_KEY"
+          if [ -n "${missing}" ]; then
+            echo "::error::Faltan secretos:${missing}"
             exit 1
           fi
+          echo "Secretos presentes."
 
-          STAMP="$(date -u +%Y-%m-%d)"
-          OUT="backup-${STAMP}.sql.gz.gpg"
-
+      - name: 1 · Datos de la aplicación (schema public)
+        env:
+          PGCONN: ${{ secrets.BACKUP_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          mkdir -p backup
           # --no-owner y --no-privileges: los roles de Supabase no existen en
           # una base local, y sin esto la restauración se llena de errores.
-          # Solo el schema public: `auth` y `storage` son de Supabase y no se
-          # pueden restaurar así (ver README para los usuarios de Auth).
           pg_dump "${PGCONN}" \
             --schema=public \
             --no-owner \
             --no-privileges \
             --format=plain \
-            | gzip -9 \
+            --file=backup/public.sql
+          echo "public.sql: $(stat -c%s backup/public.sql) bytes"
+
+      - name: 2 · Cuentas de Supabase Auth
+        env:
+          PGCONN: ${{ secrets.BACKUP_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+
+          # Solo estas dos tablas, y solo los datos.
+          #
+          #   auth.users        la cuenta, con `encrypted_password`. Es lo que
+          #                     hace que después de restaurar la gente pueda
+          #                     entrar con su contraseña de siempre.
+          #   auth.identities   el vínculo cuenta ↔ proveedor de login. Las
+          #                     versiones actuales de GoTrue lo exigen: sin
+          #                     esta fila el usuario existe y no puede entrar.
+          #
+          # Lo que NO se guarda a propósito: `auth.sessions` y
+          # `auth.refresh_tokens`. Son estado efímero; restaurarlos solo
+          # reviviría sesiones viejas. La gente vuelve a iniciar sesión.
+          #
+          # --column-inserts en vez de COPY: nombra cada columna, así el dump
+          # sigue aplicando aunque el destino tenga una versión de GoTrue con
+          # columnas nuevas. Es más lento y más grande, y para seis usuarios da
+          # exactamente lo mismo.
+          #
+          # --on-conflict-do-nothing: el destino puede tener ya alguna cuenta
+          # creada a mano. Preferimos conservarla a que aborte la restauración.
+          pg_dump "${PGCONN}" \
+            --data-only \
+            --column-inserts \
+            --on-conflict-do-nothing \
+            --table=auth.users \
+            --table=auth.identities \
+            --file=backup/auth.sql
+
+          USERS=$(grep -c 'INSERT INTO auth.users' backup/auth.sql || true)
+          echo "auth.sql: $(stat -c%s backup/auth.sql) bytes, ${USERS} usuario(s)"
+
+          # Una base con datos siempre tiene al menos un usuario. Cero significa
+          # que el dump falló en silencio o que el rol no ve el schema `auth`.
+          if [ "${USERS}" -lt 1 ]; then
+            echo "::error::El dump de auth no trajo ningún usuario."
+            exit 1
+          fi
+
+      - name: 3 · Archivos del Storage
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.BACKUP_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.BACKUP_SERVICE_ROLE_KEY }}
+          SUPABASE_STORAGE_BUCKET: ${{ secrets.BACKUP_STORAGE_BUCKET }}
+        run: npx tsx scripts/backup-storage.ts backup/storage
+
+      - name: Empaquetar, comprimir y cifrar
+        env:
+          PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          STAMP="$(date -u +%Y-%m-%d)"
+          OUT="backup-${STAMP}.tar.gz.gpg"
+
+          # Un solo archivo cifrado con las tres partes adentro: si se separan,
+          # tarde o temprano alguien restaura la base sin los archivos.
+          tar -czf - -C backup . \
             | gpg --batch --yes --symmetric \
                   --cipher-algo AES256 \
                   --passphrase "${PASSPHRASE}" \
@@ -87,7 +187,7 @@ jobs:
           SIZE=$(stat -c%s "${OUT}")
           echo "Archivo: ${OUT} (${SIZE} bytes)"
 
-          # Un dump de una base con datos nunca pesa 1 KB. Si pesa eso, algo
+          # Un backup de una base con datos nunca pesa 1 KB. Si pesa eso, algo
           # falló en silencio y es mejor que el job se ponga en rojo ahora y no
           # que nos enteremos el día que haya que restaurar.
           if [ "${SIZE}" -lt 1024 ]; then
@@ -97,6 +197,20 @@ jobs:
 
           echo "ARTIFACT_NAME=backup-${STAMP}" >> "${GITHUB_ENV}"
           echo "ARTIFACT_PATH=${OUT}" >> "${GITHUB_ENV}"
+
+      - name: Verificar que el cifrado se pueda deshacer
+        env:
+          PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          # Un backup que no se puede descifrar es un archivo inútil con nombre
+          # tranquilizador. Se prueba acá, cada semana, y no el día del
+          # incidente. Se listan los contenidos sin extraerlos.
+          gpg --batch --yes --decrypt --passphrase "${PASSPHRASE}" \
+              "${ARTIFACT_PATH}" 2>/dev/null \
+            | tar -tzf - \
+            | head -20
+          echo "Descifrado y lectura del tar: OK"
 
       - name: Subir el backup cifrado
         uses: actions/upload-artifact@v4

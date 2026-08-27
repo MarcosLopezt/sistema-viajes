@@ -62,8 +62,11 @@ export function Field({
         </p>
       ) : null}
 
+      {/* El error va en 16px, no en 14 como la ayuda. Es el texto que alguien
+          TIENE que leer para poder seguir: si hay un solo renglón de esta
+          pantalla que no puede quedar chico, es este. */}
       {error ? (
-        <p id={errorId} className="text-status-danger text-sm">
+        <p id={errorId} className="text-status-danger text-base">
           {error}
         </p>
       ) : null}

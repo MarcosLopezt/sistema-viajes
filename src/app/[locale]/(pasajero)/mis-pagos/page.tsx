@@ -60,7 +60,7 @@ export default async function MyPaymentsPage() {
 
   return (
     <div className="space-y-5 py-2">
-      <Button asChild variant="ghost" size="sm" className="-ml-2">
+      <Button asChild variant="ghost" className="-ml-2">
         <Link href="/inicio">
           <ArrowLeft aria-hidden="true" />
           {t("backHome")}
@@ -185,7 +185,7 @@ export default async function MyPaymentsPage() {
                   ) : null}
 
                   {payment.proofFileId ? (
-                    <Button asChild variant="link" size="sm" className="px-0">
+                    <Button asChild variant="link" className="px-0">
                       <a
                         href={`/api/comprobantes/${payment.id}`}
                         target="_blank"

@@ -59,7 +59,51 @@ export function formatDate(date: Date | string): string {
   return `${day}/${month}/${year}`;
 }
 
-/** Fecha y hora local, para sellar exportaciones y registros de auditoría. */
+/**
+ * Fecha y hora en un huso EXPLÍCITO.
+ *
+ * Es la que sella las exportaciones, y usa el huso del viaje. La razón es
+ * concreta: `formatDateTime()` usa la hora local del proceso, y en Vercel el
+ * proceso corre en UTC. Una planilla generada a las 16:30 en Buenos Aires
+ * saldría sellada "19:30", y como ese archivo se manda por mail y se mira
+ * semanas después, esas tres horas no se recuperan.
+ *
+ * El huso va escrito en la salida, no solo aplicado: quien recibe el archivo
+ * no tiene por qué adivinar en qué reloj está la hora.
+ */
+export function formatDateTimeInZone(
+  date: Date,
+  timeZone: string,
+): string {
+  // Un huso inválido hace que Intl tire RangeError. `Trip.timezone` tiene un
+  // default y no tiene UI, así que en la práctica siempre es válido — pero si
+  // alguna vez llega algo raro desde la base, la exportación tiene que salir
+  // igual con la hora en UTC, no devolver un 500. El sello sigue diciendo en
+  // qué huso está, así que la salida nunca miente.
+  let zone = timeZone;
+  try {
+    new Intl.DateTimeFormat("es-AR", { timeZone: zone }).format(date);
+  } catch {
+    zone = "UTC";
+  }
+
+  const parts = new Intl.DateTimeFormat("es-AR", {
+    timeZone: zone,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+
+  const get = (type: string) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+
+  return `${get("day")}/${get("month")}/${get("year")} ${get("hour")}:${get("minute")} (${zone})`;
+}
+
+/** Fecha y hora local del proceso. Ojo: en Vercel eso es UTC. */
 export function formatDateTime(date: Date | string): string {
   const d = typeof date === "string" ? new Date(date) : date;
   if (Number.isNaN(d.getTime())) {

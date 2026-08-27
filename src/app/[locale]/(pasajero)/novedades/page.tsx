@@ -29,7 +29,7 @@ export default async function NewsPage() {
 
   return (
     <div className="space-y-5 py-2">
-      <Button asChild variant="ghost" size="sm" className="-ml-2">
+      <Button asChild variant="ghost" className="-ml-2">
         <Link href="/inicio">
           <ArrowLeft aria-hidden="true" />
           {tMyPayments("backHome")}

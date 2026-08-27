@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isRealIsoDate } from "./date";
+import { isRealIsoDate } from "@/lib/domain/date";
 import { MAX_INSTALLMENTS, MIN_INSTALLMENTS } from "@/lib/domain/payments";
 
 /**

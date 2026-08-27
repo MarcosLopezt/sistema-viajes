@@ -2,8 +2,8 @@ import { getTranslations } from "next-intl/server";
 import { ArrowLeft, ChevronRight, PenLine } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { requireCapability } from "@/lib/auth/guards";
-import { prisma } from "@/lib/db/prisma";
 import { listCommunications } from "@/lib/services/communications";
+import { getTripHeader } from "@/lib/services/trip";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,10 +23,7 @@ export default async function CommunicationsPage({
   await requireCapability(tripId, "communication:send");
 
   const [trip, communications, t] = await Promise.all([
-    prisma.trip.findUniqueOrThrow({
-      where: { id: tripId },
-      select: { id: true, name: true },
-    }),
+    getTripHeader(tripId),
     listCommunications(tripId),
     getTranslations("communications"),
   ]);

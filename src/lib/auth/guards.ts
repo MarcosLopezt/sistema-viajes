@@ -2,6 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/db/prisma";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { bootstrapPassengerLookup } from "@/lib/auth/passenger-bootstrap";
 import { ForbiddenError, UnauthorizedError } from "@/lib/auth/errors";
 import {
   can,
@@ -23,6 +24,11 @@ import type { GlobalRole, TripRole } from "@/generated/prisma/enums";
  * El viewer se deriva siempre de la sesión. Los ids que sí llegan del cliente
  * son los del RECURSO al que se quiere acceder, y se validan contra el viewer.
  * Eso elimina de raíz la clase entera de bugs de IDOR.
+ *
+ * Este módulo NO consulta Passenger ni Person. Lo poco que necesita para
+ * armar el viewer sale de `bootstrapPassengerLookup()`, que vive en su propio
+ * archivo justamente para que la excepción sea una sola, tenga nombre y se
+ * pueda verificar. Ver lib/auth/passenger-bootstrap.ts.
  */
 
 export interface SessionUser {
@@ -81,10 +87,7 @@ export async function getTripViewer(tripId: string): Promise<ViewerContext> {
       select: { role: true },
     }),
     user.personId
-      ? prisma.passenger.findUnique({
-          where: { tripId_personId: { tripId, personId: user.personId } },
-          select: { id: true },
-        })
+      ? bootstrapPassengerLookup({ tripId, personId: user.personId })
       : Promise.resolve(null),
   ]);
 
@@ -149,10 +152,7 @@ export async function requirePassengerAccess(
   passengerId: string,
   mode: "view" | "edit" = "view",
 ): Promise<{ viewer: ViewerContext; tripId: string }> {
-  const passenger = await prisma.passenger.findUnique({
-    where: { id: passengerId },
-    select: { id: true, tripId: true },
-  });
+  const passenger = await bootstrapPassengerLookup({ passengerId });
 
   if (!passenger) throw new ForbiddenError();
 

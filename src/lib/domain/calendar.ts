@@ -1,4 +1,4 @@
-import { isRealIsoDate } from "@/lib/validation/date";
+import { isRealIsoDate } from "./date";
 
 /**
  * Fechas de calendario y zonas horarias.

@@ -22,9 +22,9 @@ import {
   confirmPassenger,
   createRoom,
   PassengerStateError,
+  setPassengerPriceOverride,
   updatePersonByCoordinator,
 } from "@/lib/services/passengers";
-import { setPassengerPriceOverride } from "@/lib/services/trip";
 import { personDraftSchema } from "@/lib/validation/person";
 
 /**

@@ -1,12 +1,12 @@
 import { getLocale, getTranslations } from "next-intl/server";
-import { ArrowLeft, ChevronRight, TriangleAlert } from "lucide-react";
+import { ArrowLeft, ChevronRight, Download, TriangleAlert } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { requireCapability } from "@/lib/auth/guards";
-import { prisma } from "@/lib/db/prisma";
 import {
   getTripPaymentsOverview,
   listPendingReviews,
 } from "@/lib/services/payments";
+import { getTripHeader } from "@/lib/services/trip";
 import { formatDate, formatMoney, type LocaleCode } from "@/lib/format";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -34,10 +34,7 @@ export default async function TripPaymentsPage({
   const locale = (await getLocale()) as LocaleCode;
 
   const [trip, overview, pending, t, tPayments] = await Promise.all([
-    prisma.trip.findUniqueOrThrow({
-      where: { id: tripId },
-      select: { id: true, name: true },
-    }),
+    getTripHeader(tripId),
     getTripPaymentsOverview(tripId),
     listPendingReviews(tripId),
     getTranslations("paymentsAdmin"),
@@ -72,9 +69,17 @@ export default async function TripPaymentsPage({
             {trip.name}
           </Link>
         </Button>
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-3xl font-semibold">{t("title")}</h1>
-          <PaymentLightBadge light={overview.light} />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-3xl font-semibold">{t("title")}</h1>
+            <PaymentLightBadge light={overview.light} />
+          </div>
+          <Button asChild variant="outline">
+            <a href={`/api/exportaciones/${trip.id}/pagos`}>
+              <Download aria-hidden="true" />
+              {t("export")}
+            </a>
+          </Button>
         </div>
       </div>
 

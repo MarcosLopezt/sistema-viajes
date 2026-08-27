@@ -44,8 +44,13 @@ export default async function PassengerHomePage() {
 
   if (!passenger) {
     return (
-      <div className="py-10 text-center">
-        <p className="text-muted-foreground text-base">{t("newsEmpty")}</p>
+      // Antes decía "Todavía no hay novedades del viaje", que es el texto
+      // equivocado: acá el problema no son las novedades, es que esta
+      // persona no está en ningún viaje. Un estado vacío tiene que decir
+      // qué pasa y qué hacer.
+      <div className="space-y-3 py-10 text-center">
+        <h1 className="text-2xl font-semibold">{t("noTripTitle")}</h1>
+        <p className="text-muted-foreground text-base">{t("noTripBody")}</p>
       </div>
     );
   }
@@ -195,7 +200,17 @@ export default async function PassengerHomePage() {
                   {t("myPaymentsSettled")}
                 </p>
               )}
-              <Button asChild size="lg" className="w-full">
+              {/* Primario SOLO si los datos ya están completos. Con datos
+                  incompletos el botón primario de esta pantalla es el de
+                  "Mis datos": dos primarios no priorizan nada. */}
+              <Button
+                asChild
+                size="lg"
+                variant={
+                  passenger.completeness.complete ? "default" : "outline"
+                }
+                className="w-full"
+              >
                 <Link href="/mis-pagos">
                   {t("myPaymentsAction")}
                   <ChevronRight aria-hidden="true" />

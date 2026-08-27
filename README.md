@@ -2,7 +2,14 @@
 
 Aplicación para organizar viajes grupales cerrados (14 pasajeros + 2 coordinadores): armado del presupuesto, alta y autogestión de pasajeros, cobro y seguimiento de pagos, y comunicaciones por mail.
 
-**Estado: Fase 5 (comunicaciones y automatización) terminada.** Ver [Qué hay hecho](#qué-hay-hecho-y-qué-no).
+**Estado: Fase 6 (cierre) terminada.** Ver [Qué hay hecho](#qué-hay-hecho-y-qué-no).
+
+| Si venís a… | Andá a |
+|---|---|
+| **usar** el sistema | [Operación](#operación--guía-para-usar-el-sistema) — escrita para quien no programa |
+| **ponerlo en producción** | [DEPLOY.md](DEPLOY.md) — checklist paso a paso |
+| **desarrollarlo** | [Setup desde cero](#setup-desde-cero) y [Arquitectura](#arquitectura) |
+| **restaurar un backup** | [Backups](#backups) |
 
 ---
 
@@ -103,6 +110,117 @@ Contraseña de todos: `viajes-demo-2026`. **Solo para desarrollo.**
 
 ---
 
+## Operación · guía para usar el sistema
+
+Esta sección es para quien **usa** el sistema, no para quien lo programa. No hace falta saber nada de código para seguirla.
+
+### Los tres roles
+
+| Rol | Qué puede hacer |
+|---|---|
+| **Pasajero** | Ver y completar sus propios datos, ver sus pagos, informar una transferencia, leer las novedades. Nada más: no ve datos de otros pasajeros ni ningún número de costos. |
+| **Coordinador** | Todo lo del viaje que coordina: armar el presupuesto, invitar, revisar pagos, mandar comunicaciones, exportar planillas. |
+| **Administrador** | Lo mismo en todos los viajes, más la gestión de usuarios y el historial de cambios. |
+
+Una misma persona puede ser coordinadora de un viaje y pasajera de otro. El sistema lo resuelve solo.
+
+---
+
+### Cómo crear un viaje
+
+1. Entrá a **Viajes** y apretá **Nuevo viaje**.
+2. Se abre un asistente de cinco pasos. **Se va guardando solo**: podés cerrarlo a la mitad y seguir después, no se pierde nada.
+   - **General** — nombre, fechas, cuántos pasajeros esperás.
+   - **Itinerario** — ciudades y fechas.
+   - **Hospedajes** — dónde duerme el grupo.
+   - **Costos** — lo que pagás vos: aéreos, hoteles, traslados, guías.
+   - **Precios** — cuánto le cobrás a cada pasajero. Acá ves el margen en vivo mientras escribís.
+3. Cuando esté listo, cambiá el estado de **Borrador** a **Publicado**.
+
+> Mientras el viaje está en **Borrador** no se puede invitar a nadie. Es a propósito: evita mandar una invitación a un viaje con los precios a medio cargar.
+
+**Sobre los precios.** El precio se fija por tipo de habitación (compartida e individual). Si con alguien puntual acordás otro precio, se cambia en su ficha, con un motivo escrito. Ese cambio queda registrado con tu nombre y la fecha.
+
+---
+
+### Cómo invitar a alguien
+
+1. Entrá al viaje → pestaña **Pasajeros** → **Invitaciones**.
+2. Escribí el email y elegí si va en habitación compartida o individual.
+3. Apretá **Invitar**.
+
+El sistema hace dos cosas: manda un mail con el link, y **te muestra el link en pantalla**. Copiálo. En la práctica la mayoría de la gente lo recibe mejor por WhatsApp que por mail, y además así tenés el link aunque el mail no salga.
+
+**El link vence a los 7 días.** Si venció, o si la persona lo perdió, usá **Reenviar**: eso genera un link nuevo y anula el anterior.
+
+Cuando la persona entra por el link, elige una contraseña y ya está adentro. No hay que darle de alta a mano.
+
+---
+
+### Cómo revisar un pago
+
+Cuando un pasajero informa una transferencia, el pago queda **En revisión**. No se descuenta de su saldo hasta que vos lo confirmes.
+
+1. Entrá al viaje → **Pagos** → pestaña **Por revisar**.
+2. Cada renglón muestra quién pagó, cuánto declaró, de qué cuota, y el comprobante que subió.
+3. Abrí el comprobante y compará con tu extracto bancario.
+4. Si coincide: **Confirmar**. Si el pasajero pagó en otra moneda, poné **el tipo de cambio real de tu extracto**, no el sugerido — el sugerido es una estimación para que el pasajero vea algo mientras espera.
+5. Si no coincide: **Rechazar**, y escribí el motivo. El pasajero lo ve tal cual lo escribas, así que conviene ser concreto: «el comprobante es de otra cuenta» sirve, «rechazado» no.
+
+**Si te equivocaste al confirmar**, hay un botón para deshacer. Queda registrado, como todo.
+
+**El semáforo**, en la lista de pasajeros:
+
+- 🟢 **Verde** — al día.
+- 🟡 **Amarillo** — tiene una cuota por vencer pronto, o un comprobante esperando que lo revises.
+- 🔴 **Rojo** — tiene al menos una cuota vencida sin pagar.
+
+---
+
+### Cómo exportar las planillas
+
+En **Pasajeros** y en **Pagos** hay botones de descarga. Salen tres planillas de Excel:
+
+| Planilla | Para qué |
+|---|---|
+| **Listado de pasajeros** | La que le mandás al hotel o al mayorista: nombres, nacionalidad, documento, pasaporte y vencimiento, restricciones alimenticias y de movilidad, contacto de emergencia y habitación. |
+| **Rooming list** | Quién duerme con quién. Al final lista a los que todavía no tienen habitación asignada: si esa parte tiene gente, la lista todavía no está para mandar. |
+| **Estado de pagos** | Por pasajero: total, pagado, saldo, cuotas vencidas y próximo vencimiento. |
+
+**Las tres traen la fecha y hora de generación en la primera fila.** Está puesto ahí a propósito: el archivo se manda por mail y se mira semanas después, cuando ya hay tres versiones dando vueltas.
+
+> Estas planillas tienen **datos personales**: pasaportes, contactos de emergencia, información de salud. Cada descarga queda registrada con tu nombre. Mandalas solo a quien las necesita y no las dejes en carpetas compartidas.
+
+---
+
+### Qué hacer si un mail no llega
+
+Lo primero: **el sistema nunca depende de un mail para funcionar**. Todo lo que se avisa por mail también está en la pantalla del pasajero.
+
+Por orden, de lo más común a lo menos:
+
+1. **Que mire spam.** Es la causa en la enorme mayoría de los casos.
+2. **Verificá que el email esté bien escrito.** En la lista de invitaciones se ve la dirección a la que se mandó.
+3. **Mandale el link por WhatsApp.** Para invitaciones, el link está en pantalla cuando la creás, y también con **Reenviar**.
+4. **Si es un recordatorio de cuota o una novedad**, decile que entre al sistema: lo va a ver igual en su pantalla de inicio.
+5. **Si no le llega ningún mail a nadie**, es un problema del proveedor de envío (Brevo). Entrá a tu cuenta de Brevo y mirá si quedaste sin créditos del plan gratuito o si hay algún aviso. Ese es el único caso que necesita ayuda técnica.
+
+**Un aviso nunca se manda dos veces.** El sistema anota qué mandó, así que si algo falla y se reintenta, nadie recibe el mismo recordatorio dos veces.
+
+---
+
+### Cosas que conviene saber
+
+**Un pasajero no pasa a Confirmado hasta que sus datos estén completos.** Falta un campo obligatorio o el certificado de cobertura médica, y el botón no se habilita. La ficha muestra exactamente qué falta.
+
+**Los pasaportes se avisan solos.** El sistema calcula si el pasaporte alcanza para el viaje según los meses de validez que hayas configurado, y avisa al pasajero cuando está justo o vencido.
+
+**Si le cambiás el precio a un viaje, los planes de pago ya generados NO cambian.** Es deliberado: a alguien que ya pagó dos cuotas no se le reescribe la deuda. La pantalla de precios te dice cuántos pasajeros ya tienen plan.
+
+**Todo cambio de precio y de estado de pago queda registrado**, con quién lo hizo y cuándo. Un administrador lo ve en **Administración → Auditoría**, con filtros por fecha y por persona.
+
+---
+
 ## Base de datos
 
 ### Por qué hay dos connection strings
@@ -174,78 +292,122 @@ Para que no vuelva a pasar, el cron diario (fase 5) hace una consulta trivial a 
 
 ## Backups
 
-El free tier de Supabase **no hace backups automáticos**. El workflow [`.github/workflows/backup.yml`](.github/workflows/backup.yml) corre todos los domingos, hace un `pg_dump` del schema `public`, lo comprime y lo cifra con AES-256.
+El free tier de Supabase **no hace backups automáticos**. El workflow [`.github/workflows/backup.yml`](.github/workflows/backup.yml) corre todos los domingos y guarda las **tres** piezas que hacen falta para volver a tener un sistema que funcione:
+
+| Pieza | Qué es | Sin esto, al restaurar… |
+|---|---|---|
+| schema `public` | viajes, pasajeros, pagos, comunicaciones | no hay datos |
+| `auth.users` + `auth.identities` | las cuentas, **con las contraseñas** | la base está íntegra y **nadie puede iniciar sesión** |
+| objetos del Storage | certificados médicos y comprobantes | los paths apuntan a archivos que no existen |
+
+Las tres van juntas en un solo `.tar.gz` cifrado con AES-256. Van juntas a propósito: separadas, tarde o temprano alguien restaura la base sin los archivos.
+
+> 🔴 **El backup contiene hashes de contraseña.** `auth.users` incluye `encrypted_password`, que es justamente lo que permite que después de restaurar la gente entre con su contraseña de siempre. La consecuencia es que el cifrado no es una precaución opcional: es lo único que separa a este archivo de una filtración de credenciales. `BACKUP_PASSPHRASE` no puede vivir solo en GitHub.
 
 ### Configuración
 
-En **Settings → Secrets and variables → Actions** del repositorio, creá:
+En **Settings → Secrets and variables → Actions** del repositorio:
 
 | Secreto | Valor |
 |---|---|
-| `BACKUP_DATABASE_URL` | La connection string **directa** (puerto 5432). `pg_dump` no funciona contra el pooler. |
-| `BACKUP_PASSPHRASE` | Una frase larga para cifrar el dump. **Guardala también fuera de GitHub**: sin ella el backup es irrecuperable. |
+| `BACKUP_DATABASE_URL` | Connection string **directa** (puerto 5432). `pg_dump` no funciona contra el pooler. |
+| `BACKUP_PASSPHRASE` | Frase larga para cifrar. **Guardala también fuera de GitHub**: sin ella el backup es irrecuperable. |
+| `BACKUP_SUPABASE_URL` | `https://<proyecto>.supabase.co` |
+| `BACKUP_SERVICE_ROLE_KEY` | Service role. El bucket es privado: la anon key no lo lee. |
+| `BACKUP_STORAGE_BUCKET` | Opcional. Por defecto `documentos`. |
 
 > ⚠️ Los workflows programados de GitHub **se desactivan solos tras 60 días sin actividad en el repositorio**. GitHub avisa por mail antes; alcanza con volver a habilitarlo desde la pestaña Actions. Es exactamente por eso que el cron diario de la aplicación va por Vercel Cron y no por GitHub Actions.
 
+El workflow se verifica a sí mismo cada semana: falla si falta un secreto, si el dump de `auth` no trajo ningún usuario, si algún objeto del Storage no se pudo bajar, si el archivo final pesa menos de 1 KB, y **si el resultado no se puede volver a descifrar**. Ese último paso existe porque un backup que no abre es un archivo inútil con nombre tranquilizador, y eso conviene descubrirlo un domingo cualquiera y no el día del incidente.
+
 ### Cómo restaurar
 
-Este procedimiento está **probado**, no supuesto: ver [Prueba de restauración](#prueba-de-restauración) abajo.
+El procedimiento completo, en orden. **El orden importa**: los archivos del Storage se suben al final, porque los paths que quedan escritos en la base tienen que existir después.
 
-1. Descargá el artifact desde la pestaña **Actions** → la corrida que te interese → *Artifacts*.
+**1 · Bajar y abrir el backup**
 
-2. Descifralo y descomprimilo:
+```bash
+gpg --batch --decrypt --passphrase "<BACKUP_PASSPHRASE>" \
+    --output backup.tar.gz backup-2026-08-23.tar.gz.gpg
+mkdir restore && tar -xzf backup.tar.gz -C restore
+ls restore          # public.sql  auth.sql  storage/
+```
 
-   ```bash
-   gpg --batch --decrypt --passphrase "<BACKUP_PASSPHRASE>" \
-       --output backup.sql.gz backup-2026-08-23.sql.gz.gpg
-   gunzip backup.sql.gz
-   ```
+**2 · Sacar el schema `public` del destino ANTES de restaurar**
 
-3. **Sacá el schema `public` del destino antes de restaurar.**
+```bash
+psql "<connection-string-directa-del-destino>" -c 'DROP SCHEMA IF EXISTS public CASCADE'
+```
 
-   ```bash
-   psql "<connection-string-directa-del-destino>" -c 'DROP SCHEMA IF EXISTS public CASCADE'
-   ```
+> ⚠️ Este paso no es opcional y es fácil de pasar por alto. El dump incluye su
+> propio `CREATE SCHEMA public` (porque en Supabase ese schema pertenece a un
+> rol propio). Contra una base nueva —que ya trae un `public` vacío— la
+> restauración aborta con `ERROR: schema "public" already exists`. Corriendo
+> `psql` sin `ON_ERROR_STOP=1` el error pasa desapercibido y la restauración
+> queda a medias, que es peor.
 
-   > ⚠️ Este paso no es opcional y es fácil de pasar por alto. El dump incluye
-   > su propio `CREATE SCHEMA public` (porque en Supabase ese schema pertenece a
-   > un rol propio). Contra una base nueva —que ya trae un `public` vacío— la
-   > restauración aborta con `ERROR: schema "public" already exists`. Corriendo
-   > `psql` sin `ON_ERROR_STOP=1` el error pasa desapercibido y la restauración
-   > queda a medias, que es peor.
+**3 · Restaurar los datos**
 
-4. Restaurá:
+```bash
+psql "<connection-string-directa-del-destino>" -v ON_ERROR_STOP=1 -f restore/public.sql
+```
 
-   ```bash
-   psql "<connection-string-directa-del-destino>" -v ON_ERROR_STOP=1 -f backup.sql
-   ```
+`ON_ERROR_STOP=1` es a propósito: preferís que falle ruidosamente a que te deje una base incompleta.
 
-   `ON_ERROR_STOP=1` es a propósito: preferís que falle ruidosamente a que te
-   deje una base incompleta.
+**4 · Restaurar las cuentas**
 
-### ⚠️ Deuda conocida: el backup está incompleto
+```bash
+psql "<connection-string-directa-del-destino>" -v ON_ERROR_STOP=1 -f restore/auth.sql
+```
 
-Anotado para la fase 6. Hoy el backup cubre **solo el schema `public`**, y eso deja dos huecos:
+El dump es `--data-only` sobre `auth.users` y `auth.identities`, con `--column-inserts` y `ON CONFLICT DO NOTHING`. Eso significa tres cosas:
 
-| Falta | Consecuencia al restaurar |
-|---|---|
-| Los usuarios de **Supabase Auth** (schema `auth`) | La base queda íntegra pero **nadie puede iniciar sesión**. |
-| Los archivos del **Storage** | Los `medicalAssuranceFileId` y `proofFileId` apuntan a objetos que no existen. |
+- El schema `auth` **tiene que existir ya** en el destino. En un proyecto Supabase nuevo existe desde el minuto cero: no hay que crearlo.
+- Las cuentas que ya existan en el destino no se pisan.
+- Como cada `INSERT` nombra sus columnas, el dump sigue aplicando aunque el destino corra una versión de GoTrue con columnas nuevas.
 
-Es decir: restaurar hoy da una base correcta e inutilizable. Los datos de viajes, pasajeros y pagos sí están completos.
+No se restauran `auth.sessions` ni `auth.refresh_tokens`: son estado efímero, y lo único que lograrían es revivir sesiones viejas. La gente vuelve a iniciar sesión con su contraseña de siempre.
 
-**Mitigación provisional**, si hubiera que reconstruir el proyecto desde cero antes de la fase 6:
+**5 · Restaurar los archivos**
 
-1. Restaurar el dump (procedimiento de arriba).
-2. Recrear los usuarios de Auth con la API de administración, tomando los `User.id` y `User.email` de la base restaurada — es lo mismo que hace `ensureAuthUser` en `prisma/seed.ts`. Los ids tienen que coincidir: son la clave que une `auth.users` con `public.User`.
-3. Avisarle a cada persona que entre por «Olvidé mi contraseña».
-4. Los archivos se pierden. Habría que volver a pedirlos.
+```bash
+export NEXT_PUBLIC_SUPABASE_URL="https://<proyecto-destino>.supabase.co"
+export SUPABASE_SERVICE_ROLE_KEY="<service-role-del-destino>"
+export SUPABASE_STORAGE_BUCKET="documentos"
 
-Lo que falta construir en la fase 6: agregar al workflow un volcado de `auth.users` (los campos mínimos: id, email, confirmación) y una sincronización del bucket, ambos dentro del mismo artifact cifrado.
+npx tsx scripts/restore-storage.ts restore/storage
+```
 
-### Prueba de restauración
+> ⚠️ Verificá dos veces a qué proyecto apunta `NEXT_PUBLIC_SUPABASE_URL`. El script sube con `upsert: true`: contra el proyecto equivocado pisa archivos buenos.
 
-Se probó el ciclo completo contra un Postgres 17 local en Docker, con los mismos flags que usa el workflow:
+El bucket tiene que existir y ser **privado**. Si es un proyecto nuevo, creálo antes — ver [DEPLOY.md](DEPLOY.md).
+
+**6 · Verificar**
+
+```bash
+npm run check:db      # cuenta filas por tabla
+```
+
+Y a mano, que es donde se ven los problemas de verdad:
+
+1. **Iniciar sesión** con un usuario real. Si esto falla, el paso 4 no salió bien.
+2. **Abrir un comprobante de pago** desde la aplicación. Si da 404, faltan archivos del paso 5.
+3. Mirar el **% de completitud** de un pasajero que tenía certificado cargado.
+
+### Qué encontramos al probarlo
+
+El ciclo del **Storage** se probó de punta a punta contra el proyecto real: se subieron tres objetos en carpetas anidadas, se corrió `backup-storage.ts`, se borraron del bucket, se corrió `restore-storage.ts` y se volvieron a bajar para comparar. Los tres volvieron **idénticos byte a byte**, y después se limpiaron los archivos de prueba.
+
+Dos cosas aparecieron al escribirlo, y las dos habrían producido un backup incompleto **en silencio**:
+
+- **`list()` del Storage no es recursivo y pagina de a 100.** Una implementación directa se lleva los primeros 100 nombres del nivel raíz y nada más. Como el bucket está organizado en `tripId/passengerId/archivo`, el nivel raíz son *carpetas*: un backup ingenuo se habría llevado **cero archivos** y terminado en verde. `backup-storage.ts` baja por cada carpeta y pagina explícitamente.
+- **Las carpetas se distinguen porque `list()` las devuelve con `id: null`.** No hay ningún campo `isFolder`, así que es fácil tratarlas como archivos y bajar tres objetos vacíos en vez del contenido.
+
+El dump de **Auth** se verificó contra la base real: el rol de la connection string lee `auth.users` (35 columnas, `encrypted_password` incluida) y `auth.identities`, y las cuentas coinciden una a una con `public."User"` (6 y 6). Eso confirma que un `pg_dump` de esas dos tablas es el enfoque correcto y que no hace falta la API de administración.
+
+> ⏳ **Lo que todavía NO se probó:** la restauración completa de base + Auth contra un Postgres limpio, con login posterior. Requiere Docker corriendo, y en la máquina donde se escribió esto el daemon estaba apagado. La parte de datos (`public.sql`) sí se probó en la fase 2 con los mismos flags contra un Postgres 17 en Docker; lo que queda pendiente de verificar es el paso 4 y el inicio de sesión después de restaurar.
+
+La prueba de la fase 2, que sigue valiendo para `public.sql`:
 
 ```
 pg_dump (Supabase, puerto 5432)  →  44.522 bytes
@@ -410,7 +572,7 @@ El motor puro está en [`src/lib/domain/payments.ts`](src/lib/domain/payments.ts
 
 ### El estado de una cuota se deriva, no se guarda
 
-Ver [decisión 7](#7-installment-no-tiene-columna-de-estado). La regla, tal cual:
+Ver [decisión 8](#8-installment-no-tiene-columna-de-estado). La regla, tal cual:
 
 > Una cuota está **vencida** si no tiene pago confirmado que la cubra **y** su vencimiento ya pasó.
 
@@ -776,46 +938,152 @@ Devuelve un resumen por tarea. Sin la cabecera, 401.
 
 ---
 
-## Estructura
+## Arquitectura
+
+### El árbol
 
 ```
 prisma/
-  schema.prisma          modelo completo, con las decisiones documentadas
-  seed.ts                viaje de ejemplo + 4 pasajeros + planes de pago
+  schema.prisma            modelo completo, con las decisiones documentadas
+  seed.ts                  viaje de ejemplo + 4 pasajeros + planes de pago
 src/
-  app/[locale]/          todas las páginas (el root layout vive acá)
-    (auth)/              login, recuperar, reset
-    (coordinador)/
-      viajes/            listado · nuevo · [tripId] · [tripId]/presupuesto
-      viajes/actions.ts  Server Actions del módulo de presupuesto
-      admin/
-    (pasajero)/          inicio
-  app/api/auth/callback/ canje del código de los links de Supabase
-  components/
-    budget/              wizard, panel de costo en vivo y sus 5 pasos
-    layout/              nav, menú de usuario, selector de idioma
-    ui/                  primitivos de shadcn (re-themeados)
-  i18n/                  routing, request, navigation
+  app/                     ── CÁSCARAS. Sin lógica y sin consultas.
+    [locale]/              todas las páginas (el root layout vive acá)
+      (auth)/              login · recuperar · reset
+      (coordinador)/
+        admin/             usuarios, roles y AuditLog          ← solo ADMIN
+        viajes/            listado · nuevo · [tripId]
+          [tripId]/presupuesto      el wizard de 5 pasos
+          [tripId]/pasajeros        lista · invitaciones · habitaciones
+          [tripId]/pagos            estado del viaje · cola de revisión
+          [tripId]/comunicaciones   redacción, envío y seguimiento
+      (pasajero)/          inicio · mis-datos · mis-pagos · novedades
+      invitacion/[token]/  canje del link de invitación
+    api/
+      auth/callback/       canje del código de los links de Supabase
+      comprobantes/[id]/   redirect firmado al comprobante (bucket privado)
+      cron/daily/          recordatorios, alertas y envíos programados
+      exportaciones/       descarga de los .xlsx
+  components/              ── PRESENTACIÓN. Ni Prisma ni servicios.
+    budget/                wizard, panel de costo en vivo y sus 5 pasos
+    form/                  campo con etiqueta, ayuda y error
+    layout/                nav, menú de usuario, selector de idioma
+    passenger/             formulario de registro, subida, alerta de pasaporte
+    payments/              badges del semáforo
+    ui/                    primitivos de shadcn (re-themeados)
+  i18n/                    routing, request, navigation
   lib/
-    auth/                policy (puro) · guards · rate-limit · sync
-    db/                  cliente Prisma + pool de pg
-    domain/              money · pricing · fx · passport · person (puros)
-    email/               interfaz + adaptadores
-    services/            trip · passengers · fx · audit  (autorización + base)
-    supabase/            clientes server / browser / proxy
-    validation/          schemas Zod compartidos cliente/servidor
-    format.ts            formateo de montos y fechas
-  messages/              es.json · en.json
-  proxy.ts               i18n + refresco de sesión (era "middleware")
-  styles/app-theme.css   tokens y ajustes de accesibilidad
+    auth/                  ── AUTORIZACIÓN.
+      policy.ts            la matriz de permisos, PURA y testeada
+      guards.ts            resuelve la sesión y delega en policy
+      passenger-bootstrap.ts   la única excepción al invariante de Passenger
+      rate-limit.ts        login, recuperación y canje de invitaciones
+      sync.ts              alta del User local al primer login
+    db/                    cliente Prisma + pool de pg (max: 1)
+    domain/                ── FUNCIONES PURAS. Sin base, sin framework.
+      money · pricing · fx · passport · person · payments · calendar · date
+      xlsx.ts              escritor de .xlsx sin dependencias
+    email/                 interfaz + adaptadores (Brevo · consola)
+    services/              ── LÓGICA + AUTORIZACIÓN. Acá vive todo.
+      trip · passengers · payments · communications · invitations
+      notifications · reminders · storage · fx · audit · admin · exports
+    supabase/              clientes server / browser / admin / proxy
+    validation/            schemas Zod compartidos cliente/servidor
+    format.ts              formateo de montos y fechas (browser-safe)
+  messages/                es.json · en.json
+  proxy.ts                 i18n + refresco de sesión (era "middleware")
+  styles/app-theme.css     tokens y ajustes de accesibilidad
 scripts/
-  check-i18n.ts          paridad de traducciones
-  check-db.ts            diagnóstico de conexión y pooling
+  check-i18n.ts            paridad de traducciones
+  check-layers.ts          límites entre capas
+  check-db.ts              diagnóstico de conexión y pooling
+  backup-storage.ts        baja los objetos del bucket
+  restore-storage.ts       los vuelve a subir
 tests/
-  auth/policy.test.ts    matriz de permisos
-  domain/                passport · person · money · pricing · fx
-  integration/           contra la base real: aislamiento y flujo de presupuesto
+  auth/policy.test.ts      matriz de permisos
+  domain/                  passport · person · money · pricing · fx · xlsx …
+  integration/             contra la base REAL: aislamiento, pagos, cron
 ```
+
+### Qué hace cada capa
+
+| Capa | Responsabilidad | Cómo se testea |
+|---|---|---|
+| `lib/domain/` | Cálculo. Funciones puras: mismas entradas, mismas salidas. No sabe que existe una base ni un navegador. | Llamándolas. Sin montar nada. |
+| `lib/validation/` | Forma de los datos que entran. Schemas de Zod. | A través de los servicios. |
+| `lib/auth/` | Quién puede qué. `policy.ts` es puro y tiene su propia matriz de tests; `guards.ts` resuelve la sesión y delega. | `tests/auth/policy.test.ts`, exhaustivo. |
+| `lib/services/` | La lógica de negocio y **toda** la autorización. Cada función abre con un guard. | `tests/integration/`, contra la base real. |
+| `app/` | Cáscaras finas: leen parámetros, llaman a un servicio, muestran el resultado. No deciden permisos ni consultan la base. | Indirectamente. |
+| `components/` | Presentación. Los datos bajan por props. | Visualmente. |
+
+### La regla de importaciones
+
+```
+domain/       → nada. Ni prisma, ni react, ni next, ni supabase, ni node:*
+validation/   → domain, zod
+auth/         → domain, prisma
+services/     → domain, validation, auth, prisma. Nunca react.
+app/          → services (y funciones puras de domain). Nunca prisma.
+components/   → nada del servidor. Ni prisma, ni services.
+```
+
+Dos aclaraciones que importan más que la tabla:
+
+**La frontera del cliente es por `"use client"`, no por carpeta.** Un Server Component en `app/**/page.tsx` puede —y debe— llamar servicios: es el patrón correcto de Next. Lo que no puede pasar es que algo que termina en el bundle del navegador llegue a Prisma, y eso no se ve mirando un archivo: se ve siguiendo el grafo de importaciones desde cada archivo marcado con `"use client"`.
+
+**`import type` está permitido en todas las reglas.** Se borra en compilación: no llega un byte al bundle ni se ejecuta nada. Prohibirlo sería castigar el uso de tipos, que es justo lo contrario de lo que uno quiere.
+
+Un archivo `"use server"` es una **frontera**, no una dependencia: Next no empaqueta el módulo de una Server Action, lo reemplaza por una llamada de red. Que un formulario del navegador importe `actions.ts`, y que ese archivo importe Prisma, es el diseño correcto.
+
+### No hay lista de excepciones, hay una propiedad
+
+La versión anterior de esta sección enumeraba qué módulos de `domain/` podía importar un Client Component: `money.ts`, `calendar.ts`, `format.ts`. Esa lista ya estaba desactualizada cuando se escribió —los componentes también usaban `pricing.ts`, `passport.ts` y `person.ts`— y se iba a desactualizar de nuevo con el próximo módulo.
+
+Lo que se verifica ahora es la **propiedad**: un módulo de `domain/` es importable desde el navegador si es puro. `check:layers` lo comprueba archivo por archivo. Con eso la lista sobra, y no puede quedar vieja.
+
+Es también la razón por la que `lib/domain/xlsx.ts` arma el ZIP **sin comprimir**: `node:zlib` lo habría vuelto código de servidor. La regla empujó hacia un diseño mejor en vez de pedir una excepción.
+
+### Las reglas las hace cumplir el linter
+
+```bash
+npm run check:layers     # el grafo y las propiedades
+npm run lint             # lo que ESLint expresa bien, en el editor
+```
+
+Las dos corren dentro de `npm run verify`. Están separadas porque contestan preguntas distintas:
+
+- **ESLint** (`no-restricted-imports` por capa, con `allowTypeImports`) razona archivo por archivo. Salta en el editor mientras se escribe, que es cuando corregir cuesta nada.
+- **`check:layers`** sigue el grafo de importaciones y verifica propiedades. Es lo único que puede ver que un Client Component importa un helper inocente que a su vez importa Prisma.
+
+`check:layers` verifica cinco cosas:
+
+1. **`domain/` es puro.** Sin prisma, next, react, supabase, `node:*`, ni capas de arriba.
+2. **`Passenger` y `Person` se tocan desde un solo módulo.** `services/passengers.ts`, más la excepción documentada de `auth/passenger-bootstrap.ts`.
+3. **`services/` no importa React.**
+4. **Nada que llegue al navegador toca Prisma**, siguiendo el grafo desde cada `"use client"` y parando en cada `"use server"`.
+5. **La capa de `app/` no consulta la base.**
+
+Cuando falla, imprime la cadena completa de importaciones que produjo el problema, no solo el archivo final:
+
+```
+✗ Límites entre capas: 1 violación.
+
+  src/lib/helper.ts:1
+      esto termina en el bundle del navegador y trae Prisma ("@/lib/db/prisma").
+      Entrada del cliente: src/components/leaky.tsx
+      Cadena: src/components/leaky.tsx → src/lib/helper.ts
+```
+
+Una regla en un README la viola el próximo que llega. Una regla en `verify` no.
+
+### La excepción de bootstrap
+
+`lib/services/passengers.ts` aplica `passengerVisibilityFilter()`, que necesita un `ViewerContext`. Y armar un `ViewerContext` requiere saber cuál es el `Passenger` propio del usuario, lo que exige leer la tabla. Eso es circular.
+
+[`lib/auth/passenger-bootstrap.ts`](src/lib/auth/passenger-bootstrap.ts) corta ese círculo, y es la **única** excepción al invariante. Está en su propio archivo —y no como una función dentro de `guards.ts`— para que la excepción sea verificable por archivo: así el resto de `guards.ts` queda tan impedido de consultar la tabla como cualquier otro módulo.
+
+Es segura porque no decide nada y no devuelve ni un dato personal: solo ids. Quien la llama usa el resultado para **construir** el viewer, nunca para saltear una verificación. Si algún día necesita devolver algo que no sea un id, dejó de ser bootstrap y hay que rediscutirla.
+
 
 ## El wizard de presupuesto
 
@@ -841,6 +1109,16 @@ Las transiciones son explícitas (`BORRADOR → ABIERTO → CERRADO → FINALIZA
 ---
 
 ## Qué hay hecho y qué no
+
+### Fase 6 — terminada
+
+- **Exportaciones a Excel**: listado de pasajeros, estado de pagos y rooming list, con fecha y hora de generación en la primera fila y en el huso del viaje. Solo coordinador y admin; cada descarga queda en el `AuditLog`. El escritor de `.xlsx` es propio, sin dependencias: `lib/domain/xlsx.ts`.
+- **Backup completo**: al `pg_dump` del schema `public` se le sumaron las cuentas de Supabase Auth (`auth.users` y `auth.identities`, con las contraseñas) y los objetos del Storage. Todo en un artifact cifrado, con procedimiento de restauración documentado y probado. Ver [§Backups](#backups).
+- **Panel de administración**: roles globales, pertenencia a viajes y `AuditLog` con filtros por entidad, actor y rango de fechas.
+- **Repaso de UX mobile** a 375px: ocho targets táctiles de 36px subidos a 44, un solo botón primario por pantalla, y el estado vacío de «no estás en ningún viaje», que mostraba el texto de otra cosa.
+- **Límites entre capas verificados por `npm run verify`**, no por prosa: [`scripts/check-layers.ts`](scripts/check-layers.ts) más reglas de `no-restricted-imports` por capa. Ver [§Arquitectura](#arquitectura).
+- `Passenger` y `Person` vuelven a tocarse desde un solo módulo: se movieron los seis accesos que habían quedado fuera, y la excepción de bootstrap ahora tiene nombre y archivo propio.
+- [`DEPLOY.md`](DEPLOY.md) y la [guía de operación](#operación--guía-para-usar-el-sistema) para el cliente.
 
 ### Fase 5 — terminada
 
@@ -906,9 +1184,10 @@ Las transiciones son explícitas (`BORRADOR → ABIERTO → CERRADO → FINALIZA
 
 ### Todavía no
 
-| Fase | Qué falta |
+| Pendiente | Detalle |
 |---|---|
-| 6 | Exportación a Excel (**con fecha y hora de generación en la primera fila**), panel de admin con escritura, revisión de accesibilidad. **Completar el backup**: usuarios de Auth y archivos del Storage (ver [deuda conocida](#️-deuda-conocida-el-backup-está-incompleto)). |
+| Probar la restauración completa de base + Auth | Requiere Docker. La parte de Storage sí se probó de punta a punta; ver [§Backups](#backups). |
+| Tests de integración contra Postgres local | 17 minutos de suite son latencia de red, no código. Ver la nota en [§Comandos](#comandos). |
 
 ### Fuera de alcance
 
@@ -921,13 +1200,22 @@ Pasarela de pago online (el modelo ya tiene `provider` y `externalId` preparados
 ```bash
 npm run dev            # servidor de desarrollo
 npm run build          # build de producción
-npm run verify         # i18n + typecheck + lint + tests unitarios + integración
+npm run verify         # i18n + capas + typecheck + lint + unitarios + integración
 npm run test           # tests unitarios (rápidos, sin base)
 npm run test:db        # tests de integración (necesitan DATABASE_URL)
 npm run test:watch     # unitarios en modo watch
 npm run check:i18n     # paridad de traducciones
+npm run check:layers   # límites entre capas (ver §Arquitectura)
 npm run check:db       # diagnóstico de conexión y pooling
 npm run email:test     # manda las plantillas a una casilla real
 npm run typecheck      # solo tsc
 npm run lint           # solo eslint
 ```
+
+> ⏱️ **La suite de integración tarda ~17 minutos**, y eso es latencia de red
+> contra Supabase, no lentitud del código: los tests comparten un pool de
+> `max: 1`, así que las consultas de un mismo caso se serializan y cada una
+> paga un viaje de ida y vuelta. Correrlas contra un Postgres local en Docker
+> lo bajaría un orden de magnitud. **Anotado como mejora, todavía sin hacer:**
+> hoy 17 minutos es tolerable; en tres meses, con el doble de tests, no lo va
+> a ser.

@@ -6,6 +6,10 @@ import { prisma } from "@/lib/db/prisma";
 import { requireCapability, getSessionUser } from "@/lib/auth/guards";
 import { ForbiddenError } from "@/lib/auth/errors";
 import { checkRateLimit } from "@/lib/auth/rate-limit";
+import {
+  createBlankPerson,
+  enrollPassengerFromInvitation,
+} from "./passengers";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { RoomType } from "@/generated/prisma/enums";
 
@@ -360,11 +364,7 @@ export async function redeemInvitation(
     if (existingUser.personId) {
       personId = existingUser.personId;
     } else {
-      const person = await prisma.person.create({
-        data: {},
-        select: { id: true },
-      });
-      personId = person.id;
+      personId = await createBlankPerson();
       await prisma.user.update({
         where: { id: userId },
         data: { personId },
@@ -396,11 +396,7 @@ export async function redeemInvitation(
 
     userId = data.user.id;
 
-    const person = await prisma.person.create({
-      data: {},
-      select: { id: true },
-    });
-    personId = person.id;
+    personId = await createBlankPerson();
 
     await prisma.user.create({
       data: { id: userId, email: invitation.email, role: "USER", personId },
@@ -426,18 +422,10 @@ export async function redeemInvitation(
       create: { tripId: invitation.tripId, userId, role: "PASAJERO" },
     });
 
-    return tx.passenger.upsert({
-      where: {
-        tripId_personId: { tripId: invitation.tripId, personId },
-      },
-      update: {},
-      create: {
-        tripId: invitation.tripId,
-        personId,
-        roomType: invitation.roomType,
-        status: "INVITADO",
-      },
-      select: { id: true },
+    return enrollPassengerFromInvitation(tx, {
+      tripId: invitation.tripId,
+      personId,
+      roomType: invitation.roomType,
     });
   });
 

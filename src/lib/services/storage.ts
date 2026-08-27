@@ -1,7 +1,6 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
-import { prisma } from "@/lib/db/prisma";
 import { requirePassengerAccess } from "@/lib/auth/guards";
 import { ForbiddenError } from "@/lib/auth/errors";
 import { createSupabaseAdminClient, storageBucket } from "@/lib/supabase/admin";
@@ -223,18 +222,4 @@ export async function removePassengerFiles(
     .remove(data.map((file) => `${directory}/${file.name}`));
 
   return data.length;
-}
-
-/** Path del certificado médico de un pasajero, si lo cargó. */
-export async function getMedicalFilePath(
-  passengerId: string,
-): Promise<string | null> {
-  await requirePassengerAccess(passengerId, "view");
-
-  const passenger = await prisma.passenger.findUnique({
-    where: { id: passengerId },
-    select: { person: { select: { medicalAssuranceFileId: true } } },
-  });
-
-  return passenger?.person.medicalAssuranceFileId ?? null;
 }

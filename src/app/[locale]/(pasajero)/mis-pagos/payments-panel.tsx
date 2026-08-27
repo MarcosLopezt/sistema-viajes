@@ -135,7 +135,6 @@ export function PaymentsPanel({
                   {payable.some((p) => p.id === cuota.id) ? (
                     <Button
                       variant="ghost"
-                      size="sm"
                       onClick={() => {
                         setOpenFor(cuota.id);
                         setFormVisible(true);

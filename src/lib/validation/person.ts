@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isRealIsoDate } from "./date";
+import { isRealIsoDate } from "@/lib/domain/date";
 
 /**
  * Validación de los datos personales.
@@ -106,7 +106,7 @@ const isoDateRequired = z
     "Cargá la fecha de vencimiento de tu pasaporte.",
   )
   // `isRealIsoDate` y no `!isNaN(new Date(...))`: JS desborda 31/02 a marzo
-  // en silencio en vez de rechazarla. Ver src/lib/validation/date.ts.
+  // en silencio en vez de rechazarla. Ver src/lib/domain/date.ts.
   .refine(isRealIsoDate, "Esa fecha no existe. Revisala.");
 
 /**
