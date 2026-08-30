@@ -229,7 +229,7 @@ export async function sendPaymentReminders(
                 ),
                 overdue: installment.overdue,
                 url: appUrl("/mis-pagos", lang),
-                footer: footerFor(context),
+                footer: footerFor(context, lang),
               });
 
               await deliver({
@@ -343,7 +343,7 @@ export async function sendPassportAlerts(
             minimumDate: formatEmailDate(evaluation.minimumExpiryToConfirm),
             tripEndDate: formatEmailDate(trip.endDate),
             url: appUrl("/mis-datos", lang),
-            footer: footerFor(context),
+            footer: footerFor(context, lang),
           });
 
           await deliver({ to: passenger.email!, lang, rendered, context });

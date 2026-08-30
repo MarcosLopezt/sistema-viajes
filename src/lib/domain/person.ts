@@ -20,7 +20,9 @@ export type PersonStep = 1 | 2 | 3;
 /** Subconjunto estructural de Person: sirve con el modelo y con parciales. */
 export interface PersonCompletenessInput {
   fullName?: string | null;
+  birthDate?: Date | null;
   nationalityCountry?: string | null;
+  passportIssuingCountry?: string | null;
   residenceCountry?: string | null;
   residenceAddress?: string | null;
   residenceCity?: string | null;
@@ -30,6 +32,7 @@ export interface PersonCompletenessInput {
   passportExpiryDate?: Date | null;
 
   emergencyContactName?: string | null;
+  emergencyContactRelationship?: string | null;
   emergencyContactPhone?: string | null;
   medicalAssuranceCompany?: string | null;
   medicalAssuranceId?: string | null;
@@ -40,12 +43,21 @@ export interface PersonCompletenessInput {
   dietaryRestrictionsDetail?: string | null;
   hasMobilityRestrictions?: boolean | null;
   mobilityRestrictionsDetail?: string | null;
+  takesMedication?: boolean | null;
+  takesMedicationDetail?: string | null;
+  psychTreatment?: boolean | null;
+  psychTreatmentDetail?: string | null;
+  anxietyOrPanic?: boolean | null;
+  anxietyOrPanicDetail?: string | null;
+
   /**
-   * Único campo verdaderamente opcional del formulario. Se declara acá para
-   * poder pasar una Person entera sin castear, pero NUNCA entra en el cálculo
-   * de completitud: dejarlo vacío no baja el porcentaje ni bloquea nada.
+   * Campos verdaderamente opcionales. Se declaran acá para poder pasar una
+   * Person entera sin castear, pero NUNCA entran en el cálculo de
+   * completitud: dejarlos vacíos no baja el porcentaje ni bloquea nada.
    */
   otherHealthNotes?: string | null;
+  profession?: string | null;
+  additionalInfo?: string | null;
 
   medicalAssuranceFileId?: string | null;
 }
@@ -67,7 +79,12 @@ export interface PersonCompleteness {
 /** Paso 1 — quién sos. */
 const STEP_1: readonly PersonField[] = [
   "fullName",
+  "birthDate",
   "nationalityCountry",
+  // El país EMISOR del pasaporte, que no es la nacionalidad: con doble
+  // ciudadanía son distintos, y el visado lo pide el pasaporte con el que se
+  // viaja.
+  "passportIssuingCountry",
   "residenceCountry",
   "residenceAddress",
   "residenceCity",
@@ -80,12 +97,34 @@ const STEP_1: readonly PersonField[] = [
 /** Paso 2 — contacto de emergencia y salud (parte incondicional). */
 const STEP_2: readonly PersonField[] = [
   "emergencyContactName",
+  "emergencyContactRelationship",
   "emergencyContactPhone",
   "medicalAssuranceCompany",
   "medicalAssuranceId",
   "medicalAssurancePhone",
   "medicalAssuranceEmail",
 ];
+
+/**
+ * Los campos de salud mental, en un solo lugar.
+ *
+ * De acá sale el test que recorre las tres exportaciones y falla si alguno
+ * aparece (tests/integration/exports.test.ts). Que la lista viva en domain/ y
+ * no adentro del test es lo que hace que agregar un campo sensible al modelo
+ * lo cubra automáticamente: el test no enumera, itera.
+ *
+ * Son la categoría de dato más sensible del sistema. Ver el docblock de Person
+ * en prisma/schema.prisma para las cuatro reglas y dónde las hace cumplir el
+ * código.
+ */
+export const SENSITIVE_PERSON_FIELDS = [
+  "psychTreatment",
+  "psychTreatmentDetail",
+  "anxietyOrPanic",
+  "anxietyOrPanicDetail",
+] as const satisfies readonly PersonField[];
+
+export type SensitivePersonField = (typeof SENSITIVE_PERSON_FIELDS)[number];
 
 /**
  * Paso 3 — documentos.
@@ -117,6 +156,19 @@ export function requiredFieldsFor(
   }
   if (person.hasMobilityRestrictions === true) {
     step2.push("mobilityRestrictionsDetail");
+  }
+  if (person.takesMedication === true) {
+    step2.push("takesMedicationDetail");
+  }
+  // Los dos sensibles siguen exactamente la misma regla condicional que el
+  // resto: el detalle se exige solo si declaró que sí. No hay un trato
+  // especial acá — el trato especial está en quién los ve y por dónde NO
+  // salen, no en si son obligatorios.
+  if (person.psychTreatment === true) {
+    step2.push("psychTreatmentDetail");
+  }
+  if (person.anxietyOrPanic === true) {
+    step2.push("anxietyOrPanicDetail");
   }
   return [...STEP_1, ...step2, ...STEP_3];
 }

@@ -29,7 +29,45 @@ export const RATE_LIMITS = {
   passwordRecovery: { limit: 4, windowSeconds: 60 * 60 },
   /** Canje de invitación: frena la prueba de tokens al voleo. */
   invitationRedeem: { limit: 10, windowSeconds: 60 * 60 },
+
+  // ── Registro público de interesadas ──────────────────────────────────────
+  //
+  // La primera superficie del sistema que crea usuarios SIN invitación. Los
+  // otros límites protegen credenciales; estos protegen algo distinto: que
+  // nadie use el formulario de /interes como una máquina de crear cuentas en
+  // Supabase Auth. Por eso son tres capas y no una.
+
+  /** Por IP. Deja probar de nuevo si se equivocó, corta el script. */
+  interestSignup: { limit: 5, windowSeconds: 60 * 60 },
+  /**
+   * Por mail. Evita que reintentar con la misma casilla sirva para sondear
+   * si esa cuenta existe, que es la contracara de haber elegido decirle
+   * "ya tenés una cuenta" en vez de una pantalla de éxito falsa.
+   */
+  interestSignupEmail: { limit: 3, windowSeconds: 60 * 60 },
+  /**
+   * TOPE GLOBAL DIARIO, contra una sola clave compartida por todos.
+   *
+   * Los dos de arriba se esquivan rotando IP y casilla, que es exactamente lo
+   * que hace un alta automatizada. Este no: cuenta el total del día, venga de
+   * donde venga.
+   *
+   * 200 sale de la escala real. La escuela hace 2 viajes por año con ~14
+   * pasajeras; el embudo entero son decenas de interesadas anuales. Doscientas
+   * en UN día es dos órdenes de magnitud más que el uso legítimo y varios
+   * menos que un ataque que valga la pena. El costo de equivocarse hacia
+   * arriba es una cuota de Supabase Auth agotada y descubrirlo por el lado
+   * peor; hacia abajo, una campaña de Instagram que funcionó demasiado bien
+   * y unas horas de espera.
+   *
+   * Si alguna vez se corta por uso real, subilo: no es una medida de
+   * seguridad fina, es un fusible.
+   */
+  interestSignupGlobal: { limit: 200, windowSeconds: 24 * 60 * 60 },
 } as const satisfies Record<string, RateLimitRule>;
+
+/** Clave única del tope global: todos los intentos del día caen en el mismo contador. */
+export const INTEREST_SIGNUP_GLOBAL_KEY = "global";
 
 export type RateLimitAction = keyof typeof RATE_LIMITS;
 

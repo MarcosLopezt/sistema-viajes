@@ -67,6 +67,22 @@ enum PassengerStatus {
   CANCELADO
 }
 
+/// Embudo de una interesada, de la landing pública a pasajera.
+///
+/// REGISTRADA       se anoto desde /interes y todavia nadie la contacto.
+/// EN_CONVERSACION  las coordinadoras ya estan hablando con ella.
+/// CONVERTIDA       tiene un Passenger en este viaje. Lo marca la conversion.
+/// DESCARTADA       no sigue. La fila queda: el embudo tambien se mide por
+///                  lo que no cierra.
+///
+/// Ningun estado de este enum ocupa cupo. El cupo lo ocupan los Passenger.
+enum InterestStatus {
+  REGISTRADA
+  EN_CONVERSACION
+  CONVERTIDA
+  DESCARTADA
+}
+
 enum DirectCostType {
   COMIDA
   EVENTO
@@ -156,6 +172,7 @@ model User {
   reviewedPayments Payment[]       @relation("PaymentReviewer")
   createdInvites   Invitation[]    @relation("InvitationCreator")
   createdComms     Communication[] @relation("CommunicationCreator")
+  interests        Interest[]
 
   @@index([role])
 }
@@ -227,6 +244,75 @@ model Trip {
   /// Negativo = antes del vencimiento. Default: 7 días antes y 1 día después.
   reminderOffsetsDays Int[] @default([-7, 1])
 
+  // --------------------------- Zona pública -------------------------------
+
+  /// El viaje contra el que se anotan las interesadas de /interes.
+  ///
+  /// COMO MÁXIMO UN VIAJE puede tenerlo en true, y eso lo hace cumplir un
+  /// índice único PARCIAL de Postgres, no una validación en código:
+  ///
+  ///   CREATE UNIQUE INDEX "Trip_una_sola_captacion_abierta"
+  ///     ON "Trip" ((TRUE)) WHERE "acceptingInterest";
+  ///
+  /// Prisma no sabe expresar índices parciales, así que va en SQL crudo
+  /// dentro de la migración. Está ahí y no solo en el servicio porque una
+  /// validación en código pierde contra dos requests simultáneos, y el día
+  /// que haya dos viajes abiertos las interesadas se reparten entre los dos
+  /// sin que nadie se entere. El servicio igual chequea, pero solo para dar
+  /// un mensaje decente antes de que salte el índice.
+  ///
+  /// Si no hay ninguno en true, /interes muestra un mensaje editable y no
+  /// deja registrarse. Eso es un estado válido: entre dos viajes no hay nada
+  /// abierto.
+  ///
+  /// ⚠️ El índice NO está representado en este schema porque Prisma no sabe
+  /// expresarlo. Consecuencia práctica: `prisma migrate dev` lo ve como drift
+  /// y va a proponer un DROP INDEX en la próxima migración. NO se lo aceptes —
+  /// borralo del SQL generado. La misma nota está en README §Arquitectura.
+  acceptingInterest Boolean @default(false)
+
+  /// ───────────────────────────────────────────────────────────────────────
+  ///  TEXTOS DE MARCA — son DATO, no código
+  /// ───────────────────────────────────────────────────────────────────────
+  ///
+  /// La voz de la escuela la escriben y la mantienen las coordinadoras desde
+  /// el wizard. No vive en src/messages/*.json y no la escribe quien programa:
+  /// si estuviera en el catálogo de traducciones, cambiarle una coma sería un
+  /// deploy.
+  ///
+  /// El corte es el mismo que ya usa Communication: el ES es el que manda y
+  /// el EN es opcional, con fallback a ES. Una escuela que todavía no tradujo
+  /// su propuesta tiene que poder abrir la inscripción igual.
+  ///
+  /// Lo que NO entra acá: errores de validación, montos, fechas y alertas de
+  /// pasaporte. Esos son literales y viven en el catálogo de i18n.
+
+  /// La propuesta del viaje y el link al itinerario. Lo único que ve una
+  /// interesada del viaje: ni cupos, ni precios de costo, ni pasajeras.
+  infoForInterestedEs String?
+  infoForInterestedEn String?
+
+  /// Lo que lee apenas se registra.
+  welcomeMessageEs String?
+  welcomeMessageEn String?
+
+  /// QUÉ SIGUE: hoy es escribir por WhatsApp para agendar el Zoom, y eso no
+  /// pasa dentro del sistema. Sin este texto la interesada se registra y
+  /// queda en el aire, que es la peor forma de perder a alguien que ya dijo
+  /// que sí.
+  nextStepMessageEs String?
+  nextStepMessageEn String?
+
+  /// Firma de los mails ("En la Lux de Alba, Laura y Lorena"). La usa el pie
+  /// de LAS SEIS plantillas, no solo las de esta fase: dos firmas distintas
+  /// en el mismo sistema son dos voces.
+  emailSignatureEs String?
+  emailSignatureEn String?
+
+  /// Qué se muestra en /interes cuando ningún viaje está aceptando.
+  closedMessageEs String?
+  closedMessageEn String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -238,6 +324,7 @@ model Trip {
   rooms          Room[]
   invitations    Invitation[]
   communications Communication[]
+  interests      Interest[]
 
   @@index([status])
 }
@@ -318,30 +405,74 @@ model Person {
   id String @id @default(uuid()) @db.Uuid
 
   // Paso 1 — quién sos
-  fullName           String?
-  nationalityCountry String?
-  residenceCountry   String?
-  residenceAddress   String?
-  residenceCity      String?
-  mobilePhone        String?
-  documentNumber     String?
-  passportNumber     String?
-  passportExpiryDate DateTime? @db.Date
+  fullName               String?
+  /// SIEMPRE "tal como figura en el pasaporte". La etiqueta lo dice en la
+  /// pantalla: escribir el nombre de uso y no el del documento es la causa
+  /// número uno de pasajes emitidos mal, y un pasaje mal emitido no se
+  /// corrige, se vuelve a comprar.
+  birthDate              DateTime? @db.Date
+  nationalityCountry     String?
+  /// País EMISOR del pasaporte. No es la nacionalidad: hay doble ciudadanía,
+  /// y quien viaja con el pasaporte italiano siendo argentino necesita el
+  /// visado del italiano.
+  passportIssuingCountry String?
+  residenceCountry       String?
+  residenceAddress       String?
+  residenceCity          String?
+  mobilePhone            String?
+  documentNumber         String?
+  passportNumber         String?
+  passportExpiryDate     DateTime? @db.Date
+  /// Opcional. No entra en isPersonComplete().
+  profession             String?
 
   // Paso 2 — emergencia y salud
-  emergencyContactName    String?
-  emergencyContactPhone   String?
-  medicalAssuranceCompany String?
-  medicalAssuranceId      String?
-  medicalAssurancePhone   String?
-  medicalAssuranceEmail   String?
+  emergencyContactName         String?
+  /// Qué es de ella: madre, pareja, hermana. Sin esto, quien llama desde un
+  /// hospital en Roma no sabe a quién tiene del otro lado.
+  emergencyContactRelationship String?
+  emergencyContactPhone        String?
+  medicalAssuranceCompany      String?
+  medicalAssuranceId           String?
+  medicalAssurancePhone        String?
+  medicalAssuranceEmail        String?
 
   hasDietaryRestrictions     Boolean @default(false)
   dietaryRestrictionsDetail  String?
   hasMobilityRestrictions    Boolean @default(false)
   mobilityRestrictionsDetail String?
+  takesMedication            Boolean @default(false)
+  takesMedicationDetail      String?
+
+  /// ───────────────────────────────────────────────────────────────────────
+  ///  DATOS DE SALUD MENTAL — la categoría más sensible del sistema
+  /// ───────────────────────────────────────────────────────────────────────
+  ///
+  /// Cuatro reglas, y las cuatro están hechas cumplir por código, no por esta
+  /// prosa:
+  ///
+  ///  1. Los ve la propia pasajera, las coordinadoras del viaje y un admin.
+  ///     Nadie más. Lo garantiza `requirePassengerAccess()`, igual que el
+  ///     resto de la ficha.
+  ///  2. NUNCA salen en una exportación. Lo verifica
+  ///     tests/integration/exports.test.ts, que falla si el valor aparece en
+  ///     cualquiera de las tres planillas.
+  ///  3. NUNCA entran a AuditLog. Por eso no están en COORDINATOR_EDITABLE
+  ///     (src/lib/services/passengers.ts): la coordinadora los lee y no los
+  ///     edita, así el contenido no tiene por dónde llegar a un log.
+  ///  4. NUNCA van en un mail.
+  ///
+  /// Si agregás un campo acá, agregalo también a SENSITIVE_PERSON_FIELDS en
+  /// src/lib/domain/person.ts: de ahí sale el test de las exportaciones.
+  psychTreatment       Boolean @default(false)
+  psychTreatmentDetail String?
+  anxietyOrPanic       Boolean @default(false)
+  anxietyOrPanicDetail String?
+
   /// Único campo verdaderamente opcional del formulario.
-  otherHealthNotes           String?
+  otherHealthNotes String?
+  /// Texto libre, opcional. "Algo más que quieras contarnos."
+  additionalInfo   String?
 
   // Paso 3 — documentos
   /// Path interna en el bucket privado de Supabase Storage. NUNCA una URL.
@@ -355,6 +486,64 @@ model Person {
 
   user       User?
   passengers Passenger[]
+}
+
+/// Una interesada: tiene cuenta, no es pasajera.
+///
+/// ── Por qué NO hay un TripMember ──────────────────────────────────────────
+///
+/// `TripMember` es la fuente de verdad de la autorización POR VIAJE, y una
+/// interesada no tiene ninguna autorización sobre el viaje. Que no tenga fila
+/// no es un olvido: es lo que hace que todos los guards que ya existen fallen
+/// cerrado sin tocarles una línea.
+///
+///   getTripViewer()              → tripRole: null, ownPassengerId: null
+///   can(viewer, cualquiera)      → false
+///   requireTripRole()            → ForbiddenError
+///   passengerVisibilityFilter()  → { id: "__sin-acceso__" }, cero filas
+///   viewerCoordinatesAnyTrip()   → false
+///
+/// Modelarla como un TripRole nuevo habría obligado a tocar policy.ts y, peor,
+/// habría abierto `requireTripRole(tripId, "PASAJERO")`, que hoy dice
+/// "alcanza con ser miembro del viaje, en cualquier rol".
+///
+/// ── Por qué los datos personales van en Person y no acá ───────────────────
+///
+/// El formulario público pide nombre, país de residencia y teléfono, que son
+/// tres columnas de `Person` que ya existen. Guardarlas acá obligaría a
+/// COPIARLAS al convertir, y una copia son dos fuentes de verdad para "cómo se
+/// llama": si corrige el nombre y después convierte, no hay respuesta correcta.
+///
+/// Con Person desde el minuto cero, convertir es crear el Passenger contra la
+/// Person que ya está, y la interesada entra al formulario de 3 pasos con sus
+/// datos precargados. Es el mismo camino que ya hace el canje de invitación.
+///
+/// Esta tabla guarda SOLO el estado del embudo.
+model Interest {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  tripId String @db.Uuid
+
+  status InterestStatus @default(REGISTRADA)
+
+  /// Marca MANUAL de la coordinadora. La reunión por Zoom se coordina por
+  /// WhatsApp, fuera del sistema: esto no agenda nada ni se sincroniza con
+  /// nada, solo sirve para seguir el embudo.
+  meetingDone Boolean @default(false)
+
+  /// Notas de la coordinadora. La interesada no las ve.
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  /// Una sola vez por viaje. Volver a mandar el formulario no duplica el
+  /// registro ni le pisa el estado a alguien que ya está EN_CONVERSACION.
+  @@unique([userId, tripId])
+  @@index([tripId, status])
 }
 
 /// Habitación asignada. Reemplaza al roommateId unidireccional (decisión 4).

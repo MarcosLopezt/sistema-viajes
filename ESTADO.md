@@ -10,6 +10,8 @@ Este documento es para dos personas: la dueña del sistema, y quien lo agarre de
 
 Este sistema organiza viajes grupales cerrados: grupos de alrededor de catorce personas más dos coordinadoras, con fechas fijas y un precio cerrado por persona. La coordinadora arma el viaje —itinerario, hoteles, lo que le cuesta a ella cada cosa— y el sistema le va mostrando cuánto le queda de margen mientras carga los precios de venta. Después invita a las pasajeras por mail: cada una entra con un link, elige su contraseña y completa sus propios datos —documento, pasaporte, contacto de emergencia, cobertura médica, si es celíaca o si necesita habitación accesible— sin que la coordinadora tenga que perseguirla por WhatsApp ni cargar nada a mano.
 
+Desde la fase 7 el sistema toma el embudo antes: la página de Wix se queda como está, pero su botón de "más información" lleva a una pantalla pública donde una interesada deja sus datos y crea su cuenta. Las coordinadoras la ven aparecer en un listado, coordinan la charla por Zoom por fuera del sistema, y cuando decide venir la convierten en pasajera con un clic — sin volver a pedirle el nombre ni el teléfono, porque ya los cargó ella. Una interesada no ocupa cupo y no ve nada del sistema interno: solo la propuesta del viaje y qué tiene que hacer a continuación.
+
 La otra mitad es la plata. Cada pasajera tiene un plan de cuotas con vencimientos; cuando transfiere, sube el comprobante y avisa desde su teléfono. La coordinadora revisa contra su extracto bancario y confirma o rechaza con un motivo. Un semáforo verde, amarillo o rojo muestra de un vistazo quién está al día y quién no, y el sistema manda solo los recordatorios de cuota y los avisos de pasaporte por vencer. Al final se descargan las planillas que pide el hotel: quiénes viajan, quién duerme con quién, y cómo viene la cobranza. Todo funciona en dos idiomas —español e inglés— y las pantallas de la pasajera están hechas para un teléfono, no para una computadora.
 
 ---
@@ -32,10 +34,23 @@ El sistema calcula el margen **presupuestado**: lo que la coordinadora estima qu
 
 **Por qué:** eso es contabilidad, y la contabilidad de este negocio ya vive en otro lado. Duplicarla acá habría significado tener dos números distintos para la misma pregunta, y cuando divergen ninguno de los dos es la verdad.
 
+### ~~No hay registro abierto~~ · REVERTIDA en la fase 7 (28/08/2026)
+
+Hasta la fase 6, al sistema **solo se entraba por invitación**. Desde la fase 7 ya no: `/interes` es una pantalla **pública, sin sesión**, que crea una cuenta.
+
+**Por qué cambió:** la fase 7 movió el alcance del sistema. Antes empezaba cuando la coordinadora invitaba a alguien que ya había decidido viajar; ahora empieza en el clic de "más información" de la página de Wix. Ese clic lo da una desconocida, y no hay a quién pedirle una invitación.
+
+**Lo que hay que saber, y es lo importante de este párrafo:** `/interes` es **la primera y única superficie del sistema que crea usuarios sin invitación**. Es la puerta que antes no existía. Si algún día aparece una cuenta que nadie reconoce, este es el lugar por donde entró.
+
+Lo que la acota:
+
+- tiene que haber un viaje con `acceptingInterest` en true, y como máximo puede haber uno (lo garantiza un índice de Postgres, no una validación);
+- rate limiting en tres capas: por IP, por mail y un **tope global diario** — las dos primeras se esquivan rotando IP y casilla, el tercero no;
+- **la cuenta que crea nace sin ningún `TripMember`**, o sea sin acceso a nada del sistema interno. Convertirla en pasajera es un acto manual de la coordinadora.
+
 ### Y además
 
 - No hay app móvil nativa. Es una web, pensada para el teléfono.
-- No hay registro abierto: solo se entra por invitación.
 - No hay chat ni mensajería interna. Las comunicaciones son de la coordinadora al grupo, por mail.
 
 ---
@@ -56,6 +71,17 @@ Lo que eso significa concretamente:
 
 Hay un comando para probarlo: `npm run email:test` manda las plantillas a una casilla que le indiques. **Hacer eso es el primer paso antes de usar el sistema con gente real.**
 
+### La zona pública nunca recibió a nadie de verdad
+
+`/interes` está construida, testeada y funcionando en desarrollo, pero **ninguna persona ajena al equipo la usó todavía**. Lo que no se ejerció:
+
+- **El embudo completo**: clic en el botón de Wix → registro → mail a las coordinadoras → conversación por WhatsApp → conversión a pasajera. Cada tramo funciona por separado.
+- **El mail de aviso de interesada nueva**, que es la séptima plantilla y comparte el destino de todas las demás: nunca llegó a una casilla real (ver arriba).
+- **El botón de Wix**: hay que pegar la URL de `/interes` en la página, y eso todavía no se hizo. La URL está a la vista en el paso 6 del wizard.
+- **El rate limiting bajo tráfico real.** El tope global diario es de 200 y está pensado como fusible, no como medida fina. Si una campaña de Instagram funciona muy bien, ese número se queda corto antes que cualquier otra cosa.
+
+**Lo primero que hay que hacer antes de publicar el botón:** cargar los textos de marca desde el paso 6 del wizard. Sin ellos la pantalla muestra el nombre del viaje y el formulario, sin propuesta y sin decirle a la interesada qué sigue.
+
 ### Nunca corrió en Vercel
 
 Todo el desarrollo fue local. La aplicación nunca se desplegó.
@@ -75,7 +101,7 @@ El checklist para desplegarlo está en [DEPLOY.md](DEPLOY.md), con una sección 
 
 ### La suite de integración tarda 17 minutos
 
-165 tests contra la base real de Supabase. La causa **no es el código**: los tests comparten un pool de una sola conexión (`max: 1`), así que las consultas de un mismo caso se serializan y cada una paga un viaje de ida y vuelta por la red. Lo que se mide es latencia, no lentitud.
+211 tests contra la base real de Supabase. La causa **no es el código**: los tests comparten un pool de una sola conexión (`max: 1`), así que las consultas de un mismo caso se serializan y cada una paga un viaje de ida y vuelta por la red. Lo que se mide es latencia, no lentitud.
 
 **Solución conocida, no aplicada:** correrlos contra un Postgres local en Docker bajaría el tiempo un orden de magnitud.
 
@@ -92,6 +118,28 @@ El backup guarda tres piezas, y **las tres están verificadas**:
 Queda una sola cosa que no se puede probar fuera de Supabase: **el inicio de sesión de punta a punta**, porque lo resuelve GoTrue y GoTrue solo corre dentro de Supabase. Lo que sí está demostrado es todo lo que el login necesita para funcionar.
 
 La prueba dejó al descubierto algo que conviene saber antes de una emergencia: **un Postgres pelado no tiene el schema `auth`** —lo crea Supabase—, y el dump de cuentas es `--data-only`. Restaurar contra algo que no sea un proyecto Supabase falla con `relation "auth.users" does not exist`. El detalle está en [README §Backups](README.md#la-restauración-completa-probada).
+
+### La página pública manda al navegador el catálogo de traducciones entero
+
+`/interes` es una pantalla **sin sesión**, y como toda página de la aplicación recibe el catálogo completo de `src/messages/*.json` en el HTML. Eso incluye los rótulos del panel de coordinación: «Margen por pasajero», «Costo indirecto», «Cola de revisión».
+
+**Lo que NO pasa, y está verificado:** no se filtra ningún **dato** del viaje. Ni precios, ni cupos, ni fechas, ni nombres de pasajeras. Lo que viaja son las etiquetas de la interfaz, no los valores. La página lee el viaje con `getPublicTrip()`, que selecciona campo por campo.
+
+**Qué se ve entonces:** los nombres de las funciones internas del sistema, para quien abra el código fuente de la página. Es divulgación de estructura, no de datos.
+
+**Por qué está así:** es el comportamiento por defecto de `next-intl` y aplica a **todas** las páginas, no solo a esta. No lo introdujo la fase 7; lo que cambió es que ahora una de esas páginas es pública.
+
+**Cómo se arregla, si alguna vez importa:** pasarle a `NextIntlClientProvider` solo los namespaces que cada página usa, en vez del catálogo entero. Es un cambio transversal a todas las pantallas y por eso no se hizo dentro de la fase 7.
+
+### Retención de datos de interesadas que nunca se convirtieron
+
+Cuando alguien se anota en `/interes`, el sistema le crea una **cuenta y una `Person`** con su nombre, país y teléfono. Si esa persona nunca se convierte en pasajera —porque la descartaron, o porque no volvió a escribir— esas filas **quedan para siempre**. No hay borrado, ni automático ni a mano.
+
+**Por qué está así:** la fase 7 tenía que resolver el embudo, y un módulo de retención es un tema propio (¿a los cuántos meses?, ¿lo decide una persona o un cron?, ¿se avisa antes?). Meterlo a último momento habría sido peor que dejarlo escrito acá.
+
+**Por qué importa igual, y no es lo mismo que el resto de los datos del sistema:** todas las demás personas de la base tienen una relación comercial con el cliente — pagaron, o al menos fueron invitadas a un viaje concreto. Una interesada `DESCARTADA` no tuvo ninguna. Son datos personales de gente que preguntó una vez y se fue.
+
+**El volumen es chico** (unas decenas por año, con dos viajes anuales), así que no es urgente. Pero es una decisión que alguien tiene que tomar, no un olvido.
 
 ### Sin dominio propio, los mails pueden caer en spam
 

@@ -42,7 +42,9 @@ import { MedicalFileUpload } from "./file-upload";
 
 export interface PersonValues {
   fullName: string;
+  birthDate: string;
   nationalityCountry: string;
+  passportIssuingCountry: string;
   residenceCountry: string;
   residenceAddress: string;
   residenceCity: string;
@@ -50,7 +52,9 @@ export interface PersonValues {
   documentNumber: string;
   passportNumber: string;
   passportExpiryDate: string;
+  profession: string;
   emergencyContactName: string;
+  emergencyContactRelationship: string;
   emergencyContactPhone: string;
   medicalAssuranceCompany: string;
   medicalAssuranceId: string;
@@ -60,7 +64,14 @@ export interface PersonValues {
   dietaryRestrictionsDetail: string;
   hasMobilityRestrictions: boolean;
   mobilityRestrictionsDetail: string;
+  takesMedication: boolean;
+  takesMedicationDetail: string;
+  psychTreatment: boolean;
+  psychTreatmentDetail: string;
+  anxietyOrPanic: boolean;
+  anxietyOrPanicDetail: string;
   otherHealthNotes: string;
+  additionalInfo: string;
   preferredLanguage: "ES" | "EN";
   medicalAssuranceFileId: string | null;
 }
@@ -98,6 +109,9 @@ export function RegistrationForm({
         passportExpiryDate: values.passportExpiryDate
           ? new Date(`${values.passportExpiryDate}T00:00:00.000Z`)
           : null,
+        birthDate: values.birthDate
+          ? new Date(`${values.birthDate}T00:00:00.000Z`)
+          : null,
       }),
     [values],
   );
@@ -108,7 +122,9 @@ export function RegistrationForm({
       startTransition(async () => {
         await saveDraftAction(passengerId, {
           fullName: values.fullName,
+          birthDate: values.birthDate,
           nationalityCountry: values.nationalityCountry,
+          passportIssuingCountry: values.passportIssuingCountry,
           residenceCountry: values.residenceCountry,
           residenceAddress: values.residenceAddress,
           residenceCity: values.residenceCity,
@@ -116,7 +132,9 @@ export function RegistrationForm({
           documentNumber: values.documentNumber,
           passportNumber: values.passportNumber,
           passportExpiryDate: values.passportExpiryDate,
+          profession: values.profession,
           emergencyContactName: values.emergencyContactName,
+          emergencyContactRelationship: values.emergencyContactRelationship,
           emergencyContactPhone: values.emergencyContactPhone,
           medicalAssuranceCompany: values.medicalAssuranceCompany,
           medicalAssuranceId: values.medicalAssuranceId,
@@ -126,7 +144,14 @@ export function RegistrationForm({
           dietaryRestrictionsDetail: values.dietaryRestrictionsDetail,
           hasMobilityRestrictions: values.hasMobilityRestrictions,
           mobilityRestrictionsDetail: values.mobilityRestrictionsDetail,
+          takesMedication: values.takesMedication,
+          takesMedicationDetail: values.takesMedicationDetail,
+          psychTreatment: values.psychTreatment,
+          psychTreatmentDetail: values.psychTreatmentDetail,
+          anxietyOrPanic: values.anxietyOrPanic,
+          anxietyOrPanicDetail: values.anxietyOrPanicDetail,
           otherHealthNotes: values.otherHealthNotes,
+          additionalInfo: values.additionalInfo,
           preferredLanguage: values.preferredLanguage,
         });
         resolve();
@@ -148,7 +173,12 @@ export function RegistrationForm({
         ...values,
         dietaryRestrictionsDetail: values.dietaryRestrictionsDetail || null,
         mobilityRestrictionsDetail: values.mobilityRestrictionsDetail || null,
+        takesMedicationDetail: values.takesMedicationDetail || null,
+        psychTreatmentDetail: values.psychTreatmentDetail || null,
+        anxietyOrPanicDetail: values.anxietyOrPanicDetail || null,
         otherHealthNotes: values.otherHealthNotes || null,
+        profession: values.profession || null,
+        additionalInfo: values.additionalInfo || null,
       });
 
       if (result.ok) {
@@ -356,6 +386,22 @@ function Step1({
       </Field>
 
       <Field
+        label={t("birthDate")}
+        error={errorOf("birthDate")}
+        required
+      >
+        {(props) => (
+          <Input
+            {...props}
+            type="date"
+            value={values.birthDate}
+            autoComplete="bday"
+            onChange={(e) => set("birthDate", e.target.value)}
+          />
+        )}
+      </Field>
+
+      <Field
         label={t("nationalityCountry")}
         error={errorOf("nationalityCountry")}
         required
@@ -464,6 +510,21 @@ function Step1({
       </Field>
 
       <Field
+        label={t("passportIssuingCountry")}
+        help={t("passportIssuingCountryHelp")}
+        error={errorOf("passportIssuingCountry")}
+        required
+      >
+        {(props) => (
+          <Input
+            {...props}
+            value={values.passportIssuingCountry}
+            onChange={(e) => set("passportIssuingCountry", e.target.value)}
+          />
+        )}
+      </Field>
+
+      <Field
         label={t("passportExpiryDate")}
         error={errorOf("passportExpiryDate")}
         required
@@ -474,6 +535,18 @@ function Step1({
             type="date"
             value={values.passportExpiryDate}
             onChange={(e) => set("passportExpiryDate", e.target.value)}
+          />
+        )}
+      </Field>
+
+      {/* Opcional: no baja el porcentaje ni bloquea la confirmación. */}
+      <Field label={t("profession")} error={errorOf("profession")}>
+        {(props) => (
+          <Input
+            {...props}
+            value={values.profession}
+            autoComplete="organization-title"
+            onChange={(e) => set("profession", e.target.value)}
           />
         )}
       </Field>
@@ -512,6 +585,23 @@ function Step2({
               {...props}
               value={values.emergencyContactName}
               onChange={(e) => set("emergencyContactName", e.target.value)}
+            />
+          )}
+        </Field>
+
+        <Field
+          label={t("emergencyContactRelationship")}
+          help={t("emergencyContactRelationshipHelp")}
+          error={errorOf("emergencyContactRelationship")}
+          required
+        >
+          {(props) => (
+            <Input
+              {...props}
+              value={values.emergencyContactRelationship}
+              onChange={(e) =>
+                set("emergencyContactRelationship", e.target.value)
+              }
             />
           )}
         </Field>
@@ -657,6 +747,102 @@ function Step2({
           </Field>
         ) : null}
 
+        <CheckboxField
+          id="takesMedication"
+          label={t("takesMedication")}
+          help={t("takesMedicationHelp")}
+          checked={values.takesMedication}
+          onChange={(checked) => set("takesMedication", checked)}
+        />
+
+        {values.takesMedication ? (
+          <Field
+            label={t("takesMedicationDetail")}
+            error={errorOf("takesMedicationDetail")}
+            required
+          >
+            {(props) => (
+              <Textarea
+                {...props}
+                value={values.takesMedicationDetail}
+                onChange={(e) => set("takesMedicationDetail", e.target.value)}
+              />
+            )}
+          </Field>
+        ) : null}
+      </section>
+
+      {/* ------------------------------------------------------------------
+          Salud mental.
+          ------------------------------------------------------------------
+          Va en su propia sección, con borde y con una explicación arriba de
+          POR QUÉ se pregunta y QUIÉN lo lee. Pedirle a alguien un dato de
+          salud mental en medio de una lista de campos, sin decirle a dónde va
+          a parar, es la forma de que no lo conteste o conteste de mentira —
+          y entonces el dato no sirve para lo único que tiene que servir, que
+          es acompañarla si algo pasa en el viaje.
+
+          El texto de la explicación NO lo escribe el sistema: sale del
+          catálogo de i18n y las coordinadoras lo ajustan ahí. */}
+      <section className="border-border space-y-5 rounded-lg border p-4">
+        <div className="space-y-1">
+          <h3 className="text-lg font-medium">{t("mentalHealthTitle")}</h3>
+          <p className="text-muted-foreground text-base text-balance">
+            {t("mentalHealthWhy")}
+          </p>
+          <p className="text-base font-medium">{t("mentalHealthWhoSees")}</p>
+        </div>
+
+        <CheckboxField
+          id="psychTreatment"
+          label={t("psychTreatment")}
+          help={t("psychTreatmentHelp")}
+          checked={values.psychTreatment}
+          onChange={(checked) => set("psychTreatment", checked)}
+        />
+
+        {values.psychTreatment ? (
+          <Field
+            label={t("psychTreatmentDetail")}
+            error={errorOf("psychTreatmentDetail")}
+            required
+          >
+            {(props) => (
+              <Textarea
+                {...props}
+                value={values.psychTreatmentDetail}
+                onChange={(e) => set("psychTreatmentDetail", e.target.value)}
+              />
+            )}
+          </Field>
+        ) : null}
+
+        <CheckboxField
+          id="anxietyOrPanic"
+          label={t("anxietyOrPanic")}
+          help={t("anxietyOrPanicHelp")}
+          checked={values.anxietyOrPanic}
+          onChange={(checked) => set("anxietyOrPanic", checked)}
+        />
+
+        {values.anxietyOrPanic ? (
+          <Field
+            label={t("anxietyOrPanicDetail")}
+            error={errorOf("anxietyOrPanicDetail")}
+            required
+          >
+            {(props) => (
+              <Textarea
+                {...props}
+                value={values.anxietyOrPanicDetail}
+                onChange={(e) => set("anxietyOrPanicDetail", e.target.value)}
+              />
+            )}
+          </Field>
+        ) : null}
+      </section>
+
+      <section className="space-y-5">
         <Field
           label={t("otherHealthNotes")}
           help={t("otherHealthNotesHelp")}
@@ -666,6 +852,18 @@ function Step2({
               {...props}
               value={values.otherHealthNotes}
               onChange={(e) => set("otherHealthNotes", e.target.value)}
+            />
+          )}
+        </Field>
+
+        {/* Opcional y sin estructura, a propósito: es el lugar para lo que no
+            entró en ningún campo. */}
+        <Field label={t("additionalInfo")} help={t("additionalInfoHelp")}>
+          {(props) => (
+            <Textarea
+              {...props}
+              value={values.additionalInfo}
+              onChange={(e) => set("additionalInfo", e.target.value)}
             />
           )}
         </Field>

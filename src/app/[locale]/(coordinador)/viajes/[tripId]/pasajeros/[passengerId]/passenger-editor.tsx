@@ -44,6 +44,7 @@ export function PassengerEditor({
   values,
   hasDietaryRestrictions,
   hasMobilityRestrictions,
+  sensitive,
   medicalFilePath,
 }: {
   tripId: string;
@@ -60,6 +61,24 @@ export function PassengerEditor({
   values: EditableValues;
   hasDietaryRestrictions: boolean;
   hasMobilityRestrictions: boolean;
+  /**
+   * Salud emocional: SOLO LECTURA, nunca editable desde acá.
+   *
+   * No es una limitación de la pantalla, es dónde termina una decisión de
+   * diseño. Todo campo que un coordinador puede editar genera una entrada de
+   * AuditLog con el valor viejo y el nuevo en claro; para un dato de salud
+   * mental eso sería escribirlo en un log, que es exactamente lo que no puede
+   * pasar. Se resolvió dejándolos fuera de COORDINATOR_EDITABLE
+   * (src/lib/services/passengers.ts), y esto es la consecuencia visible.
+   *
+   * La pantalla lo dice con todas las letras para que no parezca un bug.
+   */
+  sensitive: {
+    psychTreatment: boolean;
+    psychTreatmentDetail: string | null;
+    anxietyOrPanic: boolean;
+    anxietyOrPanicDetail: string | null;
+  };
   medicalFilePath: string | null;
 }) {
   const t = useTranslations("passengers");
@@ -191,7 +210,9 @@ export function PassengerEditor({
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <TextField label={tStep1("fullName")} field="fullName" draft={draft} set={set} />
+                <TextField label={tStep1("birthDate")} field="birthDate" draft={draft} set={set} type="date" />
                 <TextField label={tStep1("nationalityCountry")} field="nationalityCountry" draft={draft} set={set} />
+                <TextField label={tStep1("passportIssuingCountry")} field="passportIssuingCountry" draft={draft} set={set} />
                 <TextField label={tStep1("residenceCountry")} field="residenceCountry" draft={draft} set={set} />
                 <TextField label={tStep1("residenceCity")} field="residenceCity" draft={draft} set={set} />
                 <TextField label={tStep1("residenceAddress")} field="residenceAddress" draft={draft} set={set} />
@@ -199,7 +220,9 @@ export function PassengerEditor({
                 <TextField label={tStep1("documentNumber")} field="documentNumber" draft={draft} set={set} />
                 <TextField label={tStep1("passportNumber")} field="passportNumber" draft={draft} set={set} />
                 <TextField label={tStep1("passportExpiryDate")} field="passportExpiryDate" draft={draft} set={set} type="date" />
+                <TextField label={tStep1("profession")} field="profession" draft={draft} set={set} />
                 <TextField label={tStep2("emergencyContactName")} field="emergencyContactName" draft={draft} set={set} />
+                <TextField label={tStep2("emergencyContactRelationship")} field="emergencyContactRelationship" draft={draft} set={set} />
                 <TextField label={tStep2("emergencyContactPhone")} field="emergencyContactPhone" draft={draft} set={set} type="tel" />
                 <TextField label={tStep2("medicalAssuranceCompany")} field="medicalAssuranceCompany" draft={draft} set={set} />
                 <TextField label={tStep2("medicalAssuranceId")} field="medicalAssuranceId" draft={draft} set={set} />
@@ -258,13 +281,16 @@ export function PassengerEditor({
             </>
           ) : (
             <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+              <ReadOnly label={tStep1("birthDate")} value={values["birthDate"]} />
               <ReadOnly label={tStep1("nationalityCountry")} value={values["nationalityCountry"]} />
+              <ReadOnly label={tStep1("passportIssuingCountry")} value={values["passportIssuingCountry"]} />
               <ReadOnly label={tStep1("residenceCity")} value={values["residenceCity"]} />
               <ReadOnly label={tStep1("mobilePhone")} value={values["mobilePhone"]} />
               <ReadOnly label={tStep1("documentNumber")} value={values["documentNumber"]} />
               <ReadOnly label={tStep1("passportNumber")} value={values["passportNumber"]} />
               <ReadOnly label={tStep1("passportExpiryDate")} value={values["passportExpiryDate"]} />
               <ReadOnly label={tStep2("emergencyContactName")} value={values["emergencyContactName"]} />
+              <ReadOnly label={tStep2("emergencyContactRelationship")} value={values["emergencyContactRelationship"]} />
               <ReadOnly label={tStep2("emergencyContactPhone")} value={values["emergencyContactPhone"]} />
               <ReadOnly label={tStep2("medicalAssuranceCompany")} value={values["medicalAssuranceCompany"]} />
               <ReadOnly label={tStep2("medicalAssuranceId")} value={values["medicalAssuranceId"]} />
@@ -283,6 +309,46 @@ export function PassengerEditor({
               {tStep3("fileLabel")}
             </Button>
           ) : null}
+        </CardContent>
+      </Card>
+
+      {/* Salud emocional, en su propia tarjeta y siempre en solo lectura. */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">{t("sensitiveTitle")}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Alert>
+            <Info aria-hidden="true" />
+            <AlertDescription>{t("sensitiveOnlyPassenger")}</AlertDescription>
+          </Alert>
+
+          {sensitive.psychTreatment || sensitive.anxietyOrPanic ? (
+            <dl className="space-y-3">
+              {sensitive.psychTreatment ? (
+                <div>
+                  <dt className="text-muted-foreground text-sm">
+                    {t("psychTreatment")}
+                  </dt>
+                  <dd className="whitespace-pre-line">
+                    {sensitive.psychTreatmentDetail || "—"}
+                  </dd>
+                </div>
+              ) : null}
+              {sensitive.anxietyOrPanic ? (
+                <div>
+                  <dt className="text-muted-foreground text-sm">
+                    {t("anxietyOrPanic")}
+                  </dt>
+                  <dd className="whitespace-pre-line">
+                    {sensitive.anxietyOrPanicDetail || "—"}
+                  </dd>
+                </div>
+              ) : null}
+            </dl>
+          ) : (
+            <p className="text-muted-foreground">{t("sensitiveNotDeclared")}</p>
+          )}
         </CardContent>
       </Card>
 

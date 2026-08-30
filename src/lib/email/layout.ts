@@ -49,6 +49,19 @@ export interface EmailFooter {
   /** A quién responder. Si es null, el pie solo identifica el viaje. */
   replyToName?: string | null;
   replyToEmail?: string | null;
+  /**
+   * La firma de la escuela ("En la Lux de Alba, Laura y Lorena").
+   *
+   * Es DATO: la escriben las coordinadoras en el viaje, no vive en el código
+   * ni en el catálogo de traducciones. Va acá —en el pie compartido— y no en
+   * cada plantilla, porque así las SEIS la llevan por construcción: una firma
+   * que hay que acordarse de pasar en cada mail es un mail sin firmar
+   * esperando a ocurrir, y dos voces en el mismo sistema.
+   *
+   * Si es null el pie sale como salía antes. Un viaje sin firma cargada no
+   * rompe nada, solo no firma.
+   */
+  signature?: string | null;
 }
 
 export interface RenderedEmail {
@@ -225,7 +238,13 @@ export function renderEmail(input: RenderEmailInput): RenderedEmail {
       ? [footer.replyToName, footer.replyToEmail].filter(Boolean).join(" · ")
       : null;
 
+  // La firma va PRIMERA y separada del resto: es la voz de la escuela
+  // despidiéndose, no un dato de contacto. Lo que sigue —de qué viaje es esto,
+  // a quién responder, que es automático— es información de servicio.
+  const signature = footer.signature?.trim();
+
   const footerLines = [
+    ...(signature ? [signature] : []),
     copy.about(footer.tripName),
     ...(replyTo ? [copy.replyTo(replyTo)] : []),
     copy.automatic,

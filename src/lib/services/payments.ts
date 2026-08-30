@@ -1103,7 +1103,7 @@ async function notifyPaymentReviewed(
       installmentNumber: notice.installmentNumber,
       reason: notice.reason ?? "",
       url,
-      footer: footerFor(context),
+      footer: footerFor(context, lang),
     });
     await tryDeliver({ to: passenger.email, lang, rendered, context });
     return;
@@ -1128,7 +1128,7 @@ async function notifyPaymentReviewed(
       lang,
     ),
     url,
-    footer: footerFor(context),
+    footer: footerFor(context, lang),
   });
 
   await tryDeliver({ to: passenger.email, lang, rendered, context });

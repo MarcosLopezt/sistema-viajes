@@ -40,6 +40,16 @@ export type Capability =
   /** Ver costos, presupuesto y margen. El pasajero NUNCA la tiene. */
   | "trip:viewFinancials"
   | "passenger:invite"
+  /**
+   * Ver y mover el embudo de interesadas, y convertir una en pasajera.
+   *
+   * Es una capability propia y no `passenger:invite` reciclada porque son dos
+   * hechos distintos: invitar es mandarle un link a alguien que ya decidiste
+   * sumar; esto es leer los datos de contacto de gente que todavía no es
+   * nadie del viaje. Que la matriz los distinga deja abierta la puerta a que
+   * algún día uno se dé sin el otro.
+   */
+  | "interest:manage"
   /** Ver los datos de todos los pasajeros del viaje. */
   | "passenger:viewAll"
   /** Editar los datos de cualquier pasajero (queda auditado). */
@@ -56,6 +66,7 @@ const COORDINATOR_CAPABILITIES: ReadonlySet<Capability> = new Set([
   "trip:edit",
   "trip:viewFinancials",
   "passenger:invite",
+  "interest:manage",
   "passenger:viewAll",
   "passenger:editAny",
   "payment:definePlan",

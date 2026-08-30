@@ -18,7 +18,9 @@ import {
   saveGeneralAction,
   saveIndirectCostAction,
   savePricesAction,
+  savePublicTextsAction,
   saveStopAction,
+  setAcceptingInterestAction,
 } from "@/app/[locale]/(coordinador)/viajes/actions";
 import { CostPanel } from "./cost-panel";
 import { SaveIndicator, useSave } from "./save-state";
@@ -26,6 +28,7 @@ import { StepCosts, type CostRow } from "./step-costs";
 import { StepGeneral, generalValuesFrom, type GeneralValues } from "./step-general";
 import { StepItinerary } from "./step-itinerary";
 import { StepPrices } from "./step-prices";
+import { StepPublic } from "./step-public";
 import {
   WIZARD_STEPS,
   type WizardAccommodation,
@@ -56,10 +59,13 @@ import {
  */
 export function BudgetWizard({
   initialTrip,
+  publicUrl,
   passengerMix,
   passengersWithActivePlan,
 }: {
   initialTrip: WizardTrip;
+  /** URL de /interes, para copiar al botón de Wix. Se arma en el servidor. */
+  publicUrl: string;
   passengerMix: WizardPassengerMix[];
   passengersWithActivePlan: number;
 }) {
@@ -385,6 +391,51 @@ export function BudgetWizard({
               );
               if (result.ok) {
                 setTrip((current) => ({ ...current, ...prices }));
+                return { ok: true };
+              }
+              return { ok: false, error: result.error };
+            }}
+          />
+        ) : null}
+
+        {step === "publicZone" ? (
+          <StepPublic
+            values={trip.publicZone}
+            publicUrl={publicUrl}
+            disabled={readOnly}
+            onSaveTexts={async (next) => {
+              const result = await save(() =>
+                savePublicTextsAction(trip.id, {
+                  infoForInterestedEs: next.infoForInterestedEs,
+                  infoForInterestedEn: next.infoForInterestedEn,
+                  welcomeMessageEs: next.welcomeMessageEs,
+                  welcomeMessageEn: next.welcomeMessageEn,
+                  nextStepMessageEs: next.nextStepMessageEs,
+                  nextStepMessageEn: next.nextStepMessageEn,
+                  emailSignatureEs: next.emailSignatureEs,
+                  emailSignatureEn: next.emailSignatureEn,
+                  closedMessageEs: next.closedMessageEs,
+                  closedMessageEn: next.closedMessageEn,
+                }),
+              );
+              if (result.ok) {
+                setTrip((current) => ({
+                  ...current,
+                  publicZone: { ...next },
+                }));
+                return { ok: true };
+              }
+              return { ok: false, error: result.error };
+            }}
+            onToggleAccepting={async (accepting) => {
+              const result = await save(() =>
+                setAcceptingInterestAction(trip.id, accepting),
+              );
+              if (result.ok) {
+                setTrip((current) => ({
+                  ...current,
+                  publicZone: { ...current.publicZone, acceptingInterest: accepting },
+                }));
                 return { ok: true };
               }
               return { ok: false, error: result.error };

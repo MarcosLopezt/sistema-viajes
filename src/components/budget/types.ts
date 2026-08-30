@@ -61,6 +61,27 @@ export interface WizardTrip {
   stops: WizardStop[];
   directCosts: WizardDirectCost[];
   indirectCosts: WizardIndirectCost[];
+  publicZone: WizardPublicZone;
+}
+
+/**
+ * Los textos de marca y el switch de captación.
+ *
+ * Son DATO: los escriben y los mantienen las coordinadoras. Viajan al cliente
+ * como strings comunes y se muestran como texto, nunca como HTML.
+ */
+export interface WizardPublicZone {
+  acceptingInterest: boolean;
+  infoForInterestedEs: string;
+  infoForInterestedEn: string;
+  welcomeMessageEs: string;
+  welcomeMessageEn: string;
+  nextStepMessageEs: string;
+  nextStepMessageEn: string;
+  emailSignatureEs: string;
+  emailSignatureEn: string;
+  closedMessageEs: string;
+  closedMessageEn: string;
 }
 
 /** Mix de pasajeros confirmados, para el margen total del paso 5. */
@@ -77,6 +98,9 @@ export const WIZARD_STEPS = [
   "directCosts",
   "indirectCosts",
   "prices",
+  // Sexto paso, fase 7. Va al final y no al principio a propósito: la zona
+  // pública se abre cuando el viaje ya tiene precio, no antes.
+  "publicZone",
 ] as const;
 
 export type WizardStep = (typeof WIZARD_STEPS)[number];

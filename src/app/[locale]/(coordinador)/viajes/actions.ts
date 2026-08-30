@@ -10,7 +10,9 @@ import {
   deleteDirectCost,
   deleteIndirectCost,
   deleteItineraryStop,
+  setAcceptingInterest,
   setTripPrices,
+  setTripPublicTexts,
   TripStateError,
   updateTripGeneral,
   updateTripStatus,
@@ -28,6 +30,7 @@ import {
   tripPricesSchema,
   tripStatusSchema,
 } from "@/lib/validation/trip";
+import { tripPublicTextsSchema } from "@/lib/validation/interest";
 import type { ZodType } from "zod";
 
 /**
@@ -254,6 +257,44 @@ export async function savePricesAction(
 
   const result = await run(() => setTripPrices(tripId, parsed.data));
   if (result.ok) revalidateTrip(tripId);
+  return result;
+}
+
+/** Guarda los textos de marca de la zona pública (paso 6 del wizard). */
+export async function savePublicTextsAction(
+  tripId: string,
+  input: unknown,
+): Promise<ActionResult> {
+  const parsed = parse(tripPublicTextsSchema, input);
+  if (!parsed.ok) return parsed;
+
+  const result = await run(() => setTripPublicTexts(tripId, parsed.data));
+  if (result.ok) revalidateTrip(tripId);
+  return result;
+}
+
+/**
+ * Abre o cierra la captación de interesadas.
+ *
+ * Va separada de los textos a propósito: guardar un borrador de la propuesta y
+ * publicar la inscripción son dos decisiones distintas, y meterlas en el mismo
+ * botón haría que corregir una coma reabriera la captación.
+ */
+export async function setAcceptingInterestAction(
+  tripId: string,
+  accepting: unknown,
+): Promise<ActionResult> {
+  if (typeof accepting !== "boolean") {
+    return failure("Valor inválido.");
+  }
+
+  const result = await run(() => setAcceptingInterest(tripId, accepting));
+  if (result.ok) {
+    revalidateTrip(tripId);
+    // La página pública lee el viaje abierto: si no se revalida, el cambio
+    // tarda en verse justo donde importa.
+    revalidatePath("/[locale]/interes", "page");
+  }
   return result;
 }
 

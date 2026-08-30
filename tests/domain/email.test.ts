@@ -8,6 +8,7 @@ import {
 import {
   communicationEmail,
   invitationEmail,
+  newInterestEmail,
   passportAlertEmail,
   paymentConfirmedEmail,
   paymentReminderEmail,
@@ -92,13 +93,23 @@ const SAMPLES: Record<TemplateName, () => { subject: string; html: string; text:
         passengerName: "Ana",
         footer,
       }),
+    newInterest: () =>
+      newInterestEmail("es", {
+        interestedName: "Lucía Méndez",
+        interestedEmail: "lucia@ejemplo.test",
+        residenceCountry: "Uruguay",
+        phone: "+598 99 123 456",
+        url: "https://viajes.test/es/viajes/abc/interesadas",
+        footer,
+      }),
   };
 
 const NAMES = Object.keys(SAMPLES) as TemplateName[];
 
 describe("todas las plantillas", () => {
-  it("existen las seis", () => {
-    expect(NAMES).toHaveLength(6);
+  it("existen las siete", () => {
+    // Seis hasta la fase 6; la séptima es el aviso de interesada nueva.
+    expect(NAMES).toHaveLength(7);
     expect(Object.keys(TEMPLATES).sort()).toEqual(NAMES.sort());
   });
 
@@ -201,6 +212,16 @@ function getData(name: TemplateName): unknown {
       subject: "Final details",
       body: "See you on Thursday.",
       passengerName: "Ana",
+      footer,
+    },
+    newInterest: {
+      interestedName: "Lucía Méndez",
+      interestedEmail: "lucia@ejemplo.test",
+      residenceCountry: "Uruguay",
+      // Sin teléfono: es opcional en el formulario público, y la fila tiene
+      // que decir "no lo dejó" en vez de quedar vacía.
+      phone: null,
+      url: "https://viajes.test/en/viajes/abc/interesadas",
       footer,
     },
   };

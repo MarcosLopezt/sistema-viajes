@@ -38,6 +38,7 @@ export default async function TripDetailPage({
   const tPrices = await getTranslations("budget.prices");
   const tStatus = await getTranslations("tripStatus");
   const tPassengers = await getTranslations("passengers");
+  const tInterests = await getTranslations("interests");
   const tPaymentsAdmin = await getTranslations("paymentsAdmin");
   const tCommunications = await getTranslations("communications");
 
@@ -167,11 +168,21 @@ export default async function TripDetailPage({
               <p className="text-base">
                 {confirmed} / {trip.budgetedPassengers}
               </p>
-              <Button asChild size="lg">
-                <Link href={`/viajes/${trip.id}/pasajeros`}>
-                  {tPassengers("title")}
-                </Link>
-              </Button>
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <Button asChild size="lg">
+                  <Link href={`/viajes/${trip.id}/pasajeros`}>
+                    {tPassengers("title")}
+                  </Link>
+                </Button>
+                {/* El embudo vive al lado de las pasajeras y no en una pestaña
+                    propia porque es el paso ANTERIOR al mismo hecho: una
+                    interesada que avanza termina en esa lista. */}
+                <Button asChild size="lg" variant="outline">
+                  <Link href={`/viajes/${trip.id}/interesadas`}>
+                    {tInterests("title")}
+                  </Link>
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

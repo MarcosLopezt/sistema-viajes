@@ -168,7 +168,8 @@
       "itinerary": "Itinerary and hotels",
       "directCosts": "Meals and events",
       "indirectCosts": "Group costs",
-      "prices": "Review and pricing"
+      "prices": "Review and pricing",
+      "publicZone": "Public zone"
     },
     "panel": {
       "title": "Cost per passenger",
@@ -301,6 +302,31 @@
       "statusLabel": "Status",
       "changeStatus": "Change status",
       "readOnly": "This trip is completed: it can only be viewed."
+    },
+    "publicZone": {
+      "acceptingTitle": "Enquiry sign-ups",
+      "acceptingOn": "This trip is taking enquiries from the public page.",
+      "acceptingOff": "This trip is not taking enquiries.",
+      "openIntake": "Open sign-ups",
+      "closeIntake": "Close sign-ups",
+      "linkForWix": "Link for the Wix button",
+      "linkHelp": "Paste this address into the “more information” button on the page.",
+      "openPublicPage": "Open the public page",
+      "spanish": "Spanish",
+      "englishOptional": "English (optional)",
+      "infoTitle": "The trip proposal",
+      "infoHelp": "The only thing an enquirer sees about the trip. The proposal and the itinerary link go here. Web addresses become links on their own.",
+      "welcomeTitle": "Welcome message",
+      "welcomeHelp": "What they read as soon as they sign up.",
+      "nextStepTitle": "What happens next",
+      "nextStepHelp": "The concrete next step: which WhatsApp to write to and what to say to arrange the meeting.",
+      "signatureTitle": "Email signature",
+      "signatureHelp": "Goes at the foot of every email the system sends.",
+      "closedTitle": "When no trip is open",
+      "closedHelp": "What someone sees on the public page between two trips.",
+      "save": "Save the texts",
+      "saveFailed": "The texts could not be saved.",
+      "toggleFailed": "Sign-ups could not be changed."
     }
   },
   "invitations": {
@@ -385,7 +411,11 @@
       "mobilePhoneHelp": "Include the country code, for example +44 7700 900123.",
       "documentNumber": "ID number",
       "passportNumber": "Passport number",
-      "passportExpiryDate": "Passport expiry date"
+      "passportExpiryDate": "Passport expiry date",
+      "birthDate": "Date of birth",
+      "passportIssuingCountry": "Country that issued your passport",
+      "passportIssuingCountryHelp": "It may not match your nationality, if you hold more than one citizenship.",
+      "profession": "Profession or occupation"
     },
     "step2": {
       "intro": "We only use this if something happens. The more complete, the better.",
@@ -406,7 +436,23 @@
       "hasMobilityRestrictionsHelp": "So we can arrange transfers and choose the right visits.",
       "mobilityRestrictionsDetail": "Tell us what you need",
       "otherHealthNotes": "Anything else we should know",
-      "otherHealthNotesHelp": "Optional."
+      "otherHealthNotesHelp": "Optional.",
+      "emergencyContactRelationship": "Their relationship to you",
+      "emergencyContactRelationshipHelp": "Mother, partner, sister. So we know who we're speaking to if we have to call.",
+      "takesMedication": "I take medication",
+      "takesMedicationHelp": "So we have it to hand if it's ever needed.",
+      "takesMedicationDetail": "Tell us which",
+      "mentalHealthTitle": "Emotional wellbeing",
+      "mentalHealthWhy": "We ask so we can support you better during the trip, and so we know how to act if something happens far from home. Share only what you want to.",
+      "mentalHealthWhoSees": "Only the trip coordinators see this. It never appears in any spreadsheet, never goes in any email, and no other passenger sees it.",
+      "psychTreatment": "I'm in psychological or psychiatric treatment",
+      "psychTreatmentHelp": "Optional. It helps us support you better.",
+      "psychTreatmentDetail": "Tell us whatever you'd like",
+      "anxietyOrPanic": "I have anxiety or panic episodes",
+      "anxietyOrPanicHelp": "Knowing helps us stay attentive and not push situations.",
+      "anxietyOrPanicDetail": "Tell us whatever you'd like",
+      "additionalInfo": "Anything else you'd like to tell us",
+      "additionalInfoHelp": "Optional. Whatever didn't fit in any field."
     },
     "step3": {
       "intro": "We just need your medical cover certificate.",
@@ -473,7 +519,12 @@
     "priceOverrideSave": "Save price",
     "priceOverrideClear": "Back to list price",
     "exportList": "Download list",
-    "exportRooming": "Download rooming"
+    "exportRooming": "Download rooming",
+    "sensitiveTitle": "Emotional wellbeing",
+    "sensitiveOnlyPassenger": "Only the passenger can edit these. That's not a bug: the contents of these fields never pass through the audit log, and that is how we guarantee they're never written to a log.",
+    "sensitiveNotDeclared": "Nothing declared.",
+    "psychTreatment": "Psychological or psychiatric treatment",
+    "anxietyOrPanic": "Anxiety or panic episodes"
   },
   "rooms": {
     "title": "Rooms",
@@ -728,5 +779,49 @@
     "receivedOn": "Received on {date}",
     "seeAll": "See all",
     "count": "{count, plural, =1 {1 update} other {# updates}}"
+  },
+  "interest": {
+    "eyebrow": "Group trip",
+    "closedTitle": "No trip is open right now",
+    "closedFallback": "We're not taking sign-ups at the moment. Come back soon.",
+    "formTitle": "Leave us your details",
+    "formSubtitle": "Create your account and we'll get in touch with you.",
+    "fullName": "Full name",
+    "email": "Email",
+    "password": "Password",
+    "passwordHint": "At least 8 characters.",
+    "residenceCountry": "Country you live in",
+    "phone": "Phone",
+    "phoneHint": "Optional, with country code.",
+    "submit": "I'd like more information",
+    "submitting": "Sending…",
+    "doneTitle": "All set",
+    "doneFallback": "We've got your details. We'll be in touch with you.",
+    "nextStepTitle": "What happens next",
+    "goToLogin": "Sign in",
+    "noInfoYet": "There's no information for this trip yet."
+  },
+  "interests": {
+    "title": "Enquiries",
+    "subtitle": "The funnel, from sign-up to joining the trip.",
+    "empty": "Nobody has signed up yet.",
+    "noName": "No name",
+    "noPhone": "No phone provided",
+    "signedUpOn": "Signed up on {date}",
+    "meetingDone": "We've had the meeting",
+    "convert": "Convert to passenger",
+    "confirmConvert": "Confirm",
+    "cancel": "Cancel",
+    "alreadyConverted": "Already a passenger on this trip.",
+    "alreadyPassenger": "Already in the passenger list.",
+    "actionFailed": "The change could not be saved.",
+    "status": {
+      "REGISTRADA": "Signed up",
+      "EN_CONVERSACION": "In conversation",
+      "CONVERTIDA": "Converted",
+      "DESCARTADA": "Not proceeding"
+    },
+    "notes": "Notes",
+    "notesPlaceholder": "Notes for you. The enquirer never sees them."
   }
 }

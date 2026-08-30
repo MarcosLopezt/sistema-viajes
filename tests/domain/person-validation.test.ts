@@ -19,7 +19,9 @@ import { isPersonComplete, requiredFieldsFor } from "@/lib/domain/person";
 
 const COMPLETE = {
   fullName: "Ana Pérez",
+  birthDate: "1985-04-12",
   nationalityCountry: "Argentina",
+  passportIssuingCountry: "Argentina",
   residenceCountry: "Argentina",
   residenceAddress: "Av. Siempreviva 742",
   residenceCity: "Buenos Aires",
@@ -28,6 +30,7 @@ const COMPLETE = {
   passportNumber: "AAF123456",
   passportExpiryDate: "2032-01-01",
   emergencyContactName: "Juan Pérez",
+  emergencyContactRelationship: "Hermano",
   emergencyContactPhone: "+54 9 11 4444 4444",
   medicalAssuranceCompany: "Cobertura SA",
   medicalAssuranceId: "POL-99881",
@@ -35,6 +38,9 @@ const COMPLETE = {
   medicalAssuranceEmail: "asistencia@cobertura.example",
   hasDietaryRestrictions: false,
   hasMobilityRestrictions: false,
+  takesMedication: false,
+  psychTreatment: false,
+  anxietyOrPanic: false,
   medicalAssuranceFileId: "trips/abc/certificado.pdf",
   preferredLanguage: "ES" as const,
 };
@@ -182,11 +188,13 @@ describe("el schema estricto y isPersonComplete no pueden divergir", () => {
    * se olvida del otro, el pasajero llega al 100% y no puede terminar, o al
    * revés. Acá se rompe antes.
    */
+  const asDate = (value: unknown) =>
+    value ? new Date(`${String(value)}T00:00:00.000Z`) : null;
+
   const toDomain = (input: Record<string, unknown>) => ({
     ...input,
-    passportExpiryDate: input["passportExpiryDate"]
-      ? new Date(`${String(input["passportExpiryDate"])}T00:00:00.000Z`)
-      : null,
+    passportExpiryDate: asDate(input["passportExpiryDate"]),
+    birthDate: asDate(input["birthDate"]),
   });
 
   it("una persona que pasa el estricto está completa para el dominio", () => {
@@ -216,20 +224,48 @@ describe("el schema estricto y isPersonComplete no pueden divergir", () => {
   });
 
   it("los condicionales también coinciden en los dos lados", () => {
-    const withRestriction = {
+    // Los CINCO pares booleano + detalle, no solo el alimentario. Los dos
+    // sensibles entran en el mismo bucle a propósito: si algún día alguien
+    // les da un trato distinto en la validación, este test lo dice.
+    const pairs = [
+      ["hasDietaryRestrictions", "dietaryRestrictionsDetail"],
+      ["hasMobilityRestrictions", "mobilityRestrictionsDetail"],
+      ["takesMedication", "takesMedicationDetail"],
+      ["psychTreatment", "psychTreatmentDetail"],
+      ["anxietyOrPanic", "anxietyOrPanicDetail"],
+    ] as const;
+
+    for (const [flag, detail] of pairs) {
+      const declared = { ...COMPLETE, [flag]: true, [detail]: "" };
+
+      expect(
+        personStrictSchema.safeParse(declared).success,
+        `el estricto acepta ${flag} sin ${detail}`,
+      ).toBe(false);
+      expect(
+        isPersonComplete(toDomain(declared)),
+        `el dominio acepta ${flag} sin ${detail}`,
+      ).toBe(false);
+
+      const filled = { ...declared, [detail]: "Un detalle cualquiera." };
+      expect(
+        personStrictSchema.safeParse(filled).success,
+        `el estricto rechaza ${detail} ya cargado`,
+      ).toBe(true);
+      expect(
+        isPersonComplete(toDomain(filled)),
+        `el dominio rechaza ${detail} ya cargado`,
+      ).toBe(true);
+    }
+  });
+
+  it("rechaza una fecha de nacimiento en el futuro", () => {
+    // El error de tipeo real es poner el año en curso en vez del de
+    // nacimiento, y una fecha así pasa cualquier validación de formato.
+    const result = personStrictSchema.safeParse({
       ...COMPLETE,
-      hasDietaryRestrictions: true,
-      dietaryRestrictionsDetail: "",
-    };
-
-    expect(personStrictSchema.safeParse(withRestriction).success).toBe(false);
-    expect(isPersonComplete(toDomain(withRestriction))).toBe(false);
-
-    const filled = {
-      ...withRestriction,
-      dietaryRestrictionsDetail: "Sin TACC.",
-    };
-    expect(personStrictSchema.safeParse(filled).success).toBe(true);
-    expect(isPersonComplete(toDomain(filled))).toBe(true);
+      birthDate: "2099-01-01",
+    });
+    expect(result.success).toBe(false);
   });
 });

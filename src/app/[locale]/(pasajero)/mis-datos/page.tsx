@@ -36,7 +36,9 @@ export default async function MyDataPage() {
 
   const initialValues: PersonValues = {
     fullName: person.fullName ?? "",
+    birthDate: person.birthDate ? toIsoDate(person.birthDate) : "",
     nationalityCountry: person.nationalityCountry ?? "",
+    passportIssuingCountry: person.passportIssuingCountry ?? "",
     residenceCountry: person.residenceCountry ?? "",
     residenceAddress: person.residenceAddress ?? "",
     residenceCity: person.residenceCity ?? "",
@@ -46,7 +48,9 @@ export default async function MyDataPage() {
     passportExpiryDate: person.passportExpiryDate
       ? toIsoDate(person.passportExpiryDate)
       : "",
+    profession: person.profession ?? "",
     emergencyContactName: person.emergencyContactName ?? "",
+    emergencyContactRelationship: person.emergencyContactRelationship ?? "",
     emergencyContactPhone: person.emergencyContactPhone ?? "",
     medicalAssuranceCompany: person.medicalAssuranceCompany ?? "",
     medicalAssuranceId: person.medicalAssuranceId ?? "",
@@ -56,7 +60,14 @@ export default async function MyDataPage() {
     dietaryRestrictionsDetail: person.dietaryRestrictionsDetail ?? "",
     hasMobilityRestrictions: person.hasMobilityRestrictions,
     mobilityRestrictionsDetail: person.mobilityRestrictionsDetail ?? "",
+    takesMedication: person.takesMedication,
+    takesMedicationDetail: person.takesMedicationDetail ?? "",
+    psychTreatment: person.psychTreatment,
+    psychTreatmentDetail: person.psychTreatmentDetail ?? "",
+    anxietyOrPanic: person.anxietyOrPanic,
+    anxietyOrPanicDetail: person.anxietyOrPanicDetail ?? "",
     otherHealthNotes: person.otherHealthNotes ?? "",
+    additionalInfo: person.additionalInfo ?? "",
     preferredLanguage: person.preferredLanguage,
     medicalAssuranceFileId: person.medicalAssuranceFileId,
   };

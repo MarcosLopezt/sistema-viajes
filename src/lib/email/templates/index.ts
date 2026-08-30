@@ -8,7 +8,7 @@ import {
 import type { EmailLang } from "../types";
 
 /**
- * Las seis plantillas del sistema.
+ * Las siete plantillas del sistema.
  *
  * Todas se arman con los mismos bloques y salen por `renderEmail()`, así que
  * el HTML —tablas, estilos inline, 600px— y la versión de texto se resuelven
@@ -469,6 +469,89 @@ export function communicationEmail(
   });
 }
 
+// --------------------- Aviso de interesada nueva ---------------------------
+
+export interface NewInterestEmailData {
+  /** Los cuatro datos que dejó en el formulario público. */
+  interestedName: string;
+  interestedEmail: string;
+  residenceCountry: string;
+  phone: string | null;
+  /** Link al listado de interesadas del viaje. */
+  url: string;
+  footer: EmailFooter;
+}
+
+const NEW_INTEREST = {
+  es: {
+    subject: (name: string) => `Nueva interesada: ${name}`,
+    heading: "Se anotó alguien nueva",
+    body: (trip: string) =>
+      `Alguien completó el formulario de más información para ${trip}. Estos son sus datos:`,
+    name: "Nombre",
+    email: "Email",
+    country: "País de residencia",
+    phone: "Teléfono",
+    noPhone: "no lo dejó",
+    next: "El próximo paso es escribirle para coordinar la reunión. Cuando la tengan, marcala en el listado.",
+    button: "Ver las interesadas",
+  },
+  en: {
+    subject: (name: string) => `New enquiry: ${name}`,
+    heading: "Someone new signed up",
+    body: (trip: string) =>
+      `Someone filled in the enquiry form for ${trip}. Here are their details:`,
+    name: "Name",
+    email: "Email",
+    country: "Country of residence",
+    phone: "Phone",
+    noPhone: "not provided",
+    next: "The next step is to write to them and arrange the meeting. Once you've had it, mark it in the list.",
+    button: "View enquiries",
+  },
+} as const;
+
+/**
+ * Aviso a las coordinadoras de que se anotó una interesada.
+ *
+ * Es el único mail del sistema que va HACIA adentro, y por eso es el único que
+ * lleva datos de contacto de otra persona en el cuerpo: quien lo recibe es
+ * justamente quien tiene que escribirle, y hacerla entrar al sistema a buscar
+ * un teléfono que ya tenemos sería fricción sin ninguna ganancia.
+ *
+ * Lo que NO lleva, y no puede llevar: nada de la ficha de la interesada más
+ * allá de estos cuatro campos. En esta instancia del embudo tampoco existe
+ * nada más — todavía no cargó datos de salud ni de pasaporte.
+ */
+export function newInterestEmail(
+  lang: EmailLang,
+  data: NewInterestEmailData,
+): RenderedEmail {
+  const copy = NEW_INTEREST[lang];
+
+  return renderEmail({
+    lang,
+    subject: copy.subject(data.interestedName),
+    preheader: `${data.interestedName} · ${data.residenceCountry}`,
+    footer: data.footer,
+    blocks: [
+      { kind: "heading", text: copy.heading },
+      { kind: "paragraph", text: copy.body(data.footer.tripName) },
+      {
+        kind: "rows",
+        rows: [
+          { label: copy.name, value: data.interestedName },
+          { label: copy.email, value: data.interestedEmail },
+          { label: copy.country, value: data.residenceCountry },
+          { label: copy.phone, value: data.phone ?? copy.noPhone },
+        ],
+      },
+      { kind: "paragraph", text: copy.next, muted: true },
+      { kind: "button", label: copy.button, url: data.url },
+    ],
+  });
+}
+
 /** Todas las plantillas, para el índice de la vista previa y los tests. */
 export const TEMPLATES = {
   invitation: invitationEmail,
@@ -477,6 +560,7 @@ export const TEMPLATES = {
   paymentRejected: paymentRejectedEmail,
   passportAlert: passportAlertEmail,
   communication: communicationEmail,
+  newInterest: newInterestEmail,
 } as const;
 
 export type TemplateName = keyof typeof TEMPLATES;

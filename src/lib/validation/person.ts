@@ -51,7 +51,9 @@ const draftDate = z
 
 export const personDraftSchema = z.object({
   fullName: draftText(200),
+  birthDate: draftDate,
   nationalityCountry: draftText(100),
+  passportIssuingCountry: draftText(100),
   residenceCountry: draftText(100),
   residenceAddress: draftText(300),
   residenceCity: draftText(120),
@@ -59,8 +61,10 @@ export const personDraftSchema = z.object({
   documentNumber: draftText(40),
   passportNumber: draftText(40),
   passportExpiryDate: draftDate,
+  profession: draftText(120),
 
   emergencyContactName: draftText(200),
+  emergencyContactRelationship: draftText(80),
   emergencyContactPhone: draftText(40),
   medicalAssuranceCompany: draftText(200),
   medicalAssuranceId: draftText(80),
@@ -71,7 +75,14 @@ export const personDraftSchema = z.object({
   dietaryRestrictionsDetail: draftText(1000),
   hasMobilityRestrictions: z.boolean().optional(),
   mobilityRestrictionsDetail: draftText(1000),
+  takesMedication: z.boolean().optional(),
+  takesMedicationDetail: draftText(1000),
+  psychTreatment: z.boolean().optional(),
+  psychTreatmentDetail: draftText(1000),
+  anxietyOrPanic: z.boolean().optional(),
+  anxietyOrPanicDetail: draftText(1000),
   otherHealthNotes: draftText(1000),
+  additionalInfo: draftText(2000),
 
   preferredLanguage: z.enum(["ES", "EN"]).optional(),
 });
@@ -110,6 +121,27 @@ const isoDateRequired = z
   .refine(isRealIsoDate, "Esa fecha no existe. Revisala.");
 
 /**
+ * Fecha de nacimiento.
+ *
+ * Mismo `isRealIsoDate` que el vencimiento del pasaporte, por la misma razón:
+ * un 31 de febrero tipeado a mano se guardaría como 2 de marzo sin avisarle a
+ * nadie, y eso en una fecha de nacimiento sale a la luz recién cuando no
+ * coincide con el pasaporte en el mostrador.
+ *
+ * El tope superior descarta el futuro, que es el error de tipeo real (el año
+ * en curso en vez del de nacimiento). No hay tope inferior de edad: quién
+ * puede viajar no lo decide un schema.
+ */
+const birthDateRequired = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Cargá tu fecha de nacimiento.")
+  .refine(isRealIsoDate, "Esa fecha no existe. Revisala.")
+  .refine(
+    (value) => value <= new Date().toISOString().slice(0, 10),
+    "Esa fecha todavía no llegó. Revisá el año.",
+  );
+
+/**
  * Validación estricta, para cuando el pasajero da por terminado el registro.
  *
  * Los campos de detalle son condicionales: solo se exigen si la persona
@@ -124,7 +156,12 @@ const isoDateRequired = z
 export const personStrictSchema = z
   .object({
     fullName: required("Poné tu nombre y apellido como figura en el pasaporte.", 200),
+    birthDate: birthDateRequired,
     nationalityCountry: required("Poné tu nacionalidad.", 100),
+    passportIssuingCountry: required(
+      "Poné el país que emitió tu pasaporte.",
+      100,
+    ),
     residenceCountry: required("Poné el país donde vivís.", 100),
     residenceAddress: required("Poné tu dirección.", 300),
     residenceCity: required("Poné la ciudad donde vivís.", 120),
@@ -132,10 +169,15 @@ export const personStrictSchema = z
     documentNumber: required("Poné tu número de documento.", 40),
     passportNumber: required("Poné el número de tu pasaporte.", 40),
     passportExpiryDate: isoDateRequired,
+    profession: z.string().trim().max(120).nullable().optional(),
 
     emergencyContactName: required(
       "Poné el nombre de alguien a quien llamar en una emergencia.",
       200,
+    ),
+    emergencyContactRelationship: required(
+      "Poné qué es tuyo: madre, pareja, hermana.",
+      80,
     ),
     emergencyContactPhone: phone("Poné el teléfono de tu contacto de emergencia."),
     medicalAssuranceCompany: required(
@@ -157,7 +199,14 @@ export const personStrictSchema = z
       .max(1000)
       .nullable()
       .optional(),
+    takesMedication: z.boolean(),
+    takesMedicationDetail: z.string().trim().max(1000).nullable().optional(),
+    psychTreatment: z.boolean(),
+    psychTreatmentDetail: z.string().trim().max(1000).nullable().optional(),
+    anxietyOrPanic: z.boolean(),
+    anxietyOrPanicDetail: z.string().trim().max(1000).nullable().optional(),
     otherHealthNotes: z.string().trim().max(1000).nullable().optional(),
+    additionalInfo: z.string().trim().max(2000).nullable().optional(),
 
     medicalAssuranceFileId: required(
       "Subí el certificado o la credencial de tu cobertura médica.",
@@ -184,6 +233,34 @@ export const personStrictSchema = z
         "Contanos qué necesitás para poder organizar los traslados y las visitas.",
       path: ["mobilityRestrictionsDetail"],
     },
+  )
+  .refine(
+    (data) =>
+      !data.takesMedication ||
+      (data.takesMedicationDetail ?? "").trim().length > 0,
+    {
+      message: "Contanos cuál, para tenerlo a mano si hace falta.",
+      path: ["takesMedicationDetail"],
+    },
+  )
+  // Los dos campos sensibles se validan igual que el resto: el detalle solo
+  // se exige si dijo que sí. Lo que los hace especiales no es la validación,
+  // es quién los ve y por dónde no salen.
+  .refine(
+    (data) =>
+      !data.psychTreatment || (data.psychTreatmentDetail ?? "").trim().length > 0,
+    {
+      message: "Contanos lo que quieras compartir.",
+      path: ["psychTreatmentDetail"],
+    },
+  )
+  .refine(
+    (data) =>
+      !data.anxietyOrPanic || (data.anxietyOrPanicDetail ?? "").trim().length > 0,
+    {
+      message: "Contanos lo que quieras compartir.",
+      path: ["anxietyOrPanicDetail"],
+    },
   );
 
 export type PersonStrictInput = z.infer<typeof personStrictSchema>;
@@ -192,7 +269,9 @@ export type PersonStrictInput = z.infer<typeof personStrictSchema>;
 export const PERSON_STEP_FIELDS = {
   1: [
     "fullName",
+    "birthDate",
     "nationalityCountry",
+    "passportIssuingCountry",
     "residenceCountry",
     "residenceAddress",
     "residenceCity",
@@ -200,10 +279,12 @@ export const PERSON_STEP_FIELDS = {
     "documentNumber",
     "passportNumber",
     "passportExpiryDate",
+    "profession",
     "preferredLanguage",
   ],
   2: [
     "emergencyContactName",
+    "emergencyContactRelationship",
     "emergencyContactPhone",
     "medicalAssuranceCompany",
     "medicalAssuranceId",
@@ -213,7 +294,14 @@ export const PERSON_STEP_FIELDS = {
     "dietaryRestrictionsDetail",
     "hasMobilityRestrictions",
     "mobilityRestrictionsDetail",
+    "takesMedication",
+    "takesMedicationDetail",
+    "psychTreatment",
+    "psychTreatmentDetail",
+    "anxietyOrPanic",
+    "anxietyOrPanicDetail",
     "otherHealthNotes",
+    "additionalInfo",
   ],
   3: ["medicalAssuranceFileId"],
 } as const satisfies Record<1 | 2 | 3, readonly string[]>;

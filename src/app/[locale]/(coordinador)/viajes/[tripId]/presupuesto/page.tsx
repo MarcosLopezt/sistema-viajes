@@ -1,7 +1,7 @@
 import { getTranslations } from "next-intl/server";
 import { ArrowLeft, Lock } from "lucide-react";
 import { Link } from "@/i18n/navigation";
-import { getTripBudget } from "@/lib/services/trip";
+import { getTripBudget, getTripPublicSettings } from "@/lib/services/trip";
 import { getPassengerMix } from "@/lib/services/passengers";
 import { toIsoDate } from "@/lib/validation/trip";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -20,11 +20,13 @@ import type { WizardTrip } from "@/components/budget/types";
 export default async function BudgetPage({
   params,
 }: PageProps<"/[locale]/viajes/[tripId]/presupuesto">) {
-  const { tripId } = await params;
-  const [{ trip, passengersWithActivePlan }, passengerMix] = await Promise.all([
-    getTripBudget(tripId),
-    getPassengerMix(tripId),
-  ]);
+  const { locale, tripId } = await params;
+  const [{ trip, passengersWithActivePlan }, passengerMix, publicSettings] =
+    await Promise.all([
+      getTripBudget(tripId),
+      getPassengerMix(tripId),
+      getTripPublicSettings(tripId),
+    ]);
   const t = await getTranslations("budget");
   const tDetail = await getTranslations("budget.detail");
 
@@ -57,7 +59,27 @@ export default async function BudgetPage({
     })),
     directCosts: trip.directCosts.map((c) => ({ ...c })),
     indirectCosts: trip.indirectCosts.map((c) => ({ ...c })),
+    // Los nulos de la base se vuelven "" para el cliente: un <textarea> con
+    // value={null} pasa a no controlado y React avisa por consola.
+    publicZone: {
+      acceptingInterest: publicSettings.acceptingInterest,
+      infoForInterestedEs: publicSettings.infoForInterestedEs ?? "",
+      infoForInterestedEn: publicSettings.infoForInterestedEn ?? "",
+      welcomeMessageEs: publicSettings.welcomeMessageEs ?? "",
+      welcomeMessageEn: publicSettings.welcomeMessageEn ?? "",
+      nextStepMessageEs: publicSettings.nextStepMessageEs ?? "",
+      nextStepMessageEn: publicSettings.nextStepMessageEn ?? "",
+      emailSignatureEs: publicSettings.emailSignatureEs ?? "",
+      emailSignatureEn: publicSettings.emailSignatureEn ?? "",
+      closedMessageEs: publicSettings.closedMessageEs ?? "",
+      closedMessageEn: publicSettings.closedMessageEn ?? "",
+    },
   };
+
+  // Se arma en el servidor porque `NEXT_PUBLIC_APP_URL` es la URL real de
+  // producción, y lo que las coordinadoras tienen que pegar en Wix es esa, no
+  // la del navegador con el que están mirando.
+  const publicUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/${locale}/interes`;
 
   return (
     <div className="space-y-6">
@@ -80,6 +102,7 @@ export default async function BudgetPage({
 
       <BudgetWizard
         initialTrip={wizardTrip}
+        publicUrl={publicUrl}
         passengersWithActivePlan={passengersWithActivePlan}
         passengerMix={passengerMix.map((p) => ({
           roomType: p.roomType,

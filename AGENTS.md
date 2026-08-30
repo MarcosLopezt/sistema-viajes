@@ -39,6 +39,20 @@ db:seed · verify (corre todo, incluida la suite de integración)
   y el gate a CONFIRMADO. Nunca dos implementaciones.
 - Fechas: validar con isRealIsoDate() (lib/domain/date.ts). new Date()
   desborda en silencio: 31/02 se guarda como 02/03 sin avisar.
+- Una interesada NO tiene TripMember. Ese es el mecanismo de aislamiento
+  completo: sin esa fila, todos los guards fallan cerrado solos. No la
+  modeles como un TripRole nuevo — abriría requireTripRole(_, "PASAJERO"),
+  que hoy acepta a cualquier miembro del viaje.
+- psychTreatment y anxietyOrPanic (salud mental) NO van en
+  COORDINATOR_EDITABLE: todo campo editable escribe su valor en claro en
+  AuditLog, y estos no pueden llegar a un log. Los corrige solo la pasajera.
+  Tampoco salen en exportaciones: lo verifica un test con control positivo.
+- Como máximo un Trip con acceptingInterest. Lo garantiza un índice único
+  PARCIAL en SQL crudo, no el servicio. Prisma no lo conoce: si migrate dev
+  propone un DROP de "Trip_una_sola_captacion_abierta", borrá esa línea.
+- Los textos de marca (infoForInterested, bienvenida, qué sigue, firma) son
+  DATO en Trip, no strings del catálogo. El tono no entra en errores de
+  validación, montos, fechas ni alertas de pasaporte.
 - i18n: cero strings hardcodeados. check:i18n tiene que pasar.
 - Límites entre capas: los impone check:layers, no la prosa. Si tu cambio
   lo hace fallar, el problema es el cambio.

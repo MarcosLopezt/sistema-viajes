@@ -50,6 +50,11 @@ let betoPassengerId: string;
 /** Datos completos, para poder confirmar sin pelear con el predicado. */
 const COMPLETE_PERSON = {
   fullName: `Ana ${SUFFIX}`,
+  // Los tres obligatorios que agregó la fase 7. Sin ellos el predicado de
+  // completitud da false y el gate a CONFIRMADO bloquea, que es exactamente
+  // lo que tiene que hacer.
+  birthDate: new Date("1990-06-21T00:00:00.000Z"),
+  passportIssuingCountry: "Argentina",
   nationalityCountry: "Argentina",
   residenceCountry: "Argentina",
   residenceAddress: "Av. Siempreviva 742",
@@ -58,6 +63,7 @@ const COMPLETE_PERSON = {
   documentNumber: "30123456",
   passportNumber: "AAF123456",
   emergencyContactName: "Juan",
+  emergencyContactRelationship: "Hermano",
   emergencyContactPhone: "+54 9 11 4444 4444",
   medicalAssuranceCompany: "Cobertura SA",
   medicalAssuranceId: "POL-99881",

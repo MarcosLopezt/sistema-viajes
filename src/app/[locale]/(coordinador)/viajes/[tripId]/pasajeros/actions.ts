@@ -199,7 +199,7 @@ async function deliverInvitation(
       url,
       expiresAt,
       coordinatorName: context.replyTo?.name ?? null,
-      footer: footerFor(context),
+      footer: footerFor(context, lang),
     });
 
     return tryDeliver({ to: email, lang, rendered, context });

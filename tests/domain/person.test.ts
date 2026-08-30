@@ -12,7 +12,9 @@ function completePerson(
 ): PersonCompletenessInput {
   return {
     fullName: "Ana Pérez",
+    birthDate: new Date("1985-04-12T00:00:00.000Z"),
     nationalityCountry: "Argentina",
+    passportIssuingCountry: "Argentina",
     residenceCountry: "Argentina",
     residenceAddress: "Av. Siempreviva 742",
     residenceCity: "Buenos Aires",
@@ -21,6 +23,7 @@ function completePerson(
     passportNumber: "AAF123456",
     passportExpiryDate: new Date("2030-01-01T00:00:00.000Z"),
     emergencyContactName: "Juan Pérez",
+    emergencyContactRelationship: "Hermano",
     emergencyContactPhone: "+54 9 11 4444 4444",
     medicalAssuranceCompany: "Cobertura SA",
     medicalAssuranceId: "POL-99881",
@@ -28,6 +31,9 @@ function completePerson(
     medicalAssuranceEmail: "asistencia@cobertura.example",
     hasDietaryRestrictions: false,
     hasMobilityRestrictions: false,
+    takesMedication: false,
+    psychTreatment: false,
+    anxietyOrPanic: false,
     medicalAssuranceFileId: "trips/abc/certificado.pdf",
     ...overrides,
   };
@@ -38,11 +44,36 @@ describe("isPersonComplete", () => {
     expect(isPersonComplete(completePerson())).toBe(true);
   });
 
-  it("acepta que otherHealthNotes esté vacío", () => {
-    // Es el único campo verdaderamente opcional del formulario.
-    expect(isPersonComplete(completePerson({ otherHealthNotes: null }))).toBe(
-      true,
-    );
+  it("acepta vacíos los campos opcionales", () => {
+    // Los tres que no bajan el porcentaje ni bloquean la confirmación.
+    expect(
+      isPersonComplete(
+        completePerson({
+          otherHealthNotes: null,
+          profession: null,
+          additionalInfo: null,
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("exige los campos que agregó la fase 7", () => {
+    // Control positivo del cambio: si alguien los saca de STEP_1/STEP_2, esto
+    // falla. Sin este test, quitarlos pasaría desapercibido — el resto de la
+    // suite solo verifica que la persona COMPLETA esté completa.
+    for (const field of [
+      "birthDate",
+      "passportIssuingCountry",
+      "emergencyContactRelationship",
+    ] as const) {
+      const result = evaluatePersonCompleteness(
+        completePerson({ [field]: null }),
+      );
+      expect(result.complete, `${field} tendría que ser obligatorio`).toBe(
+        false,
+      );
+      expect(result.missing).toContain(field);
+    }
   });
 
   it("exige el certificado de cobertura médica", () => {
@@ -100,6 +131,37 @@ describe("campos condicionales", () => {
         mobilityRestrictionsDetail: "Usa bastón, evitar escaleras largas.",
       }),
     ).toBe(true);
+  });
+
+  it("pide el detalle de medicación solo si toma", () => {
+    expect(requiredFieldsFor(completePerson())).not.toContain(
+      "takesMedicationDetail",
+    );
+    const person = completePerson({ takesMedication: true });
+    expect(requiredFieldsFor(person)).toContain("takesMedicationDetail");
+    expect(isPersonComplete(person)).toBe(false);
+    expect(
+      isPersonComplete({ ...person, takesMedicationDetail: "Levotiroxina." }),
+    ).toBe(true);
+  });
+
+  it("trata los campos sensibles con la misma regla condicional", () => {
+    // Lo que los hace especiales NO es la obligatoriedad: es quién los ve y
+    // por dónde no salen. Acá se comportan como cualquier otro par
+    // booleano + detalle, y eso es deliberado.
+    for (const [flag, detail] of [
+      ["psychTreatment", "psychTreatmentDetail"],
+      ["anxietyOrPanic", "anxietyOrPanicDetail"],
+    ] as const) {
+      expect(requiredFieldsFor(completePerson())).not.toContain(detail);
+
+      const person = completePerson({ [flag]: true });
+      expect(requiredFieldsFor(person)).toContain(detail);
+      expect(isPersonComplete(person)).toBe(false);
+      expect(isPersonComplete({ ...person, [detail]: "Lo que quiera contar." })).toBe(
+        true,
+      );
+    }
   });
 
   it("suma ambos detalles cuando declaró las dos restricciones", () => {

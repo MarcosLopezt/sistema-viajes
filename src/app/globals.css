@@ -129,3 +129,50 @@
     @apply font-sans;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Zona cálida — las pantallas públicas y las de la interesada
+ * ---------------------------------------------------------------------------
+ *
+ * La zona interna es gris y densa a propósito: es una herramienta de trabajo.
+ * Estas pantallas son lo primero que ve alguien que llegó desde Instagram, y
+ * tienen que parecerse a la escuela y no a un panel de administración. El
+ * corte entre las dos identidades es la señal de que ya entraste.
+ *
+ * Se implementa pisando los tokens sobre una clase en vez de escribiendo
+ * estilos nuevos: así los componentes de shadcn —botones, tarjetas, inputs—
+ * cambian de paleta solos y no hay una segunda versión de cada uno.
+ *
+ * El tono NO llega a los errores de validación, los montos ni las fechas. Eso
+ * sigue siendo literal, acá y en todos lados.
+ */
+.zona-calida {
+  --background: oklch(0.985 0.012 78);
+  --foreground: oklch(0.26 0.024 52);
+  --card: oklch(0.995 0.008 78);
+  --card-foreground: oklch(0.26 0.024 52);
+  --popover: oklch(0.995 0.008 78);
+  --popover-foreground: oklch(0.26 0.024 52);
+  --primary: oklch(0.52 0.088 46);
+  --primary-foreground: oklch(0.985 0.012 78);
+  --secondary: oklch(0.94 0.022 74);
+  --secondary-foreground: oklch(0.34 0.038 50);
+  --muted: oklch(0.945 0.018 76);
+  --muted-foreground: oklch(0.49 0.026 56);
+  --accent: oklch(0.92 0.032 72);
+  --accent-foreground: oklch(0.31 0.036 50);
+  --border: oklch(0.88 0.022 72);
+  --input: oklch(0.88 0.022 72);
+  --ring: oklch(0.62 0.072 50);
+
+  background-color: var(--background);
+  color: var(--foreground);
+}
+
+/* La serifa es solo para los títulos. En el cuerpo del texto la sans se lee
+ * mejor en un teléfono, que es de donde llega la mayoría. */
+.zona-calida :is(h1, h2, h3) {
+  font-family: var(--font-serif), Georgia, "Times New Roman", serif;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}

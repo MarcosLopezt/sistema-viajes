@@ -367,7 +367,7 @@ export async function previewCommunication(
       // En la vista previa no hay una persona concreta: el saludo se muestra
       // sin nombre, que es como lo va a ver quien no tenga el nombre cargado.
       passengerName: null,
-      footer: footerFor(context),
+      footer: footerFor(context, langOf(lang)),
     });
     return { lang: langOf(lang), ...rendered };
   });
@@ -406,7 +406,7 @@ export async function sendTestEmail(
     subject: `[PRUEBA] ${content.subject}`,
     body: content.body,
     passengerName: null,
-    footer: footerFor(context),
+    footer: footerFor(context, langOf(lang)),
   });
 
   await deliver({ to: user.email, lang: langOf(lang), rendered, context });
@@ -770,7 +770,7 @@ async function sendToRecipient(
     subject: content.subject,
     body: content.body,
     passengerName: passenger.fullName,
-    footer: footerFor(context),
+    footer: footerFor(context, langOf(recipient.lang)),
   });
 
   await deliver({

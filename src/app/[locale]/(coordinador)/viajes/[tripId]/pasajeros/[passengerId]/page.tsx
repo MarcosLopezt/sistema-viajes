@@ -84,7 +84,9 @@ export default async function PassengerDetailPage({
         priceOverrideReason={passenger.priceOverrideReason}
         values={{
           fullName: person.fullName ?? "",
+          birthDate: person.birthDate ? toIsoDate(person.birthDate) : "",
           nationalityCountry: person.nationalityCountry ?? "",
+          passportIssuingCountry: person.passportIssuingCountry ?? "",
           residenceCountry: person.residenceCountry ?? "",
           residenceAddress: person.residenceAddress ?? "",
           residenceCity: person.residenceCity ?? "",
@@ -94,7 +96,9 @@ export default async function PassengerDetailPage({
           passportExpiryDate: person.passportExpiryDate
             ? toIsoDate(person.passportExpiryDate)
             : "",
+          profession: person.profession ?? "",
           emergencyContactName: person.emergencyContactName ?? "",
+          emergencyContactRelationship: person.emergencyContactRelationship ?? "",
           emergencyContactPhone: person.emergencyContactPhone ?? "",
           medicalAssuranceCompany: person.medicalAssuranceCompany ?? "",
           medicalAssuranceId: person.medicalAssuranceId ?? "",
@@ -102,10 +106,21 @@ export default async function PassengerDetailPage({
           medicalAssuranceEmail: person.medicalAssuranceEmail ?? "",
           dietaryRestrictionsDetail: person.dietaryRestrictionsDetail ?? "",
           mobilityRestrictionsDetail: person.mobilityRestrictionsDetail ?? "",
+          takesMedicationDetail: person.takesMedicationDetail ?? "",
           otherHealthNotes: person.otherHealthNotes ?? "",
+          additionalInfo: person.additionalInfo ?? "",
         }}
         hasDietaryRestrictions={person.hasDietaryRestrictions}
         hasMobilityRestrictions={person.hasMobilityRestrictions}
+        // Salud emocional: viaja aparte de `values` justamente porque `values`
+        // es lo EDITABLE. Estar en otra prop es lo que hace evidente, al leer
+        // el archivo, que estos cuatro campos no entran al formulario.
+        sensitive={{
+          psychTreatment: person.psychTreatment,
+          psychTreatmentDetail: person.psychTreatmentDetail,
+          anxietyOrPanic: person.anxietyOrPanic,
+          anxietyOrPanicDetail: person.anxietyOrPanicDetail,
+        }}
         medicalFilePath={person.medicalAssuranceFileId}
       />
     </div>

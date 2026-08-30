@@ -8,6 +8,7 @@ import {
   buildPaymentsExport,
   buildRoomingExport,
 } from "@/lib/services/exports";
+import { SENSITIVE_PERSON_FIELDS } from "@/lib/domain/person";
 
 /**
  * Exportaciones a Excel, contra la base real.
@@ -36,6 +37,13 @@ let tripId: string;
 let coordinator: Actor;
 let ana: Actor;
 let ajeno: Actor;
+
+/**
+ * Los valores sensibles sembrados, con el sufijo adentro para que sean únicos
+ * y no puedan aparecer por casualidad en ninguna otra celda.
+ */
+const SENSITIVE_PSYCH = `terapia-semanal-${SUFFIX}`;
+const SENSITIVE_ANXIETY = `panico-en-vuelos-${SUFFIX}`;
 
 /** Lee una hoja del .xlsx sin descomprimir: las entradas van en STORE. */
 function sheetText(bytes: Uint8Array, sheet = 1): string {
@@ -119,6 +127,15 @@ beforeAll(async () => {
       hasDietaryRestrictions: true,
       dietaryRestrictionsDetail: "Celíaca",
       hasMobilityRestrictions: false,
+      // DATOS DE SALUD MENTAL, cargados a propósito.
+      //
+      // Sin esto, el test de más abajo pasaría por vacío: buscar un valor
+      // ausente en una planilla no prueba nada, y seguiría en verde el día que
+      // alguien agregue la columna. Ver SENSITIVE_VALUES.
+      psychTreatment: true,
+      psychTreatmentDetail: SENSITIVE_PSYCH,
+      anxietyOrPanic: true,
+      anxietyOrPanicDetail: SENSITIVE_ANXIETY,
     },
   });
 
@@ -288,5 +305,117 @@ describe("auditoría de la descarga", () => {
       where: { entity: "Export", entityId: tripId },
     });
     expect(after).toBe(before);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 🔴 Salud mental: NUNCA en una exportación
+// ---------------------------------------------------------------------------
+
+/**
+ * El test que pidió la fase 7, y el que importa de esta sección.
+ *
+ * ── Por qué está construido así ───────────────────────────────────────────
+ *
+ * La versión ingenua —"generar las tres planillas y verificar que no aparezca
+ * psychTreatmentDetail"— pasa aunque el sistema esté roto: si la persona de
+ * prueba tiene el campo vacío no hay nada que encontrar, y el test sigue en
+ * verde el día que alguien agregue la columna al export.
+ *
+ * Por eso son DOS MITADES, y las dos tienen que valer:
+ *
+ *   1. CONTROL POSITIVO — el dato está en la base y es encontrable. Se afirma
+ *      explícitamente, así que si alguien limpia el fixture el test falla en
+ *      vez de volverse decorativo.
+ *   2. La afirmación real — ese mismo valor no aparece en ninguna de las tres
+ *      planillas, ni como valor ni como nombre de columna.
+ *
+ * Se itera sobre SENSITIVE_PERSON_FIELDS, que vive en lib/domain/person.ts:
+ * agregar un campo sensible al modelo lo mete en este test automáticamente,
+ * sin que nadie tenga que acordarse de venir hasta acá.
+ */
+describe("🔴 los datos de salud mental no salen en ninguna exportación", () => {
+  it("CONTROL POSITIVO: el dato está cargado y es encontrable", async () => {
+    // Sin esta mitad, la de abajo no significa nada.
+    const person = await prisma.person.findUniqueOrThrow({
+      where: { id: ana.personId },
+      select: {
+        psychTreatment: true,
+        psychTreatmentDetail: true,
+        anxietyOrPanic: true,
+        anxietyOrPanicDetail: true,
+      },
+    });
+
+    expect(person.psychTreatment).toBe(true);
+    expect(person.psychTreatmentDetail).toBe(SENSITIVE_PSYCH);
+    expect(person.anxietyOrPanic).toBe(true);
+    expect(person.anxietyOrPanicDetail).toBe(SENSITIVE_ANXIETY);
+  });
+
+  it("las tres planillas se generan y traen a la pasajera", async () => {
+    // Segundo control positivo: si las planillas salieran vacías, la
+    // afirmación de ausencia también sería trivial.
+    actAs(coordinator);
+
+    const [passengers, payments, rooming] = await Promise.all([
+      buildPassengerListExport(tripId),
+      buildPaymentsExport(tripId),
+      buildRoomingExport(tripId),
+    ]);
+
+    for (const [name, result] of [
+      ["pasajeros", passengers],
+      ["pagos", payments],
+      ["rooming", rooming],
+    ] as const) {
+      expect(sheetText(result.bytes), `${name} tendría que nombrar a Ana`).toContain(
+        `ana ${SUFFIX}`,
+      );
+    }
+  });
+
+  it("NINGUNA de las tres planillas contiene los valores sensibles", async () => {
+    actAs(coordinator);
+
+    const sheets = await Promise.all(
+      [buildPassengerListExport, buildPaymentsExport, buildRoomingExport].map(
+        async (build) => sheetText((await build(tripId)).bytes),
+      ),
+    );
+    const names = ["pasajeros", "pagos", "rooming"] as const;
+
+    for (const [index, xml] of sheets.entries()) {
+      for (const value of [SENSITIVE_PSYCH, SENSITIVE_ANXIETY]) {
+        expect(
+          xml,
+          `la planilla de ${names[index]} contiene un dato de salud mental`,
+        ).not.toContain(value);
+      }
+    }
+  });
+
+  it("ninguna planilla nombra siquiera los campos sensibles", async () => {
+    // Cubre el caso de una columna agregada con el encabezado puesto pero sin
+    // datos cargados todavía: el valor no estaría, el nombre sí.
+    actAs(coordinator);
+
+    const sheets = await Promise.all(
+      [buildPassengerListExport, buildPaymentsExport, buildRoomingExport].map(
+        async (build) => sheetText((await build(tripId)).bytes).toLowerCase(),
+      ),
+    );
+
+    for (const xml of sheets) {
+      for (const field of SENSITIVE_PERSON_FIELDS) {
+        expect(xml, `una planilla nombra ${field}`).not.toContain(
+          field.toLowerCase(),
+        );
+      }
+      // Y los rótulos con los que se mostrarían en castellano e inglés.
+      for (const label of ["psicológic", "psiquiátric", "pánico", "ansiedad", "psychiatric", "panic", "anxiety"]) {
+        expect(xml, `una planilla nombra "${label}"`).not.toContain(label);
+      }
+    }
   });
 });

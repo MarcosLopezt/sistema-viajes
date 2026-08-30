@@ -939,6 +939,36 @@ Se guarda el **SHA-256** de `acción + identificador`, no el identificador en cl
 
 **La purga corre en el cron diario** (tarea `rateLimit`), con `purgeExpiredRateLimitHits()` en [`src/lib/auth/rate-limit.ts`](src/lib/auth/rate-limit.ts): borra todo lo anterior a la ventana más larga configurada. Deuda de la fase 1, saldada en la fase 5.
 
+#### `Trip_una_sola_captacion_abierta`: un índice que Prisma no conoce
+
+«Como máximo un viaje aceptando interesadas» lo hace cumplir un índice único **parcial**, escrito a mano en la migración de la fase 7:
+
+```sql
+CREATE UNIQUE INDEX "Trip_una_sola_captacion_abierta"
+    ON "Trip" ((TRUE))
+    WHERE "acceptingInterest";
+```
+
+Todas las filas con `acceptingInterest = true` producen la misma clave, así que la segunda choca. Las filas en `false` no entran al índice.
+
+**Por qué en la base y no en el servicio.** El servicio chequea antes, pero solo para dar un mensaje legible. Un `SELECT` seguido de un `UPDATE` es una condición de carrera de manual: dos requests simultáneos leen los dos que no hay ninguno abierto y escriben los dos. El día que eso pase, las interesadas se reparten entre dos viajes y nadie se entera hasta que falta media lista.
+
+**⚠️ La trampa.** Prisma no sabe expresar índices parciales, así que **no está en `schema.prisma`**. Consecuencia práctica: `prisma migrate dev` lo ve como drift y va a proponer un `DROP INDEX` en la próxima migración. **No se lo aceptes** — borrá esa línea del SQL generado. El mismo aviso está en el docblock de `Trip.acceptingInterest` y en `AGENTS.md`.
+
+Hay una segunda consecuencia, menos obvia: **es una regla global de la base, no del viaje**. Una suite de tests que quiera abrir su propio viaje tiene que cerrar el que estuviera abierto y devolverlo al terminar. `tests/integration/interest.test.ts` lo hace explícito.
+
+#### Salud mental: lo que la protege es una ausencia
+
+`psychTreatment` y `anxietyOrPanic` son la categoría de dato más sensible del sistema. Lo que garantiza que no terminen en un log **no es una regla escrita en ningún lado**: es que no están en la lista `COORDINATOR_EDITABLE` de [`src/lib/services/passengers.ts`](src/lib/services/passengers.ts).
+
+Todo campo de esa lista que un coordinador modifica genera una entrada de `AuditLog` con el valor viejo y el nuevo **en claro**. Eso es exactamente lo que se quiere para un número de pasaporte mal tipeado, y exactamente lo que no puede pasar con una nota de salud mental.
+
+**Por qué una ausencia y no un filtro.** Un `if` dentro del bucle de auditoría es una línea que alguien puede olvidar al agregar el próximo campo; una ausencia se sostiene sola. (Además, auditarlos «solo por el nombre» no funcionaría: `recordAudit` descarta las entradas donde nada cambió, así que una con los dos valores nulos se perdería en silencio.)
+
+**El costo, aceptado:** esos dos campos los corrige **únicamente la pasajera**. La ficha del coordinador los muestra en solo lectura y lo dice con todas las letras, para que no parezca un bug.
+
+La otra mitad de la protección es el test de [`tests/integration/exports.test.ts`](tests/integration/exports.test.ts), que recorre las tres planillas. Está escrito en **dos mitades** a propósito: primero afirma que el dato **está** en la base y es encontrable, y recién después que no aparece en ninguna planilla. Sin la primera mitad el test pasaría por vacío y seguiría en verde el día que alguien agregue la columna.
+
 ### Otras decisiones que quedaron en el código
 
 **Prorrateo de indirectos: `ROUND_UP` al centavo.** `Σ(indirectos) / budgetedPassengers` casi nunca da exacto. Redondear hacia arriba garantiza que lo prorrateado nunca sume menos que el costo real. El residuo (centavos) queda a favor del viaje y nunca llega al pasajero, porque el coordinador fija el precio final a mano. Ver `perPassengerShare()` en [`src/lib/domain/money.ts`](src/lib/domain/money.ts).
@@ -1291,7 +1321,7 @@ El motivo es que el aislamiento depende de que `passengerVisibilityFilter()` se 
 
 ### Verificado, no supuesto
 
-Los 44 tests de `tests/integration/` corren contra la base **real**. Lo único mockeado es la resolución de la sesión de Supabase; los guards, los servicios y las consultas se ejecutan de verdad. Un test de aislamiento con Prisma mockeado no prueba aislamiento: prueba que el mock hace lo que le dijimos.
+Los 211 tests de `tests/integration/` corren contra la base **real**. Lo único mockeado es la resolución de la sesión de Supabase; los guards, los servicios y las consultas se ejecutan de verdad. Un test de aislamiento con Prisma mockeado no prueba aislamiento: prueba que el mock hace lo que le dijimos.
 
 Escenario: dos viajes independientes con sus coordinadores y pasajeros. Se verifica que una pasajera no llega a los datos de otro pasajero del mismo viaje, a nada del otro viaje, ni a los costos de ninguno —tampoco pasando ids a mano.
 
@@ -1382,11 +1412,14 @@ src/
       (coordinador)/
         admin/             usuarios, roles y AuditLog          ← solo ADMIN
         viajes/            listado · nuevo · [tripId]
-          [tripId]/presupuesto      el wizard de 5 pasos
+          [tripId]/presupuesto      el wizard de 6 pasos
           [tripId]/pasajeros        lista · invitaciones · habitaciones
           [tripId]/pagos            estado del viaje · cola de revisión
           [tripId]/comunicaciones   redacción, envío y seguimiento
+          [tripId]/interesadas      el embudo y la conversión a pasajera
       (pasajero)/          inicio · mis-datos · mis-pagos · novedades
+      (publico)/interes    registro SIN SESIÓN. El destino del botón de Wix.
+      (interesada)/mi-viaje  lo único que ve una interesada del sistema
       invitacion/[token]/  canje del link de invitación
     api/
       auth/callback/       canje del código de los links de Supabase
@@ -1399,6 +1432,7 @@ src/
     layout/                nav, menú de usuario, selector de idioma
     passenger/             formulario de registro, subida, alerta de pasaporte
     payments/              badges del semáforo
+    public/                texto plano con saltos y links, sin HTML
     ui/                    primitivos de shadcn (re-themeados)
   i18n/                    routing, request, navigation
   lib/
@@ -1406,16 +1440,19 @@ src/
       policy.ts            la matriz de permisos, PURA y testeada
       guards.ts            resuelve la sesión y delega en policy
       passenger-bootstrap.ts   la única excepción al invariante de Passenger
-      rate-limit.ts        login, recuperación y canje de invitaciones
+      rate-limit.ts        login, recuperación, canje y registro público
       sync.ts              alta del User local al primer login
     db/                    cliente Prisma + pool de pg (max: 1)
     domain/                ── FUNCIONES PURAS. Sin base, sin framework.
       money · pricing · fx · passport · person · payments · calendar · date
+      storage-paths.ts     la convención de paths del bucket
+      rich-text.ts         tokeniza links; el sustituto del "texto enriquecido"
       xlsx.ts              escritor de .xlsx sin dependencias
     email/                 interfaz + adaptadores (Brevo · consola)
     services/              ── LÓGICA + AUTORIZACIÓN. Acá vive todo.
       trip · passengers · payments · communications · invitations
-      notifications · reminders · storage · fx · audit · admin · exports
+      interest · notifications · reminders · storage · fx · audit
+      admin · exports
     supabase/              clientes server / browser / admin / proxy
     validation/            schemas Zod compartidos cliente/servidor
     format.ts              formateo de montos y fechas (browser-safe)
@@ -1539,6 +1576,19 @@ Las transiciones son explícitas (`BORRADOR → ABIERTO → CERRADO → FINALIZA
 
 ## Qué hay hecho y qué no
 
+### Fase 7 — terminada
+
+La primera fase que cambia el **alcance** del sistema y no solo lo completa: aparece un actor nuevo (la interesada) y una zona pública sin sesión.
+
+- **Registro público en `/interes`**, destino del botón de Wix. Es la única superficie del sistema que crea usuarios sin invitación; la acotan un viaje abierto obligatorio y rate limiting en tres capas (IP, mail y un tope global diario). Identidad propia —serifa y paleta cálida— porque la mayoría llega desde Instagram: el corte con la zona interna, gris y densa, es la señal de que ya entraste.
+- **`Interest` sin `TripMember`**, que es el diseño entero del aislamiento. Una interesada no tiene fila en la tabla de autorización por viaje, así que `can()`, `requireTripRole()` y `passengerVisibilityFilter()` le dicen que no **sin una sola regla nueva**. Los datos personales van a `Person` desde el minuto cero, y por eso convertirla es crear el `Passenger` y nada más: no se copia ni un campo.
+- **Ocho campos nuevos en `Person`**, tres de ellos obligatorios (`birthDate`, `passportIssuingCountry`, `emergencyContactRelationship`). La etiqueta de `fullName` dice «como figura en el pasaporte», que es la causa número uno de pasajes emitidos mal.
+- **Datos de salud mental**, la categoría más sensible del sistema. Lo que los protege no es una regla escrita: **no están en `COORDINATOR_EDITABLE`**, así que no tienen por dónde llegar al `AuditLog`, y un test recorre las tres exportaciones con control positivo. La pantalla donde se piden explica por qué se piden y quién los ve.
+- **Un solo viaje captando a la vez**, garantizado por un índice único **parcial** de Postgres (`Trip_una_sola_captacion_abierta`) y no por una validación en código, que perdería contra dos requests simultáneos.
+- **Los textos de marca son dato, no código**: propuesta, bienvenida, qué sigue, firma de los mails y mensaje de «no hay viaje abierto» se editan desde el paso 6 del wizard. La firma va en el pie de **las siete** plantillas, en el idioma de quien las recibe.
+- **Qué sigue**, en pantalla: sin ese texto la interesada se registra y queda en el aire, que es la peor forma de perder a alguien que ya dijo que sí.
+- 36 tests de integración nuevos (211 en total) y 18 unitarios (407 en total), con la **mutación verificada** en los dos que importan: darle un `TripMember` a una interesada hace fallar seis, y filtrar un dato de salud mental a una planilla hace fallar dos.
+
 ### Fase 6 — terminada
 
 - **Exportaciones a Excel**: listado de pasajeros, estado de pagos y rooming list, con fecha y hora de generación en la primera fila y en el huso del viaje. Solo coordinador y admin; cada descarga queda en el `AuditLog`. El escritor de `.xlsx` es propio, sin dependencias: `lib/domain/xlsx.ts`.
@@ -1603,7 +1653,7 @@ Las transiciones son explícitas (`BORRADOR → ABIERTO → CERRADO → FINALIZA
 
 - Proyecto Next.js 16 con TypeScript estricto, Tailwind v4, shadcn re-themeado, ESLint, Prettier y Vitest.
 - Schema Prisma completo: 20 modelos, con las seis decisiones y las cinco entidades agregadas.
-- Auth con los tres roles: login, logout, recuperación de contraseña, rate limiting, sincronización con Supabase Auth. Sin registro abierto.
+- Auth con los tres roles: login, logout, recuperación de contraseña, rate limiting, sincronización con Supabase Auth. Sin registro abierto (la fase 7 agregó el registro público de interesadas, que es la única excepción).
 - Capa de autorización con 73 tests, incluidos los de aislamiento entre pasajeros.
 - i18n completo con verificación de paridad de claves.
 - Shells de coordinador y de pasajero, con la home del pasajero de 3 tarjetas.

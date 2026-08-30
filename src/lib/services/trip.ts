@@ -27,6 +27,7 @@ import {
   type TripGeneralInput,
   type TripPricesInput,
 } from "@/lib/validation/trip";
+import type { TripPublicTextsInput } from "@/lib/validation/interest";
 import type { TripStatus } from "@/generated/prisma/enums";
 
 /**
@@ -344,6 +345,151 @@ export async function setTripPrices(
       newValue: auditMoney(input.priceSingle),
     },
   ]);
+}
+
+// ------------------------ Zona pública del viaje ---------------------------
+
+export interface TripPublicSettings {
+  acceptingInterest: boolean;
+  infoForInterestedEs: string | null;
+  infoForInterestedEn: string | null;
+  welcomeMessageEs: string | null;
+  welcomeMessageEn: string | null;
+  nextStepMessageEs: string | null;
+  nextStepMessageEn: string | null;
+  emailSignatureEs: string | null;
+  emailSignatureEn: string | null;
+  closedMessageEs: string | null;
+  closedMessageEn: string | null;
+}
+
+/** Los textos de marca y el switch de captación, para el wizard. */
+export async function getTripPublicSettings(
+  tripId: string,
+): Promise<TripPublicSettings> {
+  await requireCapability(tripId, "trip:edit");
+
+  return prisma.trip.findUniqueOrThrow({
+    where: { id: tripId },
+    select: {
+      acceptingInterest: true,
+      infoForInterestedEs: true,
+      infoForInterestedEn: true,
+      welcomeMessageEs: true,
+      welcomeMessageEn: true,
+      nextStepMessageEs: true,
+      nextStepMessageEn: true,
+      emailSignatureEs: true,
+      emailSignatureEn: true,
+      closedMessageEs: true,
+      closedMessageEn: true,
+    },
+  });
+}
+
+/**
+ * Guarda los textos de marca.
+ *
+ * NO pasan por AuditLog. Es una decisión, no un olvido: son el texto de una
+ * propuesta comercial reescrito muchas veces, no un dato de una persona. Una
+ * entrada de auditoría por cada corrección de estilo enterraría bajo ruido las
+ * entradas que sí importan —quién le cambió el pasaporte a quién.
+ */
+export async function setTripPublicTexts(
+  tripId: string,
+  input: TripPublicTextsInput,
+): Promise<void> {
+  await requireCapability(tripId, "trip:edit");
+
+  await prisma.trip.update({
+    where: { id: tripId },
+    data: {
+      infoForInterestedEs: input.infoForInterestedEs ?? null,
+      infoForInterestedEn: input.infoForInterestedEn ?? null,
+      welcomeMessageEs: input.welcomeMessageEs ?? null,
+      welcomeMessageEn: input.welcomeMessageEn ?? null,
+      nextStepMessageEs: input.nextStepMessageEs ?? null,
+      nextStepMessageEn: input.nextStepMessageEn ?? null,
+      emailSignatureEs: input.emailSignatureEs ?? null,
+      emailSignatureEn: input.emailSignatureEn ?? null,
+      closedMessageEs: input.closedMessageEs ?? null,
+      closedMessageEn: input.closedMessageEn ?? null,
+    },
+  });
+}
+
+/**
+ * Abre o cierra la captación de interesadas de este viaje.
+ *
+ * ── El chequeo previo NO es la garantía ───────────────────────────────────
+ *
+ * Preguntar "¿ya hay otro abierto?" y después escribir es una condición de
+ * carrera de manual: dos coordinadoras apretando el switch al mismo tiempo
+ * leen las dos que no hay ninguno y escriben las dos. Lo que de verdad impide
+ * que haya dos viajes captando es el índice único parcial de Postgres
+ * (ver la migración de la fase 7).
+ *
+ * Este chequeo existe solo para dar un mensaje entendible en el caso normal,
+ * que es una sola persona apretando el switch con otro viaje ya abierto.
+ * El `catch` de abajo es el que cubre el caso de carrera: traduce el error del
+ * índice al mismo mensaje en vez de mostrar un stack trace de Postgres.
+ */
+export async function setAcceptingInterest(
+  tripId: string,
+  accepting: boolean,
+): Promise<void> {
+  const viewer = await requireCapability(tripId, "trip:edit");
+
+  if (accepting) {
+    const other = await prisma.trip.findFirst({
+      where: { acceptingInterest: true, id: { not: tripId } },
+      select: { name: true },
+    });
+
+    if (other) {
+      throw new TripStateError(
+        `"${other.name}" ya está recibiendo interesadas. Cerrá ese primero: solo puede haber uno abierto a la vez.`,
+      );
+    }
+  }
+
+  try {
+    await prisma.trip.update({
+      where: { id: tripId },
+      data: { acceptingInterest: accepting },
+    });
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      throw new TripStateError(
+        "Otro viaje ya está recibiendo interesadas. Actualizá la página.",
+      );
+    }
+    throw error;
+  }
+
+  await recordAudit(viewer.userId, [
+    {
+      entity: "Trip",
+      entityId: tripId,
+      field: "acceptingInterest",
+      oldValue: String(!accepting),
+      newValue: String(accepting),
+    },
+  ]);
+}
+
+/**
+ * ¿Es el error del índice único?
+ *
+ * Se mira el código `P2002` de Prisma y, por las dudas, el `23505` de
+ * Postgres: el índice es PARCIAL y está escrito en SQL crudo, así que Prisma
+ * no lo conoce y no hay garantía de que siempre lo envuelva en su propio
+ * error tipado.
+ */
+function isUniqueViolation(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const code = (error as { code?: unknown }).code;
+  return code === "P2002" || code === "23505";
 }
 
 // -------------------- Itinerario, hospedajes y costos ----------------------

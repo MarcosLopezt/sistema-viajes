@@ -168,7 +168,8 @@
       "itinerary": "Itinerario y hoteles",
       "directCosts": "Comidas y eventos",
       "indirectCosts": "Costos del grupo",
-      "prices": "Revisión y precios"
+      "prices": "Revisión y precios",
+      "publicZone": "Zona pública"
     },
     "panel": {
       "title": "Costo por pasajero",
@@ -301,6 +302,31 @@
       "statusLabel": "Estado",
       "changeStatus": "Cambiar estado",
       "readOnly": "Este viaje está finalizado: solo se puede consultar."
+    },
+    "publicZone": {
+      "acceptingTitle": "Inscripción de interesadas",
+      "acceptingOn": "Este viaje está recibiendo interesadas desde la página pública.",
+      "acceptingOff": "Este viaje no está recibiendo interesadas.",
+      "openIntake": "Abrir inscripción",
+      "closeIntake": "Cerrar inscripción",
+      "linkForWix": "Link para el botón de Wix",
+      "linkHelp": "Pegá esta dirección en el botón “más información” de la página.",
+      "openPublicPage": "Abrir la página pública",
+      "spanish": "Español",
+      "englishOptional": "Inglés (opcional)",
+      "infoTitle": "La propuesta del viaje",
+      "infoHelp": "Lo único que ve una interesada del viaje. Acá va la propuesta y el link al itinerario. Las direcciones web se convierten en links solas.",
+      "welcomeTitle": "Mensaje de bienvenida",
+      "welcomeHelp": "Lo que lee apenas se registra.",
+      "nextStepTitle": "Qué sigue",
+      "nextStepHelp": "El próximo paso concreto: a qué WhatsApp escribir y qué decir para coordinar la reunión.",
+      "signatureTitle": "Firma de los mails",
+      "signatureHelp": "Va al pie de todos los mails que manda el sistema.",
+      "closedTitle": "Cuando no hay viaje abierto",
+      "closedHelp": "Lo que ve alguien que entra a la página pública entre dos viajes.",
+      "save": "Guardar los textos",
+      "saveFailed": "No se pudieron guardar los textos.",
+      "toggleFailed": "No se pudo cambiar la inscripción."
     }
   },
   "invitations": {
@@ -385,7 +411,11 @@
       "mobilePhoneHelp": "Con código de país, por ejemplo +54 9 11 1234 5678.",
       "documentNumber": "Número de documento",
       "passportNumber": "Número de pasaporte",
-      "passportExpiryDate": "Vencimiento del pasaporte"
+      "passportExpiryDate": "Vencimiento del pasaporte",
+      "birthDate": "Fecha de nacimiento",
+      "passportIssuingCountry": "País que emitió el pasaporte",
+      "passportIssuingCountryHelp": "Puede no ser el mismo que tu nacionalidad, si tenés más de una ciudadanía.",
+      "profession": "Profesión u ocupación"
     },
     "step2": {
       "intro": "Esto solo lo usamos si pasa algo. Cuanto más completo, mejor.",
@@ -406,7 +436,23 @@
       "hasMobilityRestrictionsHelp": "Para organizar los traslados y elegir bien las visitas.",
       "mobilityRestrictionsDetail": "Contanos qué necesitás",
       "otherHealthNotes": "Algo más que debamos saber",
-      "otherHealthNotesHelp": "Opcional."
+      "otherHealthNotesHelp": "Opcional.",
+      "emergencyContactRelationship": "Qué es tuyo",
+      "emergencyContactRelationshipHelp": "Madre, pareja, hermana. Para saber con quién estamos hablando si tenemos que llamar.",
+      "takesMedication": "Tomo alguna medicación",
+      "takesMedicationHelp": "Para tenerlo a mano si hace falta.",
+      "takesMedicationDetail": "Contanos cuál",
+      "mentalHealthTitle": "Salud emocional",
+      "mentalHealthWhy": "Te lo preguntamos para poder acompañarte mejor durante el viaje, y para saber cómo actuar si algo pasa lejos de casa. Contestá solo lo que quieras compartir.",
+      "mentalHealthWhoSees": "Esto lo vemos únicamente las coordinadoras del viaje. No sale en ninguna planilla, no va en ningún mail y no lo ve ninguna otra pasajera.",
+      "psychTreatment": "Estoy haciendo tratamiento psicológico o psiquiátrico",
+      "psychTreatmentHelp": "Opcional. Nos ayuda a acompañarte mejor.",
+      "psychTreatmentDetail": "Contanos lo que quieras",
+      "anxietyOrPanic": "Tengo episodios de ansiedad o ataques de pánico",
+      "anxietyOrPanicHelp": "Saberlo nos ayuda a estar atentas y a no forzar situaciones.",
+      "anxietyOrPanicDetail": "Contanos lo que quieras",
+      "additionalInfo": "Algo más que quieras contarnos",
+      "additionalInfoHelp": "Opcional. Lo que no entró en ningún campo."
     },
     "step3": {
       "intro": "Nos falta el certificado de tu cobertura médica.",
@@ -473,7 +519,12 @@
     "priceOverrideSave": "Guardar precio",
     "priceOverrideClear": "Volver al precio de lista",
     "exportList": "Descargar listado",
-    "exportRooming": "Descargar rooming"
+    "exportRooming": "Descargar rooming",
+    "sensitiveTitle": "Salud emocional",
+    "sensitiveOnlyPassenger": "Estos datos solo puede editarlos la pasajera. No es un error: el contenido de estos campos no pasa por el registro de auditoría, y esa es la forma de garantizar que no quede escrito en ningún log.",
+    "sensitiveNotDeclared": "No declaró nada.",
+    "psychTreatment": "Tratamiento psicológico o psiquiátrico",
+    "anxietyOrPanic": "Ansiedad o ataques de pánico"
   },
   "rooms": {
     "title": "Habitaciones",
@@ -728,5 +779,49 @@
     "receivedOn": "Recibida el {date}",
     "seeAll": "Ver todas",
     "count": "{count, plural, =1 {1 novedad} other {# novedades}}"
+  },
+  "interest": {
+    "eyebrow": "Viaje grupal",
+    "closedTitle": "No hay viaje abierto en este momento",
+    "closedFallback": "Ahora mismo no estamos tomando inscripciones. Volvé a visitarnos pronto.",
+    "formTitle": "Dejanos tus datos",
+    "formSubtitle": "Creá tu cuenta y nos ponemos en contacto con vos.",
+    "fullName": "Nombre y apellido",
+    "email": "Email",
+    "password": "Contraseña",
+    "passwordHint": "Al menos 8 caracteres.",
+    "residenceCountry": "País donde vivís",
+    "phone": "Teléfono",
+    "phoneHint": "Opcional, con código de país.",
+    "submit": "Quiero más información",
+    "submitting": "Enviando…",
+    "doneTitle": "Listo",
+    "doneFallback": "Recibimos tus datos. Nos vamos a poner en contacto con vos.",
+    "nextStepTitle": "Qué sigue",
+    "goToLogin": "Iniciar sesión",
+    "noInfoYet": "Todavía no hay información cargada para este viaje."
+  },
+  "interests": {
+    "title": "Interesadas",
+    "subtitle": "El embudo, desde que se anotan hasta que se suman al viaje.",
+    "empty": "Todavía no se anotó nadie.",
+    "noName": "Sin nombre",
+    "noPhone": "No dejó teléfono",
+    "signedUpOn": "Se anotó el {date}",
+    "meetingDone": "Ya tuvimos la reunión",
+    "convert": "Convertir en pasajera",
+    "confirmConvert": "Confirmar",
+    "cancel": "Cancelar",
+    "alreadyConverted": "Ya es pasajera de este viaje.",
+    "alreadyPassenger": "Ya está en la lista de pasajeras.",
+    "actionFailed": "No se pudo guardar el cambio.",
+    "status": {
+      "REGISTRADA": "Se anotó",
+      "EN_CONVERSACION": "En conversación",
+      "CONVERTIDA": "Convertida",
+      "DESCARTADA": "Descartada"
+    },
+    "notes": "Notas",
+    "notesPlaceholder": "Notas para ustedes. La interesada no las ve."
   }
 }

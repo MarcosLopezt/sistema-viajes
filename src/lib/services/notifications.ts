@@ -48,6 +48,8 @@ export interface TripEmailContext {
   tripName: string;
   /** A quién contesta el pasajero si aprieta "responder". */
   replyTo: { name: string | null; email: string } | null;
+  /** Firma editable de la escuela, por idioma. El EN cae al ES si falta. */
+  signature: { es: string | null; en: string | null };
 }
 
 /**
@@ -66,6 +68,8 @@ export async function tripEmailContext(
     select: {
       id: true,
       name: true,
+      emailSignatureEs: true,
+      emailSignatureEn: true,
       members: {
         where: { role: "COORDINADOR" },
         orderBy: { createdAt: "asc" },
@@ -88,14 +92,36 @@ export async function tripEmailContext(
       ? { name: coordinator.person?.fullName ?? null, email: coordinator.email }
       : null;
 
-  return { tripId: trip.id, tripName: trip.name, replyTo };
+  return {
+    tripId: trip.id,
+    tripName: trip.name,
+    replyTo,
+    signature: {
+      es: trip.emailSignatureEs,
+      en: trip.emailSignatureEn,
+    },
+  };
 }
 
-export function footerFor(context: TripEmailContext): EmailFooter {
+/**
+ * El pie, ya resuelto para el idioma del destinatario.
+ *
+ * Toma el idioma porque la firma es texto de marca y puede estar traducida.
+ * Cae al español cuando no hay versión en inglés, igual que el resto de los
+ * textos editables: mostrar el español es mejor que no firmar.
+ */
+export function footerFor(
+  context: TripEmailContext,
+  lang: EmailLang = "es",
+): EmailFooter {
+  const { es, en } = context.signature;
+  const signature = (lang === "en" ? en?.trim() || es?.trim() : es?.trim()) ?? null;
+
   return {
     tripName: context.tripName,
     replyToName: context.replyTo?.name ?? null,
     replyToEmail: context.replyTo?.email ?? null,
+    signature: signature || null,
   };
 }
 

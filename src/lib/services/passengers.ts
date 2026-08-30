@@ -69,10 +69,20 @@ const PERSON_LIST_FIELDS = {
   hasMobilityRestrictions: true,
 } as const;
 
-/** Campos que alimentan `isPersonComplete`. Se traen siempre juntos. */
+/**
+ * Campos que alimentan `isPersonComplete`. Se traen siempre juntos.
+ *
+ * Incluye `psychTreatment` y `anxietyOrPanic` —los BOOLEANOS, no los
+ * detalles— porque de ellos depende si el detalle es un campo requerido, y sin
+ * eso el porcentaje de completitud sería incorrecto justo para quien declaró
+ * algo. Los detalles no hacen falta acá: `isFilled()` los evalúa solo cuando
+ * el booleano está en true, y en ese caso quien llame ya trae la ficha entera.
+ */
 const PERSON_COMPLETENESS_FIELDS = {
   fullName: true,
+  birthDate: true,
   nationalityCountry: true,
+  passportIssuingCountry: true,
   residenceCountry: true,
   residenceAddress: true,
   residenceCity: true,
@@ -81,6 +91,7 @@ const PERSON_COMPLETENESS_FIELDS = {
   passportNumber: true,
   passportExpiryDate: true,
   emergencyContactName: true,
+  emergencyContactRelationship: true,
   emergencyContactPhone: true,
   medicalAssuranceCompany: true,
   medicalAssuranceId: true,
@@ -90,7 +101,42 @@ const PERSON_COMPLETENESS_FIELDS = {
   dietaryRestrictionsDetail: true,
   hasMobilityRestrictions: true,
   mobilityRestrictionsDetail: true,
+  takesMedication: true,
+  takesMedicationDetail: true,
+  psychTreatment: true,
+  psychTreatmentDetail: true,
+  anxietyOrPanic: true,
+  anxietyOrPanicDetail: true,
   medicalAssuranceFileId: true,
+} as const;
+
+/**
+ * TODOS los campos de la ficha, enumerados uno por uno.
+ *
+ * ── Por qué no `person: true` ─────────────────────────────────────────────
+ *
+ * Hasta la fase 7 `getPassenger()` traía la Person entera con `person: true`.
+ * Funcionaba, y la autorización estaba bien puesta: `requirePassengerAccess()`
+ * garantiza que solo lleguen acá la propia pasajera, las coordinadoras del
+ * viaje y un admin.
+ *
+ * Lo que cambió es lo que hay adentro de la tabla. Con datos de salud mental
+ * en Person, un `select *` significa que la próxima columna sensible que
+ * alguien agregue al modelo sale publicada hacia todos los llamadores de esta
+ * función sin que nadie lo haya decidido. La lista explícita convierte esa
+ * decisión en una línea de diff que se ve en la revisión.
+ *
+ * Si agregás una columna a Person y no aparece en la ficha, este es el lugar.
+ */
+const PERSON_FULL_FIELDS = {
+  ...PERSON_COMPLETENESS_FIELDS,
+  id: true,
+  profession: true,
+  otherHealthNotes: true,
+  additionalInfo: true,
+  preferredLanguage: true,
+  createdAt: true,
+  updatedAt: true,
 } as const;
 
 // ------------------------------ Listado ------------------------------------
@@ -217,7 +263,9 @@ export async function getPassenger(passengerId: string) {
       isCoordinator: true,
       priceOverride: true,
       priceOverrideReason: true,
-      person: true,
+      // Lista explícita, no `person: true`. El porqué está en el docblock de
+      // PERSON_FULL_FIELDS: acá adentro ahora hay datos de salud mental.
+      person: { select: PERSON_FULL_FIELDS },
       room: {
         select: {
           id: true,
@@ -408,9 +456,35 @@ export async function attachMedicalFile(
 // --------------------------- Edición por el coordinador --------------------
 
 /** Campos que el coordinador puede editar de un pasajero. */
+/**
+ * Qué puede corregirle un coordinador a un pasajero.
+ *
+ * ── Lo que NO está en esta lista, y por qué ───────────────────────────────
+ *
+ * `psychTreatmentDetail` y `anxietyOrPanicDetail` NO están, a propósito.
+ *
+ * Cada campo de esta lista que cambia genera una entrada de AuditLog con el
+ * valor viejo y el nuevo EN CLARO (ver `updatePersonByCoordinator`). Eso es
+ * exactamente lo que queremos para un número de pasaporte mal tipeado, y
+ * exactamente lo que no puede pasar con una nota de salud mental: el texto
+ * terminaría persistido en una tabla que nadie piensa como contenedora de
+ * datos personales, y la regla es que esos datos no van a un log nunca.
+ *
+ * Se resolvió sacándolos de la lista y no filtrándolos dentro del bucle
+ * porque un filtro es una línea que alguien puede olvidar al agregar el
+ * próximo campo; una ausencia se sostiene sola. (Además, auditarlos "solo por
+ * nombre" no funcionaría: `recordAudit` descarta las entradas donde nada
+ * cambió, así que una con los dos valores nulos se perdería en silencio.)
+ *
+ * Consecuencia aceptada: esos dos campos los corrige ÚNICAMENTE la pasajera.
+ * La pantalla del coordinador lo dice con todas las letras para que no
+ * parezca un error.
+ */
 const COORDINATOR_EDITABLE = [
   "fullName",
+  "birthDate",
   "nationalityCountry",
+  "passportIssuingCountry",
   "residenceCountry",
   "residenceAddress",
   "residenceCity",
@@ -418,7 +492,9 @@ const COORDINATOR_EDITABLE = [
   "documentNumber",
   "passportNumber",
   "passportExpiryDate",
+  "profession",
   "emergencyContactName",
+  "emergencyContactRelationship",
   "emergencyContactPhone",
   "medicalAssuranceCompany",
   "medicalAssuranceId",
@@ -426,7 +502,9 @@ const COORDINATOR_EDITABLE = [
   "medicalAssuranceEmail",
   "dietaryRestrictionsDetail",
   "mobilityRestrictionsDetail",
+  "takesMedicationDetail",
   "otherHealthNotes",
+  "additionalInfo",
 ] as const;
 
 /**
@@ -452,12 +530,19 @@ export async function updatePersonByCoordinator(
   const entries: AuditEntry[] = [];
   const data: Record<string, unknown> = {};
 
+  // Las columnas @db.Date llegan del formulario como "AAAA-MM-DD" y hay que
+  // convertirlas. Es un CONJUNTO y no una comparación contra un solo nombre:
+  // cuando la fase 7 sumó birthDate a los campos editables, la versión con
+  // `field === "passportExpiryDate"` habría intentado escribir un string en
+  // una columna de fecha.
+  const DATE_FIELDS = new Set(["passportExpiryDate", "birthDate"]);
+
   for (const field of COORDINATOR_EDITABLE) {
     if (!(field in changes)) continue;
 
     const raw = (changes as Record<string, unknown>)[field];
     const next =
-      field === "passportExpiryDate" && typeof raw === "string" && raw !== ""
+      DATE_FIELDS.has(field) && typeof raw === "string" && raw !== ""
         ? new Date(`${raw}T00:00:00.000Z`)
         : (raw ?? null);
 
@@ -525,21 +610,31 @@ export async function getRecentCoordinatorEdits(
   return logs.map((log) => ({ field: log.field, at: log.createdAt }));
 }
 
-// --------------------------- Alta desde la invitación -----------------------
+// ------------------------------ Altas ---------------------------------------
 
 /**
- * Las dos funciones de esta sección son las ÚNICAS de este módulo que no
- * exigen una sesión, y eso es deliberado.
+ * Las funciones de esta sección son las ÚNICAS de este módulo que no exigen
+ * una sesión, y eso es deliberado.
  *
- * Corren durante el canje de una invitación, que es el momento exacto en que
- * todavía no hay Passenger contra el cual autorizar: la autorización de ese
- * flujo es el token, que `invitations.ts` valida (vigente, no revocado, no
- * usado) antes de llamar acá. Agregar un `requirePassengerAccess` sería pedir
- * permiso sobre una fila que estamos por crear.
+ * Corren durante un ALTA, que es el momento exacto en que todavía no hay
+ * Passenger contra el cual autorizar. Pedir `requirePassengerAccess` sería
+ * pedir permiso sobre una fila que estamos por crear. La autorización de cada
+ * flujo está antes de llegar acá, y es distinta en cada uno:
  *
- * Viven acá y no en `invitations.ts` porque Passenger y Person se tocan desde
- * un solo módulo. Que el alta sea la excepción al guard no la convierte en
- * excepción a esa regla.
+ *   · canje de invitación → el token, que `invitations.ts` valida (vigente,
+ *     no revocado, no usado).
+ *   · registro público    → no hay ninguna, porque no hay a quién pedírsela:
+ *     es una persona anónima anotándose. Lo que la acota es el rate limiting
+ *     y que exista un viaje aceptando (ver `interest.ts`).
+ *
+ * Que no haya guard NO las hace inseguras: ninguna LEE datos de nadie. Crean
+ * una fila nueva y devuelven su id. El invariante que protege
+ * `passengerVisibilityFilter()` es sobre lecturas, y acá no hay ninguna.
+ *
+ * Viven acá y no en `invitations.ts` ni en `interest.ts` porque Passenger y
+ * Person se tocan desde un solo módulo. Que el alta sea la excepción al guard
+ * no la convierte en excepción a esa regla — y por eso `check:layers` sigue
+ * pasando sin agregarle un archivo más a la lista de permitidos.
  */
 
 /**
@@ -555,6 +650,106 @@ export async function createBlankPerson(): Promise<string> {
     select: { id: true },
   });
   return person.id;
+}
+
+/**
+ * Crea la Person de alguien que se registra desde la zona pública.
+ *
+ * No está vacía como la del canje porque el formulario público YA pide tres
+ * cosas que son campos de Person: cómo se llama, dónde vive y su teléfono.
+ * Guardarlas en otro lado y copiarlas al convertir serían dos fuentes de
+ * verdad para "cómo se llama"; guardarlas acá desde el minuto cero significa
+ * que convertirla a pasajera es crear el Passenger y nada más, y que llega al
+ * formulario de 3 pasos con esos campos ya cargados.
+ *
+ * Es un alta, no una lectura: no hay ficha de nadie que filtrar. Ver el
+ * docblock de la sección.
+ *
+ * Recibe el cliente transaccional del llamador —y no abre el suyo— porque la
+ * Person, el User y la Interest son un solo hecho. Si la Person se creara
+ * aparte y `user.create` fallara después (por ejemplo, dos formularios con el
+ * mismo mail al mismo tiempo), quedaría una Person huérfana: sin usuario, sin
+ * pasajero y sin nadie que la borre. Son datos personales de alguien que,
+ * hasta donde el sistema sabe, nunca terminó de registrarse.
+ */
+export async function createPersonForSignup(
+  tx: Prisma.TransactionClient,
+  input: {
+    fullName: string;
+    residenceCountry: string;
+    mobilePhone: string | null;
+    preferredLanguage: "ES" | "EN";
+  },
+): Promise<string> {
+  const person = await tx.person.create({
+    data: {
+      fullName: input.fullName,
+      residenceCountry: input.residenceCountry,
+      mobilePhone: input.mobilePhone,
+      preferredLanguage: input.preferredLanguage,
+    },
+    select: { id: true },
+  });
+  return person.id;
+}
+
+/**
+ * De estas personas, cuáles YA son pasajeras de este viaje.
+ *
+ * La usa el listado de interesadas para no ofrecer "convertir" dos veces sobre
+ * la misma persona. Vive acá y no en `interest.ts` porque consulta Passenger, y
+ * esa tabla se toca desde un solo módulo.
+ *
+ * Devuelve `personId`s, no fichas: es exactamente la misma clase de dato que
+ * devuelve `passenger-bootstrap.ts` y por la misma razón. Sin datos personales
+ * no hay nada que filtrar, así que no hace falta un ViewerContext acá —
+ * la autorización la puso el llamador con `requireCapability(interest:manage)`
+ * antes de armar la lista.
+ */
+export async function listEnrolledPersonIds(
+  tripId: string,
+  personIds: readonly string[],
+): Promise<string[]> {
+  if (personIds.length === 0) return [];
+
+  const rows = await prisma.passenger.findMany({
+    where: { tripId, personId: { in: [...personIds] } },
+    select: { personId: true },
+  });
+
+  return rows.map((row) => row.personId);
+}
+
+/**
+ * Da de alta el Passenger de una interesada que se convierte, dentro de la
+ * transacción del llamador.
+ *
+ * Mismo `upsert` y misma razón que el alta por invitación: si la coordinadora
+ * aprieta dos veces, la segunda no duplica el pasajero ni le pisa el estado.
+ *
+ * Recibe el cliente transaccional porque convertir son tres escrituras que
+ * tienen que pasar juntas o no pasar: el Passenger, el TripMember que le da
+ * acceso al viaje, y el paso de la Interest a CONVERTIDA. Si el Passenger se
+ * creara aparte y algo fallara después, quedaría una pasajera que el embudo
+ * sigue contando como interesada sin convertir.
+ */
+export async function enrollPassengerFromInterest(
+  tx: Prisma.TransactionClient,
+  input: { tripId: string; personId: string; roomType: RoomType },
+): Promise<{ id: string }> {
+  return tx.passenger.upsert({
+    where: {
+      tripId_personId: { tripId: input.tripId, personId: input.personId },
+    },
+    update: {},
+    create: {
+      tripId: input.tripId,
+      personId: input.personId,
+      roomType: input.roomType,
+      status: "INVITADO",
+    },
+    select: { id: true },
+  });
 }
 
 /**
