@@ -4,6 +4,12 @@ import { randomUUID } from "node:crypto";
 import { requirePassengerAccess } from "@/lib/auth/guards";
 import { ForbiddenError } from "@/lib/auth/errors";
 import { createSupabaseAdminClient, storageBucket } from "@/lib/supabase/admin";
+import {
+  buildStoragePath,
+  isInsidePassengerFolder,
+  passengerFolder,
+  type StorageFileKind,
+} from "@/lib/domain/storage-paths";
 
 /**
  * Archivos privados: certificados de cobertura médica y, más adelante,
@@ -49,7 +55,8 @@ export class StorageError extends Error {
   }
 }
 
-export type FileKind = "cobertura-medica" | "comprobante-pago";
+/** Alias del tipo de dominio: los valores viven junto a la convención de paths. */
+export type FileKind = StorageFileKind;
 
 export const MAX_UPLOAD_BYTES = MAX_BYTES;
 export const ACCEPTED_MIME_TYPES = Object.keys(ALLOWED_MIME);
@@ -99,7 +106,7 @@ export async function createSignedUpload(
   assertDeclared(contentType, size);
 
   const extension = ALLOWED_MIME[contentType]!;
-  const path = `${tripId}/${passengerId}/${kind}-${randomUUID()}.${extension}`;
+  const path = buildStoragePath(tripId, passengerId, kind, randomUUID(), extension);
 
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin.storage
@@ -131,8 +138,10 @@ export async function confirmUpload(
 
   // La path tiene que caer dentro de la carpeta de este pasajero: sin este
   // chequeo se podría "confirmar" el archivo de otro y quedárselo.
-  const expectedPrefix = `${tripId}/${passengerId}/`;
-  if (!path.startsWith(expectedPrefix) || path.includes("..")) {
+  if (!isInsidePassengerFolder(path, tripId, passengerId)) {
+    console.warn(
+      `[storage] subida rechazada: la path no cae en ${passengerFolder(tripId, passengerId)}`,
+    );
     throw new ForbiddenError();
   }
 
@@ -179,7 +188,27 @@ export async function createSignedDownloadUrl(
 ): Promise<string> {
   const { tripId } = await requirePassengerAccess(passengerId, "view");
 
-  if (!path.startsWith(`${tripId}/${passengerId}/`) || path.includes("..")) {
+  // ── Las dos causas de un 404, separadas en el log ──────────────────────
+  //
+  // Quien pide el archivo ve el MISMO 404 en los dos casos, y eso es
+  // deliberado: un 403 le confirmaría a alguien que ese pago existe. Pero del
+  // lado del servidor las dos situaciones no se parecen en nada, y sin
+  // distinguirlas el próximo diagnóstico arranca de cero.
+  //
+  //   PATH_FUERA_DE_CARPETA  la path guardada no respeta la convención, o
+  //                          alguien está pidiendo el archivo de otro. Es un
+  //                          problema de DATOS o un intento de acceso.
+  //   OBJETO_INEXISTENTE     la path está bien pero el archivo no está en el
+  //                          bucket. Es un problema de STORAGE: subida
+  //                          abandonada, borrado manual, o una restauración
+  //                          de la base sin los archivos.
+  //
+  // Se loguean tripId y passengerId, que son ids internos, nunca datos de la
+  // persona.
+  if (!isInsidePassengerFolder(path, tripId, passengerId)) {
+    console.warn(
+      `[storage] PATH_FUERA_DE_CARPETA · esperaba ${passengerFolder(tripId, passengerId)} · pasajero ${passengerId}`,
+    );
     throw new ForbiddenError();
   }
 
@@ -189,6 +218,9 @@ export async function createSignedDownloadUrl(
     .createSignedUrl(path, DOWNLOAD_TTL_SECONDS);
 
   if (error || !data) {
+    console.warn(
+      `[storage] OBJETO_INEXISTENTE · path "${path}" · bucket "${storageBucket()}" · ${error?.message ?? "sin datos"}`,
+    );
     throw new StorageError("No pudimos abrir el archivo.", "FALLO");
   }
 
