@@ -799,7 +799,8 @@
     "doneFallback": "Recibimos tus datos. Nos vamos a poner en contacto con vos.",
     "nextStepTitle": "Qué sigue",
     "goToLogin": "Iniciar sesión",
-    "noInfoYet": "Todavía no hay información cargada para este viaje."
+    "noInfoYet": "Todavía no hay información cargada para este viaje.",
+    "nextStepFallback": "Nos vamos a poner en contacto con vos para coordinar una charla y contarte todo."
   },
   "interests": {
     "title": "Interesadas",

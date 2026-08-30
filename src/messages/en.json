@@ -799,7 +799,8 @@
     "doneFallback": "We've got your details. We'll be in touch with you.",
     "nextStepTitle": "What happens next",
     "goToLogin": "Sign in",
-    "noInfoYet": "There's no information for this trip yet."
+    "noInfoYet": "There's no information for this trip yet.",
+    "nextStepFallback": "We'll get in touch with you to arrange a chat and tell you everything."
   },
   "interests": {
     "title": "Enquiries",

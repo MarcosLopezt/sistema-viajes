@@ -53,9 +53,9 @@ export default async function InterestPage() {
         <PlainText text={trip.infoForInterested} className="text-lg" />
       ) : null}
 
+      {/* El encabezado de esta sección lo pone InterestForm, que es quien
+          sabe si todavía está pidiendo datos o ya los recibió. */}
       <div className="border-border border-t pt-8">
-        <h2 className="mb-1 text-2xl">{t("formTitle")}</h2>
-        <p className="text-muted-foreground mb-6">{t("formSubtitle")}</p>
         <InterestForm />
       </div>
     </div>

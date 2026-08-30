@@ -64,12 +64,14 @@ export default async function MyTripPage() {
           <p className="text-muted-foreground text-lg">{t("noInfoYet")}</p>
         )}
 
-        {view.nextStepMessage ? (
-          <section className="border-border bg-card rounded-lg border p-5">
-            <h2 className="mb-2 text-xl">{t("nextStepTitle")}</h2>
-            <PlainText text={view.nextStepMessage} />
-          </section>
-        ) : null}
+        {/* El MISMO bloque que vio al registrarse, y por la misma razón: si
+            cerró la pestaña en ese momento, este es el único lugar donde
+            vuelve a encontrar el número de WhatsApp. Se renderiza siempre,
+            con el mismo texto de reserva. */}
+        <section className="border-border bg-card rounded-lg border p-5">
+          <h2 className="mb-2 text-xl">{t("nextStepTitle")}</h2>
+          <PlainText text={view.nextStepMessage ?? t("nextStepFallback")} />
+        </section>
       </main>
     </div>
   );

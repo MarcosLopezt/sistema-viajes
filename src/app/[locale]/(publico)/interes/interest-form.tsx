@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/form/field";
+import { PlainText } from "@/components/public/plain-text";
 import { registerInterestAction } from "./actions";
 
 /**
@@ -81,6 +82,10 @@ export function InterestForm() {
   // ------------------------------------------------------- ya se registró
   if (done) {
     return (
+      // El encabezado de la sección vive ACÁ y no en la página justamente por
+      // esto: cuando el registro sale bien tiene que dejar de decir «dejanos
+      // tus datos». Con el título afuera, la pantalla quedaba diciendo
+      // «Dejanos tus datos» arriba de «Listo, recibimos tus datos».
       <div className="space-y-5">
         <div className="flex items-start gap-3">
           <CheckCircle2 className="text-primary mt-1 size-6 shrink-0" aria-hidden="true" />
@@ -88,20 +93,29 @@ export function InterestForm() {
             <h3 className="text-2xl">{t("doneTitle")}</h3>
             {/* Si las coordinadoras no escribieron el mensaje de bienvenida,
                 cae al del catálogo: nadie se queda sin saber que salió bien. */}
-            <p className="whitespace-pre-line text-lg">
-              {done.welcome ?? t("doneFallback")}
-            </p>
+            <PlainText
+              text={done.welcome ?? t("doneFallback")}
+              className="text-lg"
+            />
           </div>
         </div>
 
-        {/* QUÉ SIGUE. Sin esto se registra y queda en el aire, que es la peor
-            forma de perder a alguien que ya dijo que sí. */}
-        {done.nextStep ? (
-          <div className="border-border bg-card rounded-lg border p-4">
-            <h4 className="mb-1 font-semibold">{t("nextStepTitle")}</h4>
-            <p className="whitespace-pre-line">{done.nextStep}</p>
-          </div>
-        ) : null}
+        {/* ------------------------------------------------------ QUÉ SIGUE
+            Sin esto se registra y queda en el aire, que es la peor forma de
+            perder a alguien que ya dijo que sí.
+
+            Se renderiza SIEMPRE, con texto de reserva: si las coordinadoras
+            todavía no cargaron el suyo, un hueco en blanco la deja sin saber
+            qué hacer. El de reserva no puede traer el número de WhatsApp
+            —solo ellas lo saben— pero al menos dice que la van a contactar.
+
+            Va por PlainText y no por un <p>: el texto que ellas escriben
+            lleva un link de wa.me, y en un párrafo plano no se puede apretar.
+            Esta pantalla y la vista permanente tienen que mostrarlo igual. */}
+        <div className="border-border bg-card rounded-lg border p-4">
+          <h4 className="mb-1 font-semibold">{t("nextStepTitle")}</h4>
+          <PlainText text={done.nextStep ?? t("nextStepFallback")} />
+        </div>
 
         <Button asChild variant="outline">
           <Link href="/login">{t("goToLogin")}</Link>
@@ -113,18 +127,23 @@ export function InterestForm() {
   // -------------------------------------------------------- el formulario
   return (
     <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+      <div className="mb-6 space-y-1">
+        <h2 className="text-2xl">{t("formTitle")}</h2>
+        <p className="text-muted-foreground">{t("formSubtitle")}</p>
+      </div>
+
       {error ? (
         <Alert variant="destructive">
           <AlertTriangle aria-hidden="true" />
-          <AlertDescription className="space-y-2">
+          <AlertDescription className="space-y-3">
             <span>{error}</span>
+            {/* Botón y no un link de texto: es LA acción de quien ya tiene
+                cuenta, y un renglón subrayado de 24px de alto es un target
+                que se falla con el pulgar. Va en 44px como el resto. */}
             {alreadyRegistered ? (
-              <Link
-                href="/login"
-                className="block font-medium underline underline-offset-4"
-              >
-                {t("goToLogin")}
-              </Link>
+              <Button asChild variant="outline">
+                <Link href="/login">{t("goToLogin")}</Link>
+              </Button>
             ) : null}
           </AlertDescription>
         </Alert>

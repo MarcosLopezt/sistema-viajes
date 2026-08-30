@@ -35,7 +35,12 @@ export function LanguageSwitcher() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" aria-label={t("language")}>
+        {/* `default` (44px) y no `sm` (36px): este botón vive en las shells
+            del pasajero y de la interesada, que son pantallas de teléfono, y
+            el propio button.tsx reserva `sm` para las filas densas del panel
+            de escritorio. Era un target de 36px que se coló en las tres
+            shells; en el panel del coordinador 44px también está bien. */}
+        <Button variant="ghost" aria-label={t("language")}>
           <Languages aria-hidden="true" />
           {label[locale]}
         </Button>

@@ -644,6 +644,39 @@ describe("el registro público", () => {
     }
   });
 
+  it("QUÉ SIGUE llega a los DOS lugares, con el mismo texto", async () => {
+    // El requisito: si cierra la pestaña al registrarse, tiene que poder
+    // volver y encontrar el número de WhatsApp. Eso solo se cumple si el
+    // texto sale por los dos caminos, y son caminos distintos —uno lo
+    // devuelve el registro, el otro lo lee la vista permanente—, así que
+    // pueden divergir sin que nadie se entere.
+    const esperado = `Escribinos por WhatsApp ${SUFFIX}`;
+
+    // 1 · La pantalla inmediata, con lo que devuelve el registro.
+    const registro = await registerInterest({
+      fullName: `Dosveces ${SUFFIX}`,
+      email: email("dosveces"),
+      password: "una-contrasena-larga",
+      residenceCountry: "Chile",
+      phone: null,
+      locale: "es",
+    });
+    expect(registro.nextStepMessage).toBe(esperado);
+
+    // 2 · La vista permanente, al volver más tarde.
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { email: email("dosveces") },
+      select: { id: true },
+    });
+    actAs({ id: user.id, email: email("dosveces") });
+
+    const vista = await getMyInterestView("es");
+    expect(vista?.nextStepMessage).toBe(esperado);
+
+    // Y son EL MISMO texto, no dos que casualmente coinciden hoy.
+    expect(vista?.nextStepMessage).toBe(registro.nextStepMessage);
+  });
+
   it("si la escritura falla a mitad, la transacción no deja una Person huérfana", async () => {
     // Se hace fallar `tx.user.create` DESPUÉS de que la Person ya se creó
     // dentro de la transacción: Auth devuelve un id que la tabla local ya

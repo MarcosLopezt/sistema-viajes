@@ -32,7 +32,11 @@ export function PlainText({
                 href={token.href}
                 target="_blank"
                 rel="noreferrer noopener"
-                className="text-primary underline underline-offset-4"
+                // `break-all` no es cosmético: un link de Canva son ~46
+                // caracteres sin un solo espacio, y a 375px eso no entra en
+                // la columna. Sin esto la página entera scrollea de costado,
+                // que en un teléfono se siente como que está rota.
+                className="text-primary [overflow-wrap:anywhere] underline underline-offset-4"
               >
                 {token.value}
               </a>
