@@ -101,6 +101,14 @@ describe("pickLocalized", () => {
     expect(pickLocalized("Hola", null, "en")).toBe("Hola");
   });
 
+  it("sin español cargado, un lector en español ve el inglés", () => {
+    // El fallback va en LAS DOS DIRECCIONES. El español es el idioma canónico
+    // del sistema, pero acá lo que se decide es qué se muestra, y mostrar el
+    // otro idioma es mejor que dejar la pantalla en blanco por un campo mal
+    // cargado.
+    expect(pickLocalized(null, "Hello", "es")).toBe("Hello");
+  });
+
   it("un string en blanco cuenta como ausente", () => {
     // Un textarea vaciado deja "" y no null, y "" no es una traducción.
     expect(pickLocalized("Hola", "   ", "en")).toBe("Hola");

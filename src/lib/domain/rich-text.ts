@@ -71,11 +71,23 @@ export function tokenizePlainText(text: string): TextToken[] {
 }
 
 /**
- * Elige el texto en el idioma del lector, cayendo a español.
+ * Elige el texto en el idioma del lector, cayendo al otro idioma si falta.
  *
- * El inglés es opcional a propósito, igual que en Communication: una escuela
- * que todavía no tradujo su propuesta tiene que poder abrir la inscripción.
- * Mostrar el español es infinitamente mejor que mostrar un hueco.
+ * El fallback es en LAS DOS DIRECCIONES, y es a propósito. La convención del
+ * sistema es que el español manda y el inglés es opcional —igual que en
+ * Communication—, pero acá lo que se decide no es cuál es el idioma canónico
+ * sino qué se muestra en pantalla, y para eso la regla es una sola: mostrar el
+ * otro idioma es mejor que mostrar un hueco.
+ *
+ * Concretamente:
+ *
+ *   · un lector en inglés, sin inglés cargado, ve el español. Es el caso
+ *     esperado: una escuela que todavía no tradujo su propuesta tiene que
+ *     poder abrir la inscripción igual;
+ *   · un lector en español, sin español cargado, ve el inglés. Es el caso
+ *     raro —alguien vació el textarea del ES y dejó el EN—, y cae para el
+ *     mismo lado por la misma razón. La alternativa sería una pantalla en
+ *     blanco por un campo mal cargado.
  *
  * Un string en blanco cuenta como ausente: un textarea vaciado deja "" y no
  * null, y "" no es una traducción.
