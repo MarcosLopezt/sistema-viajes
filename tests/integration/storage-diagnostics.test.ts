@@ -27,6 +27,8 @@ const SUFFIX = randomUUID().slice(0, 8);
 
 let tripId: string;
 let passengerId: string;
+/** El segundo segmento de la path del bucket. Ver lib/domain/storage-paths.ts. */
+let personId: string;
 let coordinator: { id: string; email: string };
 
 beforeAll(async () => {
@@ -75,6 +77,7 @@ beforeAll(async () => {
     select: { id: true },
   });
   passengerId = passenger.id;
+  personId = passengerPerson.id;
 }, 60_000);
 
 afterAll(async () => {
@@ -114,7 +117,7 @@ describe("las dos causas de un 404 quedan separadas en el log", () => {
   it("una path que no respeta la convención se registra como PATH_FUERA_DE_CARPETA", async () => {
     actAs(coordinator);
 
-    // La forma que tenía el seed: el segundo segmento no es el passengerId.
+    // La forma que tenía el seed: el segundo segmento no es el id de la persona.
     const { error, warnings } = await captureWarnings(() =>
       createSignedDownloadUrl(passengerId, `${tripId}/certificados/ana.pdf`),
     );
@@ -130,7 +133,7 @@ describe("las dos causas de un 404 quedan separadas en el log", () => {
     // Path perfectamente formada, archivo que nunca se subió.
     const path = buildStoragePath(
       tripId,
-      passengerId,
+      personId,
       "comprobante-pago",
       "no-existe",
       "pdf",
@@ -152,8 +155,9 @@ describe("las dos causas de un 404 quedan separadas en el log", () => {
       createSignedDownloadUrl(passengerId, `${tripId}/otra-carpeta/x.pdf`),
     );
 
-    // Sin esto hay que ir a buscar el passengerId a la base para entender
-    // por qué se rechazó.
-    expect(warnings.join("\n")).toContain(`${tripId}/${passengerId}/`);
+    // El log dice la carpeta ESPERADA (por personId) y además el passengerId
+    // por el que se pidió, que es lo que uno tiene en la mano al diagnosticar.
+    expect(warnings.join("\n")).toContain(`${tripId}/${personId}/`);
+    expect(warnings.join("\n")).toContain(passengerId);
   });
 });

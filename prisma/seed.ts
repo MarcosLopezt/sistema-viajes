@@ -561,16 +561,16 @@ async function main() {
 
     ids[seed.key] = { personId: person.id, passengerId: passenger.id };
 
-    // El certificado se sube y se guarda DESPUÉS de crear el Passenger, y no
-    // antes: la path lleva el passengerId adentro, así que hasta acá no se
-    // podía armar. Es el mismo orden que sigue la aplicación de verdad —
-    // primero el objeto, después la fila— y usa la MISMA función que
-    // storage.ts para construirla, así el seed no puede divergir de la
-    // convención sin que se rompa el build.
+    // El objeto se sube ANTES de escribir la path en la fila: si la subida
+    // falla, la fila queda sin certificado en vez de con uno que no existe.
+    // Usa la MISMA función que storage.ts para construir la path, así el seed
+    // no puede divergir de la convención sin que se rompa el build.
+    //
+    // La carpeta lleva el personId, no el passengerId (ver storage-paths.ts).
     if (!seed.incomplete) {
       const certificatePath = buildStoragePath(
         trip.id,
-        passenger.id,
+        person.id,
         "cobertura-medica",
         `seed-${seed.key}`,
         "pdf",
@@ -661,14 +661,14 @@ async function main() {
   // crea sin comprobante en vez de con uno que no existe.
   const anaProofPath = buildStoragePath(
     trip.id,
-    ids["ana"]!.passengerId,
+    ids["ana"]!.personId,
     "comprobante-pago",
     "seed-ana-1",
     "pdf",
   );
   const betoProofPath = buildStoragePath(
     trip.id,
-    ids["beto"]!.passengerId,
+    ids["beto"]!.personId,
     "comprobante-pago",
     "seed-beto-1",
     "pdf",

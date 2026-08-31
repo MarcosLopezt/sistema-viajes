@@ -23,6 +23,7 @@
     "db:reset": "prisma migrate reset",
     "postinstall": "prisma generate",
     "check:db": "tsx scripts/check-db.ts",
+    "migrate:storage-paths": "tsx scripts/migrate-storage-paths.ts",
     "test:db": "vitest run --project integration"
   },
   "dependencies": {

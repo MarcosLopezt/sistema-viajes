@@ -1550,6 +1550,8 @@ Una regla en un README la viola el próximo que llega. Una regla en `verify` no.
 
 Es segura porque no decide nada y no devuelve ni un dato personal: solo ids. Quien la llama usa el resultado para **construir** el viewer, nunca para saltear una verificación. Si algún día necesita devolver algo que no sea un id, dejó de ser bootstrap y hay que rediscutirla.
 
+Devuelve `{ id, tripId, personId }`. El `personId` se sumó en la fase 8, cuando la convención de paths del bucket pasó a ser `{tripId}/{personId}/`: `services/storage.ts` autoriza por pasajero pero arma el prefijo por persona, así que necesita traducir uno en otro. Cabe dentro de la regla tal como está escrita —es un id, una clave foránea que no dice nada de nadie— y sale de la misma lectura que el guard ya hacía, sin una consulta nueva. Lo que seguiría fuera de la excepción es devolver un `fullName`, un `status` o cualquier columna que describa a la persona.
+
 
 ## El wizard de presupuesto
 

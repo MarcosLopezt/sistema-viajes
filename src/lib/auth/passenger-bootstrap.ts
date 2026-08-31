@@ -29,19 +29,41 @@ import { prisma } from "@/lib/db/prisma";
  *
  * Si algún día esta función necesita devolver un campo que no sea un id,
  * la excepción dejó de ser de bootstrap y hay que rediscutirla.
+ *
+ * ── El `personId` en la salida (fase 8) ───────────────────────────────────
+ *
+ * Al principio devolvía `{ id, tripId }`. Desde la fase 8 devuelve también el
+ * `personId`, y conviene que quede escrito por qué eso NO amplía la excepción.
+ *
+ * La convención de paths del bucket pasó a ser `{tripId}/{personId}/` (ver
+ * `lib/domain/storage-paths.ts`): la carpeta es de la PERSONA, porque la
+ * persona es la identidad que sobrevive a la conversión de interesada a
+ * pasajera. Entonces `services/storage.ts`, que autoriza por pasajero, tiene
+ * que poder traducir un `passengerId` al `personId` con el que se arma el
+ * prefijo. Ese es el único uso.
+ *
+ * Cabe dentro de la regla tal como está escrita —"no devuelve un dato
+ * personal: solo ids"— y `personId` es un id: es una clave foránea, no dice
+ * nada de nadie. Quien la recibe la usa para construir una path, igual que usa
+ * el `tripId`, nunca para saltear una verificación: el guard de acceso se
+ * resuelve antes y por separado, contra el Passenger.
+ *
+ * Lo que SÍ seguiría fuera de la excepción es devolver un `fullName`, un
+ * `status` o cualquier columna que describa a la persona o su situación. Ahí
+ * dejaría de ser bootstrap.
  */
 export async function bootstrapPassengerLookup(
   key: { tripId: string; personId: string } | { passengerId: string },
-): Promise<{ id: string; tripId: string } | null> {
+): Promise<{ id: string; tripId: string; personId: string } | null> {
   if ("passengerId" in key) {
     return prisma.passenger.findUnique({
       where: { id: key.passengerId },
-      select: { id: true, tripId: true },
+      select: { id: true, tripId: true, personId: true },
     });
   }
 
   return prisma.passenger.findUnique({
     where: { tripId_personId: { tripId: key.tripId, personId: key.personId } },
-    select: { id: true, tripId: true },
+    select: { id: true, tripId: true, personId: true },
   });
 }

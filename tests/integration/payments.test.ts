@@ -92,6 +92,8 @@ const email = (name: string) => `${name}-pagos-${SUFFIX}@test.invalid`;
 interface Actor {
   id: string;
   email: string;
+  /** El segundo segmento de sus paths en el bucket. Ver domain/storage-paths.ts. */
+  personId: string;
 }
 
 let tripA: string;
@@ -120,7 +122,7 @@ async function createActor(name: string): Promise<Actor> {
     },
     select: { id: true, email: true },
   });
-  return user;
+  return { ...user, personId: person.id };
 }
 
 async function createTrip(name: string, currency: "GBP" | "EUR" = "GBP") {
@@ -879,8 +881,10 @@ describe("un pasajero no ve comprobantes de otro · por HTTP", () => {
 
     expect(response.status).toBe(307);
     expect(response.headers.get("location")).toContain("bucket.test");
-    // Y la path firmada es la suya, no otra.
-    expect(storageState.signed.at(-1)).toContain(`/${anaId}/`);
+    // Y la path firmada es la suya, no otra. La carpeta del bucket va por
+    // personId, no por passengerId: es la identidad que sobrevive a la
+    // conversión de interesada a pasajera (ver domain/storage-paths.ts).
+    expect(storageState.signed.at(-1)).toContain(`/${ana.personId}/`);
   });
 
   it("el comprobante de otro pasajero del mismo viaje: 404", async () => {

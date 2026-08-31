@@ -147,11 +147,16 @@ export async function requireTripRole(
  *
  * Resuelve el viaje a partir del pasajero (no lo toma del cliente) para que no
  * se pueda pedir el pasajero de un viaje pasando el tripId de otro.
+ *
+ * Devuelve también el `personId`, que es con lo que `services/storage.ts` arma
+ * el prefijo de la carpeta del bucket (`{tripId}/{personId}/`). Es un id y sale
+ * de la misma lectura que ya hacía el guard: no hay una consulta nueva ni un
+ * dato personal nuevo. Ver la nota en `passenger-bootstrap.ts`.
  */
 export async function requirePassengerAccess(
   passengerId: string,
   mode: "view" | "edit" = "view",
-): Promise<{ viewer: ViewerContext; tripId: string }> {
+): Promise<{ viewer: ViewerContext; tripId: string; personId: string }> {
   const passenger = await bootstrapPassengerLookup({ passengerId });
 
   if (!passenger) throw new ForbiddenError();
@@ -164,5 +169,5 @@ export async function requirePassengerAccess(
 
   if (!allowed) throw new ForbiddenError();
 
-  return { viewer, tripId: passenger.tripId };
+  return { viewer, tripId: passenger.tripId, personId: passenger.personId };
 }

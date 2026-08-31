@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { prisma, disconnectDb } from "@/lib/db/prisma";
-import { isInsidePassengerFolder } from "@/lib/domain/storage-paths";
+import { isInsidePersonFolder } from "@/lib/domain/storage-paths";
 
 /**
  * Toda path guardada en la base tiene que pasar el guard de descarga.
@@ -8,7 +8,7 @@ import { isInsidePassengerFolder } from "@/lib/domain/storage-paths";
  * ── Por qué este test existe ──────────────────────────────────────────────
  *
  * El seed escribió `{tripId}/certificados/{key}.pdf` durante tres fases. La
- * forma correcta es `{tripId}/{passengerId}/...`, así que esos archivos eran
+ * forma correcta es `{tripId}/{personId}/...`, así que esos archivos eran
  * imposibles de abrir: el guard los rechazaba con ForbiddenError y el usuario
  * veía un 404 sin explicación.
  *
@@ -29,27 +29,29 @@ afterAll(async () => {
 });
 
 describe("las paths guardadas respetan la convención del bucket", () => {
-  it("todos los certificados médicos caen en la carpeta de su pasajero", async () => {
+  it("todos los certificados médicos caen en la carpeta de su persona", async () => {
     // Una Person puede viajar en varios viajes, y `medicalAssuranceFileId`
-    // vive en Person, no en Passenger: el certificado se carga una vez y se
-    // reutiliza. Así que la path tiene que caer en la carpeta de ALGUNO de
-    // sus pasajeros, no necesariamente del primero.
+    // vive en Person: el certificado se carga una vez y se reutiliza. El
+    // segundo segmento de la path es siempre el mismo —su propio id—, así que
+    // lo que varía es el viaje: tiene que caer en la carpeta de ALGUNO de los
+    // viajes en los que está anotada.
     const people = await prisma.person.findMany({
       where: { medicalAssuranceFileId: { not: null } },
       select: {
+        id: true,
         fullName: true,
         medicalAssuranceFileId: true,
-        passengers: { select: { id: true, tripId: true } },
+        passengers: { select: { tripId: true } },
       },
     });
 
     const malas = people.filter(
       (person) =>
         !person.passengers.some((passenger) =>
-          isInsidePassengerFolder(
+          isInsidePersonFolder(
             person.medicalAssuranceFileId!,
             passenger.tripId,
-            passenger.id,
+            person.id,
           ),
         ),
     );
@@ -59,24 +61,24 @@ describe("las paths guardadas respetan la convención del bucket", () => {
     ).toEqual([]);
   });
 
-  it("todos los comprobantes caen en la carpeta de su pasajero", async () => {
+  it("todos los comprobantes caen en la carpeta de su persona", async () => {
     const payments = await prisma.payment.findMany({
       where: { proofFileId: { not: null } },
       select: {
         id: true,
         proofFileId: true,
         plan: {
-          select: { passenger: { select: { id: true, tripId: true } } },
+          select: { passenger: { select: { personId: true, tripId: true } } },
         },
       },
     });
 
     const malas = payments.filter(
       (payment) =>
-        !isInsidePassengerFolder(
+        !isInsidePersonFolder(
           payment.proofFileId!,
           payment.plan.passenger.tripId,
-          payment.plan.passenger.id,
+          payment.plan.passenger.personId,
         ),
     );
 

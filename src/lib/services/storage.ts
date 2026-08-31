@@ -6,14 +6,18 @@ import { ForbiddenError } from "@/lib/auth/errors";
 import { createSupabaseAdminClient, storageBucket } from "@/lib/supabase/admin";
 import {
   buildStoragePath,
-  isInsidePassengerFolder,
-  passengerFolder,
+  isInsidePersonFolder,
+  personFolder,
   type StorageFileKind,
 } from "@/lib/domain/storage-paths";
 
 /**
- * Archivos privados: certificados de cobertura médica y, más adelante,
- * comprobantes de pago.
+ * Archivos privados: certificados de cobertura médica y comprobantes de pago.
+ *
+ * Todo cuelga de `{tripId}/{personId}/`. La carpeta es de la PERSONA y no del
+ * pasajero: es la identidad que sobrevive a la conversión de interesada a
+ * pasajera, así que el comprobante de la seña no cambia de lugar cuando la
+ * convierten. El detalle está en `lib/domain/storage-paths.ts`.
  *
  * ── Por qué la subida NO pasa por el servidor ─────────────────────────────
  *
@@ -93,8 +97,9 @@ export interface SignedUpload {
 /**
  * Autoriza una subida y decide dónde va el archivo.
  *
- * La path la arma el servidor a partir del pasajero: el cliente no puede
- * elegir sobreescribir el archivo de otra persona.
+ * La path la arma el servidor a partir de la persona dueña del pasajero: el
+ * cliente no puede elegir sobreescribir el archivo de otra. El `personId` sale
+ * del guard, nunca del input — es la misma lectura que ya autorizó el acceso.
  */
 export async function createSignedUpload(
   passengerId: string,
@@ -102,11 +107,11 @@ export async function createSignedUpload(
   contentType: string,
   size: number,
 ): Promise<SignedUpload> {
-  const { tripId } = await requirePassengerAccess(passengerId, "edit");
+  const { tripId, personId } = await requirePassengerAccess(passengerId, "edit");
   assertDeclared(contentType, size);
 
   const extension = ALLOWED_MIME[contentType]!;
-  const path = buildStoragePath(tripId, passengerId, kind, randomUUID(), extension);
+  const path = buildStoragePath(tripId, personId, kind, randomUUID(), extension);
 
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin.storage
@@ -134,13 +139,13 @@ export async function confirmUpload(
   passengerId: string,
   path: string,
 ): Promise<string> {
-  const { tripId } = await requirePassengerAccess(passengerId, "edit");
+  const { tripId, personId } = await requirePassengerAccess(passengerId, "edit");
 
-  // La path tiene que caer dentro de la carpeta de este pasajero: sin este
-  // chequeo se podría "confirmar" el archivo de otro y quedárselo.
-  if (!isInsidePassengerFolder(path, tripId, passengerId)) {
+  // La path tiene que caer dentro de la carpeta de esta persona: sin este
+  // chequeo se podría "confirmar" el archivo de otra y quedárselo.
+  if (!isInsidePersonFolder(path, tripId, personId)) {
     console.warn(
-      `[storage] subida rechazada: la path no cae en ${passengerFolder(tripId, passengerId)}`,
+      `[storage] subida rechazada: la path no cae en ${personFolder(tripId, personId)}`,
     );
     throw new ForbiddenError();
   }
@@ -186,7 +191,7 @@ export async function createSignedDownloadUrl(
   passengerId: string,
   path: string,
 ): Promise<string> {
-  const { tripId } = await requirePassengerAccess(passengerId, "view");
+  const { tripId, personId } = await requirePassengerAccess(passengerId, "view");
 
   // ── Las dos causas de un 404, separadas en el log ──────────────────────
   //
@@ -205,9 +210,9 @@ export async function createSignedDownloadUrl(
   //
   // Se loguean tripId y passengerId, que son ids internos, nunca datos de la
   // persona.
-  if (!isInsidePassengerFolder(path, tripId, passengerId)) {
+  if (!isInsidePersonFolder(path, tripId, personId)) {
     console.warn(
-      `[storage] PATH_FUERA_DE_CARPETA · esperaba ${passengerFolder(tripId, passengerId)} · pasajero ${passengerId}`,
+      `[storage] PATH_FUERA_DE_CARPETA · esperaba ${personFolder(tripId, personId)} · pasajero ${passengerId}`,
     );
     throw new ForbiddenError();
   }
@@ -237,14 +242,14 @@ export async function removeFile(path: string): Promise<void> {
   await admin.storage.from(storageBucket()).remove([path]);
 }
 
-/** Elimina todos los archivos de un pasajero. Para el borrado de datos. */
-export async function removePassengerFiles(
+/** Elimina todos los archivos de una persona en un viaje. Para el borrado de datos. */
+export async function removePersonFiles(
   tripId: string,
-  passengerId: string,
+  personId: string,
 ): Promise<number> {
   const admin = createSupabaseAdminClient();
   const bucket = storageBucket();
-  const directory = `${tripId}/${passengerId}`;
+  const directory = `${tripId}/${personId}`;
 
   const { data } = await admin.storage.from(bucket).list(directory);
   if (!data || data.length === 0) return 0;

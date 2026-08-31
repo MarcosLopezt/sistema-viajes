@@ -29,6 +29,14 @@ db:seed · verify (corre todo, incluida la suite de integración)
   excepción sea verificable por archivo — el resto de guards.ts no puede
   tocar la tabla. Si algún día necesita devolver algo que no sea un id,
   dejó de ser bootstrap: rediscutila, no la amplíes.
+  Devuelve { id, tripId, personId }. El personId se sumó en la fase 8 y
+  cabe en la regla: es un id, y con él services/storage.ts arma el prefijo
+  de la carpeta del bucket. Un fullName o un status NO cabrían.
+- Los archivos del bucket viven en {tripId}/{personId}/, nunca por
+  passengerId: la Person es la identidad que sobrevive a la conversión de
+  interesada a pasajera, así que el comprobante de la seña no se mueve.
+  La convención es una función pura (lib/domain/storage-paths.ts) y la
+  usan producción, el seed y los tests. No la dupliques.
 - Dinero: decimal.js, nunca float. NO uses Prisma.Decimal en código que
   comparten cliente y servidor (arrastra node:process).
 - El pg.Pool se construye en código con max: 1 y se cachea en globalThis.
