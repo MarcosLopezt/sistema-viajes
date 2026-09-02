@@ -25,8 +25,16 @@ mostrar el resultado, no avanzar sin confirmación. No commitear sin pedido.
   decisión ya tomada         → README.md
 No leas un documento que la tarea no necesita.
 
-Al cerrar una fase: actualizar SESION.md y TAREAS.md sin que lo pidan.
-Un SESION.md desactualizado es peor que no tenerlo.
+## Cuándo actualizar cada uno (sin que lo pidan)
+Señales observables, no "al cerrar una fase" — eso no se puede detectar:
+- Escribiste o modificaste código en este turno → actualizá SESION.md
+  antes de responder, aunque el trabajo haya quedado a medias. Sobre
+  todo si quedó a medias.
+- Vas a hacer un commit → actualizá TAREAS.md en el mismo commit.
+- El usuario escribe "fase N aprobada" → agregá esa entrada a
+  PROGRESO.md. Esa frase es la señal, no la infieras de otra cosa.
+Si no sabés si corresponde actualizar algo, actualizá SESION.md igual:
+es barato y es el que más duele desactualizado.
 
 ## Comandos
 dev · build · test · test:db · check:db · check:i18n · check:layers ·
