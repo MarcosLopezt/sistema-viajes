@@ -8,6 +8,7 @@ import {
 } from "./money";
 import {
   addCalendarDays,
+  addCalendarMonths,
   daysBetweenCalendarDates,
   maxCalendarDate,
   type CalendarDate,
@@ -118,6 +119,68 @@ export function splitIntoInstallments(
   return [...head, last];
 }
 
+/** Cuotas mínimas de un plan con seña: la seña, más una. */
+export const MIN_INSTALLMENTS_WITH_DEPOSIT = 2;
+
+/**
+ * Reparte un total en N cuotas donde la PRIMERA es la seña ya pagada.
+ *
+ * ── Por qué la seña es una cuota y no un pago aparte ──────────────────────
+ *
+ * Porque si no lo fuera, se cobraría dos veces.
+ *
+ * El total del plan es el precio del viaje. Si la seña quedara como un pago
+ * sin imputar, `derivePlan()` la trataría como CRÉDITO —que a propósito no se
+ * imputa solo— y las N cuotas seguirían sumando el precio entero. La pasajera
+ * vería que debe todo, incluido lo que ya pagó, con un crédito al costado que
+ * nadie le descontó. Eso no es un error de visualización: es el saldo.
+ *
+ * Haciéndola la cuota 1, la seña no se SUMA al total: ocupa su primer tramo.
+ * Lo que queda se reparte entre las demás, con la última absorbiendo la
+ * diferencia de redondeo, exactamente como en un plan sin seña. Y una vez
+ * armado así, `derivePlan()` no necesita saber que hubo una seña: ve una cuota
+ * cubierta por un pago confirmado, que es algo que ya sabe leer.
+ *
+ * El invariante es el mismo de siempre y el test lo verifica igual:
+ * `sum(splitWithDeposit(total, deposit, n)) === total`, exacto.
+ */
+export function splitWithDeposit(
+  total: MoneyInput,
+  deposit: MoneyInput,
+  count: number,
+): Decimal[] {
+  if (
+    !Number.isInteger(count) ||
+    count < MIN_INSTALLMENTS_WITH_DEPOSIT ||
+    count > MAX_INSTALLMENTS
+  ) {
+    throw new PaymentPlanError(
+      `Un plan con seña necesita entre ${MIN_INSTALLMENTS_WITH_DEPOSIT} y ${MAX_INSTALLMENTS} cuotas, recibido: ${count}`,
+      "CANTIDAD_CUOTAS",
+    );
+  }
+
+  const amount = roundToCents(total);
+  const head = roundToCents(deposit);
+
+  if (!head.isFinite() || head.lessThanOrEqualTo(0)) {
+    throw new PaymentPlanError(
+      `La seña tiene que ser un monto positivo, recibido: ${String(deposit)}`,
+      "MONTO",
+    );
+  }
+  if (head.greaterThanOrEqualTo(amount)) {
+    // Con la seña cubriendo el precio entero no hay plan que armar, y repartir
+    // cero entre las restantes daría cuotas de 0,00 que nadie sabe interpretar.
+    throw new PaymentPlanError(
+      `La seña (${head.toFixed(2)}) no puede cubrir el precio entero (${amount.toFixed(2)}).`,
+      "MONTO",
+    );
+  }
+
+  return [head, ...splitIntoInstallments(amount.minus(head), count - 1)];
+}
+
 export interface SuggestedDueDate {
   number: number;
   dueDate: CalendarDate;
@@ -175,6 +238,67 @@ export function suggestDueDates(
     dueDate,
     afterDeparture: dueDate >= tripStartDate,
   }));
+}
+
+/** Meses de separación admitidos entre cuotas cuando el plan arranca en la seña. */
+export const MIN_INTERVAL_MONTHS = 1;
+export const MAX_INTERVAL_MONTHS = 12;
+
+/**
+ * Vencimientos a intervalo fijo, arrancando el día en que se pagó la seña.
+ *
+ * Convive con `suggestDueDates()` en vez de reemplazarla: son dos preguntas
+ * distintas. Aquella reparte N cuotas en la ventana que queda hasta la salida;
+ * esta dice "una cada tantos meses", que es como lo piensan las coordinadoras
+ * cuando hubo seña — el default del negocio es seña más dos cuotas, cada tres
+ * meses.
+ *
+ * La cuota 1 vence el día de la transferencia de la seña. No es un vencimiento
+ * de verdad —ya está pagada antes de que el plan exista— pero deja el plan en
+ * orden cronológico y hace que el semáforo no la muestre nunca ni vencida ni
+ * próxima: `derivePlan()` la ve cubierta.
+ *
+ * Las que caen después de la salida NO se corrigen ni se esconden: vuelven
+ * marcadas con `afterDeparture`, igual que en el otro modo, y la pantalla lo
+ * advierte. Con seña en marzo, tres meses de intervalo y un viaje en julio, la
+ * tercera cuota cae pasada la partida — y eso es información para la
+ * coordinadora, que puede mover las fechas, no un error del generador.
+ */
+export function suggestDueDatesFromDeposit(
+  count: number,
+  depositDate: CalendarDate,
+  intervalMonths: number,
+  tripStartDate: CalendarDate,
+): SuggestedDueDate[] {
+  if (
+    !Number.isInteger(count) ||
+    count < MIN_INSTALLMENTS_WITH_DEPOSIT ||
+    count > MAX_INSTALLMENTS
+  ) {
+    throw new PaymentPlanError(
+      `Un plan con seña necesita entre ${MIN_INSTALLMENTS_WITH_DEPOSIT} y ${MAX_INSTALLMENTS} cuotas, recibido: ${count}`,
+      "CANTIDAD_CUOTAS",
+    );
+  }
+  if (
+    !Number.isInteger(intervalMonths) ||
+    intervalMonths < MIN_INTERVAL_MONTHS ||
+    intervalMonths > MAX_INTERVAL_MONTHS
+  ) {
+    throw new PaymentPlanError(
+      `El intervalo entre cuotas debe ser un entero entre ${MIN_INTERVAL_MONTHS} y ${MAX_INTERVAL_MONTHS} meses, recibido: ${intervalMonths}`,
+      "CANTIDAD_CUOTAS",
+    );
+  }
+
+  return Array.from({ length: count }, (_unused, index) => {
+    const dueDate = addCalendarMonths(depositDate, intervalMonths * index);
+    return {
+      number: index + 1,
+      dueDate,
+      afterDeparture: dueDate >= tripStartDate,
+    };
+  });
 }
 
 /** Cuotas cuyo vencimiento cae después de la salida. Alimenta la advertencia. */

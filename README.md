@@ -1419,12 +1419,13 @@ src/
           [tripId]/interesadas      el embudo y la conversión a pasajera
       (pasajero)/          inicio · mis-datos · mis-pagos · novedades
       (publico)/interes    registro SIN SESIÓN. El destino del botón de Wix.
-      (interesada)/mi-viaje  lo único que ve una interesada del sistema
+      (interesada)/mi-viaje  lo único que ve una interesada: propuesta y seña
       invitacion/[token]/  canje del link de invitación
     api/
       auth/callback/       canje del código de los links de Supabase
       comprobantes/[id]/   redirect firmado al comprobante (bucket privado)
       cron/daily/          recordatorios, alertas y envíos programados
+      senas/[depositId]/   redirect firmado al comprobante de una seña
       exportaciones/       descarga de los .xlsx
   components/              ── PRESENTACIÓN. Ni Prisma ni servicios.
     budget/                wizard, panel de costo en vivo y sus 5 pasos
@@ -1445,14 +1446,14 @@ src/
     db/                    cliente Prisma + pool de pg (max: 1)
     domain/                ── FUNCIONES PURAS. Sin base, sin framework.
       money · pricing · fx · passport · person · payments · calendar · date
-      storage-paths.ts     la convención de paths del bucket
+      storage-paths.ts     la convención de paths del bucket ({trip}/{person}/)
       rich-text.ts         tokeniza links; el sustituto del "texto enriquecido"
       xlsx.ts              escritor de .xlsx sin dependencias
     email/                 interfaz + adaptadores (Brevo · consola)
     services/              ── LÓGICA + AUTORIZACIÓN. Acá vive todo.
       trip · passengers · payments · communications · invitations
-      interest · notifications · reminders · storage · fx · audit
-      admin · exports
+      interest · deposits · notifications · reminders · storage · fx
+      audit · admin · exports
     supabase/              clientes server / browser / admin / proxy
     validation/            schemas Zod compartidos cliente/servidor
     format.ts              formateo de montos y fechas (browser-safe)
@@ -1465,6 +1466,7 @@ scripts/
   check-db.ts              diagnóstico de conexión y pooling
   backup-storage.ts        baja los objetos del bucket
   restore-storage.ts       los vuelve a subir
+  migrate-storage-paths.ts pasa el bucket de passengerId a personId (fase 8)
 tests/
   auth/policy.test.ts      matriz de permisos
   domain/                  passport · person · money · pricing · fx · xlsx …

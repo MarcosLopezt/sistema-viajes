@@ -383,6 +383,9 @@ export function BudgetWizard({
             passengerMix={passengerMix}
             savedPriceDouble={trip.priceDouble}
             savedPriceSingle={trip.priceSingle}
+            savedDepositAmount={trip.depositAmount}
+            savedInstallmentCount={trip.defaultInstallmentCount}
+            savedIntervalMonths={trip.installmentIntervalMonths}
             passengersWithActivePlan={passengersWithActivePlan}
             disabled={readOnly}
             onSave={async (prices) => {

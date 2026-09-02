@@ -395,6 +395,25 @@ async function main() {
         "Ahora mismo no tenemos ningún viaje abierto. Estamos preparando el próximo: escribinos y te avisamos cuando abramos las inscripciones.",
       closedMessageEn:
         "We don't have a trip open right now. We're preparing the next one: write to us and we'll let you know when sign-ups open.",
+      // La seña. El monto es plata y se carga en el paso 5; la condición y las
+      // instrucciones son textos de marca del paso 6. Igual que los de arriba,
+      // son de EJEMPLO: sin ellos la pantalla de la seña no aparece y no se
+      // puede mirar en desarrollo.
+      depositAmount: "500.00",
+      depositTermsEs:
+        "La seña de £500 reserva tu lugar en el viaje y NO es reembolsable.\n\n" +
+        "La única excepción es que el viaje se cancele por decisión de las coordinadoras: en ese caso te devolvemos el total.\n\n" +
+        "Si más adelante decidís no viajar, la seña no se devuelve y no se transfiere a otro viaje.",
+      depositTermsEn:
+        "The £500 deposit reserves your place on the trip and is NOT refundable.\n\n" +
+        "The only exception is if the trip is cancelled by decision of the coordinators: in that case we refund the full amount.\n\n" +
+        "If you later decide not to travel, the deposit is not returned and is not transferred to another trip.",
+      paymentInstructionsEs:
+        "Escribinos por WhatsApp antes de transferir: la cuenta cambia según el país desde el que pagues.\n\n" +
+        "Cuando la acordemos, subí el comprobante desde esta misma pantalla.",
+      paymentInstructionsEn:
+        "Message us on WhatsApp before transferring: the account depends on the country you're paying from.\n\n" +
+        "Once we've agreed on it, upload the receipt from this same screen.",
       stops: {
         create: [
           {
@@ -779,6 +798,7 @@ async function main() {
       status: "REGISTRADA" as const,
       meetingDone: false,
       notes: null,
+      deposit: null,
     },
     {
       email: "paula@ejemplo.test",
@@ -790,6 +810,9 @@ async function main() {
       status: "EN_CONVERSACION" as const,
       meetingDone: true,
       notes: "Tuvimos el Zoom el 12/08. Quiere venir con una amiga.",
+      // Cinco días esperando: el contador de la cola sale en ámbar, que es
+      // justo el tramo que hay que poder ver sin esperar cinco días.
+      deposit: { daysAgo: 5 },
     },
   ]) {
     const authId = await ensureAuthUser(seed.email);
@@ -815,7 +838,7 @@ async function main() {
       },
     });
 
-    await prisma.interest.create({
+    const interest = await prisma.interest.create({
       data: {
         userId: user.id,
         tripId: trip.id,
@@ -824,6 +847,56 @@ async function main() {
         notes: seed.notes,
       },
     });
+
+    // Paula ya transfirió y está esperando que la revisen. Es lo que hace que
+    // la cola de señas de la coordinadora muestre algo, incluido el contador
+    // de días de espera — por eso la fecha de creación se pisa hacia atrás.
+    //
+    // El comprobante se sube ANTES de escribir la fila y con la MISMA función
+    // de paths que usa producción: la carpeta va por personId, que es lo que
+    // hace que el archivo no se mueva cuando la conviertan en pasajera.
+    if (seed.deposit) {
+      const proofPath = buildStoragePath(
+        trip.id,
+        person.id,
+        "comprobante-pago",
+        `seed-sena-${seed.email.split("@")[0]}`,
+        "pdf",
+      );
+
+      const uploaded = await uploadSeedFile(
+        proofPath,
+        `Comprobante de sena - ${seed.fullName}`,
+      );
+
+      if (uploaded) {
+        const hace = new Date(Date.now() - seed.deposit.daysAgo * 86_400_000);
+
+        await prisma.depositProof.create({
+          data: {
+            interestId: interest.id,
+            amount: "500.00",
+            currency: "GBP",
+            amountInTripCurrency: "500.00",
+            transferDate: new Date("2026-08-28T00:00:00.000Z"),
+            proofFileId: proofPath,
+            // El texto que se le mostró ese día, copiado. Si las
+            // coordinadoras editan la condición, esta fila no se entera: es
+            // el registro de qué aceptó, no un puntero al texto vigente.
+            acceptedTermsText:
+              "La seña de £500 reserva tu lugar en el viaje y NO es reembolsable.\n\n" +
+              "La única excepción es que el viaje se cancele por decisión de las coordinadoras: en ese caso te devolvemos el total.\n\n" +
+              "Si más adelante decidís no viajar, la seña no se devuelve y no se transfiere a otro viaje.",
+            acceptedTermsLang: "ES",
+            acceptedAt: hace,
+            shownAmount: "500.00",
+            shownCurrency: "GBP",
+            status: "EN_REVISION",
+            createdAt: hace,
+          },
+        });
+      }
+    }
   }
 
   // ------------------------------------------------------ comunicación

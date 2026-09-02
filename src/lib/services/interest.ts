@@ -29,6 +29,7 @@ import {
 import { newInterestEmail } from "@/lib/email/templates";
 import { pickLocalized } from "@/lib/domain/rich-text";
 import type { InterestStatus, RoomType } from "@/generated/prisma/enums";
+import type { Prisma } from "@/generated/prisma/client";
 
 /**
  * El embudo de interesadas: de la landing pública a pasajera.
@@ -698,10 +699,65 @@ export async function setInterestNotes(
 // ---------------------------------------------------------------------------
 
 /**
- * Convierte una interesada en pasajera.
+ * Las tres escrituras de la conversión, DENTRO de la transacción del llamador.
  *
- * Es MANUAL y sin seña: la decisión la toma la coordinadora después de la
- * reunión, y el pago es fase 8. Acá no se cobra ni se reserva nada.
+ * Recibe el cliente transaccional en vez de abrir el suyo porque hay dos
+ * caminos que llegan hasta acá y el segundo necesita meter más cosas en la
+ * misma transacción:
+ *
+ *   · la conversión a secas, que decide la coordinadora después del Zoom
+ *     (`convertInterestToPassenger`, acá abajo);
+ *   · confirmar la seña, que convierte Y sella el DepositProof contra el
+ *     Passenger recién creado (`services/deposits.ts`).
+ *
+ * Si esta función abriera su propia transacción, el segundo camino tendría dos
+ * transacciones anidadas y el sellado del DepositProof podría quedar afuera:
+ * una pasajera creada con una seña que no la señala, que es justo el estado
+ * que hace imposible encontrar la seña al generar el plan.
+ *
+ * Está exportada y no es privada porque `deposits.ts` la necesita, y NO toca
+ * Passenger con Prisma: se lo pide a `enrollPassengerFromInterest`, que vive
+ * en el único módulo autorizado.
+ */
+export async function convertWithinTransaction(
+  tx: Prisma.TransactionClient,
+  input: {
+    interestId: string;
+    tripId: string;
+    personId: string;
+    userId: string;
+    roomType: RoomType;
+  },
+): Promise<{ id: string }> {
+  const created = await enrollPassengerFromInterest(tx, {
+    tripId: input.tripId,
+    personId: input.personId,
+    roomType: input.roomType,
+  });
+
+  // Esta es la línea que efectivamente le abre el sistema: hasta acá no tenía
+  // acceso a nada, porque no tenía TripMember.
+  await tx.tripMember.upsert({
+    where: { tripId_userId: { tripId: input.tripId, userId: input.userId } },
+    update: {},
+    create: { tripId: input.tripId, userId: input.userId, role: "PASAJERO" },
+  });
+
+  await tx.interest.update({
+    where: { id: input.interestId },
+    data: { status: "CONVERTIDA" },
+  });
+
+  return created;
+}
+
+/**
+ * Convierte una interesada en pasajera, sin cobrarle nada.
+ *
+ * Es la conversión MANUAL: la decisión la toma la coordinadora después de la
+ * reunión. Sigue existiendo junto a la conversión por seña —el camino de
+ * `deposits.ts`— porque no toda interesada paga seña: una invitada de la
+ * escuela, o alguien a quien le hicieron una excepción, entra por acá.
  *
  * Las tres escrituras van en una transacción porque describen un solo hecho:
  *
@@ -753,26 +809,15 @@ export async function convertInterestToPassenger(
     );
   }
 
-  const passenger = await prisma.$transaction(async (tx) => {
-    const created = await enrollPassengerFromInterest(tx, {
+  const passenger = await prisma.$transaction((tx) =>
+    convertWithinTransaction(tx, {
+      interestId,
       tripId,
       personId,
+      userId: interest.userId,
       roomType,
-    });
-
-    await tx.tripMember.upsert({
-      where: { tripId_userId: { tripId, userId: interest.userId } },
-      update: {},
-      create: { tripId, userId: interest.userId, role: "PASAJERO" },
-    });
-
-    await tx.interest.update({
-      where: { id: interestId },
-      data: { status: "CONVERTIDA" },
-    });
-
-    return created;
-  });
+    }),
+  );
 
   await recordAudit(viewer.userId, [
     {

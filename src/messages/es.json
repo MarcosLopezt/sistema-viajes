@@ -269,7 +269,13 @@
       "impactSingle": "El costo en individual pasa de {before} a {after}",
       "negativeMargin": "Este precio está por debajo del costo: perderías {amount} por pasajero.",
       "save": "Guardar precios",
-      "activePlansWarning": "{count, plural, one {Hay # pasajero con un plan de pagos ya generado. Su plan NO cambia: sigue debiendo lo que se le fijó cuando se creó. El precio nuevo solo aplica a quienes todavía no tienen plan.} other {Hay # pasajeros con un plan de pagos ya generado. Sus planes NO cambian: siguen debiendo lo que se les fijó cuando se crearon. El precio nuevo solo aplica a quienes todavía no tienen plan.}}"
+      "activePlansWarning": "{count, plural, one {Hay # pasajero con un plan de pagos ya generado. Su plan NO cambia: sigue debiendo lo que se le fijó cuando se creó. El precio nuevo solo aplica a quienes todavía no tienen plan.} other {Hay # pasajeros con un plan de pagos ya generado. Sus planes NO cambian: siguen debiendo lo que se les fijó cuando se crearon. El precio nuevo solo aplica a quienes todavía no tienen plan.}}",
+      "depositAmount": "Seña",
+      "depositHelp": "Opcional. Si lo dejás vacío, no se le pide seña a nadie.",
+      "installmentCount": "Cuotas por defecto (con seña)",
+      "installmentCountHelp": "Contando la seña como primera. El default es 3: seña más dos.",
+      "intervalMonths": "Meses entre cuotas",
+      "intervalMonthsHelp": "Solo se usa si hay seña. Sin seña, las cuotas se reparten hasta la salida."
     },
     "actions": {
       "add": "Agregar",
@@ -326,7 +332,11 @@
       "closedHelp": "Lo que ve alguien que entra a la página pública entre dos viajes.",
       "save": "Guardar los textos",
       "saveFailed": "No se pudieron guardar los textos.",
-      "toggleFailed": "No se pudo cambiar la inscripción."
+      "toggleFailed": "No se pudo cambiar la inscripción.",
+      "depositTermsTitle": "Condición de la seña",
+      "depositTermsHelp": "Lo que la interesada tiene que aceptar para poder subir el comprobante. Se guarda copiado en cada aceptación: si lo editás después, las aceptaciones viejas conservan su versión.",
+      "paymentInstructionsTitle": "Dónde transferir",
+      "paymentInstructionsHelp": "Los datos de la cuenta. Se muestran en la pantalla de la interesada y en «Mis pagos». Se puede pisar por pasajera desde su ficha."
     }
   },
   "invitations": {
@@ -524,7 +534,16 @@
     "sensitiveOnlyPassenger": "Estos datos solo puede editarlos la pasajera. No es un error: el contenido de estos campos no pasa por el registro de auditoría, y esa es la forma de garantizar que no quede escrito en ningún log.",
     "sensitiveNotDeclared": "No declaró nada.",
     "psychTreatment": "Tratamiento psicológico o psiquiátrico",
-    "anxietyOrPanic": "Ansiedad o ataques de pánico"
+    "anxietyOrPanic": "Ansiedad o ataques de pánico",
+    "paymentInstructionsTitle": "Dónde transferir",
+    "paymentInstructionsHelp": "Pisa ENTERO al texto del viaje: no se suman ni se muestran los dos. Cada cambio queda registrado con quién lo hizo.",
+    "paymentInstructions": "Instrucciones propias de esta pasajera",
+    "paymentInstructionsPlaceholder": "Los datos de la cuenta que acordaron.",
+    "paymentInstructionsUsingOwn": "Hoy rige: el texto propio de esta pasajera.",
+    "paymentInstructionsUsingTrip": "Hoy rige: el texto general del viaje.",
+    "paymentInstructionsTripEmpty": "El viaje todavía no tiene instrucciones cargadas. Se cargan en el paso 6 del presupuesto.",
+    "paymentInstructionsSave": "Guardar",
+    "paymentInstructionsClear": "Volver al texto del viaje"
   },
   "rooms": {
     "title": "Habitaciones",
@@ -639,7 +658,8 @@
     "formSuccess": "Listo. El coordinador lo va a revisar.",
     "formNoRate": "No hace falta que pongas el tipo de cambio: lo carga el coordinador.",
     "formCancel": "Cancelar",
-    "backHome": "Volver al inicio"
+    "backHome": "Volver al inicio",
+    "whereToPay": "Dónde transferir"
   },
   "paymentsAdmin": {
     "title": "Pagos del viaje",
@@ -824,5 +844,60 @@
     },
     "notes": "Notas",
     "notesPlaceholder": "Notas para ustedes. La interesada no las ve."
+  },
+  "deposit": {
+    "title": "La seña",
+    "amountHint": "El monto de la seña es {amount}.",
+    "whereToPay": "Dónde transferir",
+    "proofTitle": "Comprobante de la transferencia",
+    "proofButton": "Subir comprobante",
+    "proofReplace": "Cambiar",
+    "proofUploaded": "Comprobante cargado",
+    "compressing": "Preparando…",
+    "uploading": "Subiendo…",
+    "amount": "Importe que transferiste",
+    "currency": "Moneda",
+    "transferDate": "Fecha de la transferencia",
+    "transferDateHint": "La que figura en el comprobante, no la de hoy.",
+    "termsTitle": "Condición de la seña",
+    "termsAccept": "Leí y acepto la condición.",
+    "submit": "Enviar la seña",
+    "submitting": "Enviando…",
+    "underReview": "Comprobante en revisión",
+    "underReviewDetail": "Lo estamos verificando. Te avisamos apenas esté confirmado.",
+    "confirmed": "Seña confirmada",
+    "confirmedDetail": "Ya está registrada. Tu lugar quedó reservado.",
+    "rejectedTitle": "No pudimos confirmar tu comprobante",
+    "rejectedRetry": "Podés subir otro comprobante más abajo.",
+    "errorType": "Ese tipo de archivo no sirve. Subí una foto (JPG, PNG o WEBP) o un PDF.",
+    "errorSize": "El archivo es demasiado grande. El máximo son 8 MB.",
+    "errorNoProof": "Subí el comprobante antes de enviar.",
+    "errorGeneric": "No pudimos subir el archivo. Probá de nuevo."
+  },
+  "depositReview": {
+    "title": "Señas por revisar",
+    "count": "{count, plural, one {# seña} other {# señas}}",
+    "waitingToday": "Llegó hoy",
+    "waitingDays": "{days, plural, one {Hace # día} other {Hace # días}}",
+    "declared": "Importe declarado",
+    "transferDate": "Fecha de transferencia",
+    "shownAmount": "Se le pidió",
+    "submittedOn": "Subida el",
+    "openProof": "Ver comprobante",
+    "fxRate": "Tipo de cambio {from} → {to}",
+    "fxHint": "Con la cotización del día serían {amount}. Usá el del extracto.",
+    "roomType": "Habitación",
+    "roomDouble": "Compartida",
+    "roomSingle": "Individual",
+    "confirmAndConvert": "Confirmar y convertir en pasajera",
+    "reject": "Rechazar",
+    "confirmReject": "Rechazar la seña",
+    "cancel": "Cancelar",
+    "reasonLabel": "Motivo del rechazo",
+    "reasonPlaceholder": "Qué tiene que corregir.",
+    "reasonHint": "Lo va a leer ella. Sin motivo no puede saber qué hacer.",
+    "converted": "Confirmada. Ya es pasajera del viaje.",
+    "alreadyResolved": "Ya estaba resuelta: la confirmó alguien más.",
+    "rejected": "Rechazada. Le avisamos con el motivo."
   }
 }

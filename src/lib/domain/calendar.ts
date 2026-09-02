@@ -150,6 +150,55 @@ export function addCalendarDays(date: CalendarDate, days: number): CalendarDate 
 }
 
 /**
+ * Suma meses de calendario, recortando al último día del mes destino.
+ *
+ * El 31 de enero más un mes es el 28 de febrero, no el 3 de marzo. Ese
+ * desborde silencioso es el MISMO contra el que existe `isRealIsoDate()`: JS
+ * acepta `new Date(2027, 1, 31)` y devuelve marzo sin avisar. Con vencimientos
+ * de cuota eso corre la fecha a otro mes, y nadie lo nota hasta que la
+ * pasajera reclama que le cobraron antes de lo que decía su plan.
+ *
+ * Se opera sobre los componentes de la fecha y no sobre milisegundos: los
+ * meses no tienen una duración fija, y sumarlos como "treinta días" es la otra
+ * forma de tener el mismo bug con menos ruido.
+ *
+ * Recortar y no desbordar es una decisión: quien pactó el 31 espera fin de
+ * mes, no el 3 del siguiente.
+ */
+export function addCalendarMonths(
+  date: CalendarDate,
+  months: number,
+): CalendarDate {
+  assertCalendarDate(date);
+
+  if (!Number.isInteger(months)) {
+    throw new CalendarError(`Los meses tienen que ser enteros: ${months}`);
+  }
+
+  const [year, month, day] = date.split("-").map(Number) as [
+    number,
+    number,
+    number,
+  ];
+
+  // Se trabaja en meses absolutos para no tener que acarrear el año a mano.
+  const absolute = year * 12 + (month - 1) + months;
+  const targetYear = Math.floor(absolute / 12);
+  const targetMonth = absolute - targetYear * 12; // 0..11
+
+  // El día 0 del mes SIGUIENTE es el último del mes destino. Es la forma de
+  // preguntar "cuántos días tiene este mes" sin una tabla ni un caso especial
+  // para los años bisiestos.
+  const lastDay = new Date(
+    Date.UTC(targetYear, targetMonth + 1, 0),
+  ).getUTCDate();
+
+  return toCalendarDate(
+    new Date(Date.UTC(targetYear, targetMonth, Math.min(day, lastDay))),
+  );
+}
+
+/**
  * Días enteros de `from` a `to`. Negativo si `to` ya pasó.
  *
  * Al operar sobre fechas de calendario —las dos a medianoche UTC— no hay

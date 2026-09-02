@@ -269,7 +269,13 @@
       "impactSingle": "The single-room cost goes from {before} to {after}",
       "negativeMargin": "This price is below cost: you'd lose {amount} per passenger.",
       "save": "Save prices",
-      "activePlansWarning": "{count, plural, one {# passenger already has a payment plan. Their plan will NOT change: they still owe what was set when it was created. The new price only applies to passengers without a plan yet.} other {# passengers already have payment plans. Their plans will NOT change: they still owe what was set when they were created. The new price only applies to passengers without a plan yet.}}"
+      "activePlansWarning": "{count, plural, one {# passenger already has a payment plan. Their plan will NOT change: they still owe what was set when it was created. The new price only applies to passengers without a plan yet.} other {# passengers already have payment plans. Their plans will NOT change: they still owe what was set when they were created. The new price only applies to passengers without a plan yet.}}",
+      "depositAmount": "Deposit",
+      "depositHelp": "Optional. Leave it empty and no deposit is requested.",
+      "installmentCount": "Default instalments (with deposit)",
+      "installmentCountHelp": "Counting the deposit as the first one. The default is 3: deposit plus two.",
+      "intervalMonths": "Months between instalments",
+      "intervalMonthsHelp": "Only used when there's a deposit. Without one, instalments are spread until departure."
     },
     "actions": {
       "add": "Add",
@@ -326,7 +332,11 @@
       "closedHelp": "What someone sees on the public page between two trips.",
       "save": "Save the texts",
       "saveFailed": "The texts could not be saved.",
-      "toggleFailed": "Sign-ups could not be changed."
+      "toggleFailed": "Sign-ups could not be changed.",
+      "depositTermsTitle": "Deposit condition",
+      "depositTermsHelp": "What she must accept in order to upload the receipt. A copy is stored with each acceptance: if you edit it later, earlier acceptances keep their version.",
+      "paymentInstructionsTitle": "Where to transfer",
+      "paymentInstructionsHelp": "The account details. Shown on the interested party's screen and in “My payments”. Can be overridden per passenger from her record."
     }
   },
   "invitations": {
@@ -524,7 +534,16 @@
     "sensitiveOnlyPassenger": "Only the passenger can edit these. That's not a bug: the contents of these fields never pass through the audit log, and that is how we guarantee they're never written to a log.",
     "sensitiveNotDeclared": "Nothing declared.",
     "psychTreatment": "Psychological or psychiatric treatment",
-    "anxietyOrPanic": "Anxiety or panic episodes"
+    "anxietyOrPanic": "Anxiety or panic episodes",
+    "paymentInstructionsTitle": "Where to transfer",
+    "paymentInstructionsHelp": "This REPLACES the trip's text entirely: they are not combined, and both are never shown. Every change is logged with who made it.",
+    "paymentInstructions": "Instructions for this passenger",
+    "paymentInstructionsPlaceholder": "The account details you agreed on.",
+    "paymentInstructionsUsingOwn": "Currently in effect: this passenger's own text.",
+    "paymentInstructionsUsingTrip": "Currently in effect: the trip's general text.",
+    "paymentInstructionsTripEmpty": "The trip has no instructions yet. They're set in step 6 of the budget.",
+    "paymentInstructionsSave": "Save",
+    "paymentInstructionsClear": "Go back to the trip's text"
   },
   "rooms": {
     "title": "Rooms",
@@ -639,7 +658,8 @@
     "formSuccess": "Done. Your coordinator will review it.",
     "formNoRate": "No need to enter an exchange rate: your coordinator adds it.",
     "formCancel": "Cancel",
-    "backHome": "Back to home"
+    "backHome": "Back to home",
+    "whereToPay": "Where to transfer"
   },
   "paymentsAdmin": {
     "title": "Trip payments",
@@ -824,5 +844,60 @@
     },
     "notes": "Notes",
     "notesPlaceholder": "Notes for you. The enquirer never sees them."
+  },
+  "deposit": {
+    "title": "Deposit",
+    "amountHint": "The deposit is {amount}.",
+    "whereToPay": "Where to transfer",
+    "proofTitle": "Transfer receipt",
+    "proofButton": "Upload receipt",
+    "proofReplace": "Change",
+    "proofUploaded": "Receipt uploaded",
+    "compressing": "Preparing…",
+    "uploading": "Uploading…",
+    "amount": "Amount you transferred",
+    "currency": "Currency",
+    "transferDate": "Transfer date",
+    "transferDateHint": "The one on the receipt, not today's.",
+    "termsTitle": "Deposit condition",
+    "termsAccept": "I have read and accept the condition.",
+    "submit": "Send the deposit",
+    "submitting": "Sending…",
+    "underReview": "Receipt under review",
+    "underReviewDetail": "We're checking it. We'll let you know as soon as it's confirmed.",
+    "confirmed": "Deposit confirmed",
+    "confirmedDetail": "It's registered. Your place is reserved.",
+    "rejectedTitle": "We couldn't confirm your receipt",
+    "rejectedRetry": "You can upload another receipt below.",
+    "errorType": "That file type doesn't work. Upload a photo (JPG, PNG or WEBP) or a PDF.",
+    "errorSize": "The file is too large. The maximum is 8 MB.",
+    "errorNoProof": "Upload the receipt before sending.",
+    "errorGeneric": "We couldn't upload the file. Please try again."
+  },
+  "depositReview": {
+    "title": "Deposits to review",
+    "count": "{count, plural, one {# deposit} other {# deposits}}",
+    "waitingToday": "Arrived today",
+    "waitingDays": "{days, plural, one {# day ago} other {# days ago}}",
+    "declared": "Declared amount",
+    "transferDate": "Transfer date",
+    "shownAmount": "Amount requested",
+    "submittedOn": "Uploaded on",
+    "openProof": "View receipt",
+    "fxRate": "Exchange rate {from} → {to}",
+    "fxHint": "At today's rate that would be {amount}. Use the one on the statement.",
+    "roomType": "Room",
+    "roomDouble": "Shared",
+    "roomSingle": "Single",
+    "confirmAndConvert": "Confirm and convert to passenger",
+    "reject": "Reject",
+    "confirmReject": "Reject the deposit",
+    "cancel": "Cancel",
+    "reasonLabel": "Reason for rejection",
+    "reasonPlaceholder": "What she needs to correct.",
+    "reasonHint": "She will read this. Without a reason she can't know what to do.",
+    "converted": "Confirmed. She's now a passenger on the trip.",
+    "alreadyResolved": "Already resolved: someone else confirmed it.",
+    "rejected": "Rejected. We let her know with the reason."
   }
 }

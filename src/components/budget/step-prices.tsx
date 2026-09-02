@@ -33,6 +33,9 @@ export function StepPrices({
   passengerMix,
   savedPriceDouble,
   savedPriceSingle,
+  savedDepositAmount,
+  savedInstallmentCount,
+  savedIntervalMonths,
   passengersWithActivePlan,
   disabled,
   onSave,
@@ -43,12 +46,18 @@ export function StepPrices({
   passengerMix: WizardPassengerMix[];
   savedPriceDouble: string | null;
   savedPriceSingle: string | null;
+  savedDepositAmount: string | null;
+  savedInstallmentCount: number;
+  savedIntervalMonths: number;
   /** Cuántos pasajeros ya tienen un plan de pagos generado. */
   passengersWithActivePlan: number;
   disabled?: boolean;
   onSave: (prices: {
     priceDouble: string;
     priceSingle: string;
+    depositAmount: string | null;
+    defaultInstallmentCount: number;
+    installmentIntervalMonths: number;
   }) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const t = useTranslations("budget.prices");
@@ -56,6 +65,13 @@ export function StepPrices({
 
   const [priceDouble, setPriceDouble] = useState(savedPriceDouble ?? "");
   const [priceSingle, setPriceSingle] = useState(savedPriceSingle ?? "");
+  const [depositAmount, setDepositAmount] = useState(savedDepositAmount ?? "");
+  const [installmentCount, setInstallmentCount] = useState(
+    String(savedInstallmentCount),
+  );
+  const [intervalMonths, setIntervalMonths] = useState(
+    String(savedIntervalMonths),
+  );
   const [error, setError] = useState<string | null>(null);
 
   const money = (value: string) => formatMoney(value, currency, locale);
@@ -88,7 +104,13 @@ export function StepPrices({
       className="space-y-6"
       onSubmit={async (event) => {
         event.preventDefault();
-        const result = await onSave({ priceDouble, priceSingle });
+        const result = await onSave({
+          priceDouble,
+          priceSingle,
+          depositAmount: depositAmount.trim() || null,
+          defaultInstallmentCount: Number(installmentCount),
+          installmentIntervalMonths: Number(intervalMonths),
+        });
         if (!result.ok) setError(result.error ?? null);
         else setError(null);
       }}
@@ -131,6 +153,57 @@ export function StepPrices({
               disabled={disabled}
               onChange={(e) => setPriceSingle(e.target.value)}
               required
+            />
+          )}
+        </Field>
+      </div>
+
+      {/* La seña va acá y no en el paso público porque es PLATA en la moneda
+          del viaje, como los dos de arriba. Lo que sí es texto de marca —la
+          condición de no reembolsable— vive en el paso 6, con el resto de la
+          voz de la escuela. */}
+      <Field label={t("depositAmount")} help={t("depositHelp")}>
+        {(props) => (
+          <Input
+            {...props}
+            inputMode="decimal"
+            placeholder="0.00"
+            value={depositAmount}
+            disabled={disabled}
+            onChange={(e) => setDepositAmount(e.target.value)}
+          />
+        )}
+      </Field>
+
+      {/* Los dos defaults del plan CON seña. Solo intervienen si hay seña:
+          sin ella el generador sigue repartiendo las cuotas hasta la salida,
+          como siempre. Son sugerencias — al generar el plan de cada pasajera
+          se pueden cambiar. */}
+      <div className="grid gap-5 sm:grid-cols-2">
+        <Field label={t("installmentCount")} help={t("installmentCountHelp")}>
+          {(props) => (
+            <Input
+              {...props}
+              type="number"
+              min={2}
+              max={6}
+              value={installmentCount}
+              disabled={disabled}
+              onChange={(e) => setInstallmentCount(e.target.value)}
+            />
+          )}
+        </Field>
+
+        <Field label={t("intervalMonths")} help={t("intervalMonthsHelp")}>
+          {(props) => (
+            <Input
+              {...props}
+              type="number"
+              min={1}
+              max={12}
+              value={intervalMonths}
+              disabled={disabled}
+              onChange={(e) => setIntervalMonths(e.target.value)}
             />
           )}
         </Field>

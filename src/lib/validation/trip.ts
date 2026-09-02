@@ -1,5 +1,11 @@
 import { z } from "zod";
 import { isRealIsoDate } from "@/lib/domain/date";
+import {
+  MAX_INSTALLMENTS,
+  MAX_INTERVAL_MONTHS,
+  MIN_INSTALLMENTS_WITH_DEPOSIT,
+  MIN_INTERVAL_MONTHS,
+} from "@/lib/domain/payments";
 
 /**
  * Validación del módulo de presupuesto.
@@ -170,6 +176,36 @@ export type IndirectCostInput = z.infer<typeof indirectCostSchema>;
 export const tripPricesSchema = z.object({
   priceDouble: money("el precio en habitación compartida"),
   priceSingle: money("el precio en habitación individual"),
+  /**
+   * La seña, en la moneda del viaje.
+   *
+   * Opcional a diferencia de los dos precios: un viaje puede tener el precio
+   * fijado y todavía no haber decidido cuánto pedir de seña. Lo que no puede
+   * pasar es pedirle a alguien que transfiera sin decirle cuánto, y de eso se
+   * ocupa la pantalla: sin este monto, la sección de la seña no aparece.
+   */
+  depositAmount: money("el monto de la seña").nullable().optional(),
+  /**
+   * Defaults del plan CUANDO hay seña. Van con la seña y no en otro paso
+   * porque solo tienen sentido junto a ella: sin seña el generador reparte
+   * las cuotas hasta la salida, como siempre, y estos dos no intervienen.
+   *
+   * Opcionales: no mandarlos significa "dejalos como están", no "poneles el
+   * default". Un formulario que guarda precios no tiene por qué pisar la
+   * configuración del plan de nadie.
+   */
+  defaultInstallmentCount: z
+    .number()
+    .int()
+    .min(MIN_INSTALLMENTS_WITH_DEPOSIT, `Con seña, el plan tiene al menos ${MIN_INSTALLMENTS_WITH_DEPOSIT} cuotas.`)
+    .max(MAX_INSTALLMENTS, `El plan no puede tener más de ${MAX_INSTALLMENTS} cuotas.`)
+    .optional(),
+  installmentIntervalMonths: z
+    .number()
+    .int()
+    .min(MIN_INTERVAL_MONTHS, "El intervalo mínimo es de un mes.")
+    .max(MAX_INTERVAL_MONTHS, "El intervalo máximo es de doce meses.")
+    .optional(),
 });
 
 export type TripPricesInput = z.infer<typeof tripPricesSchema>;

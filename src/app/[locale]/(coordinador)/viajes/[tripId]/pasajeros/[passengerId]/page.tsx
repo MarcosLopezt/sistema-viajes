@@ -1,7 +1,8 @@
-import { getTranslations } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
 import { ArrowLeft } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { getPassenger } from "@/lib/services/passengers";
+import { pickLocalized } from "@/lib/domain/rich-text";
 import { toIsoDate } from "@/lib/validation/trip";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ export default async function PassengerDetailPage({
   params,
 }: PageProps<"/[locale]/viajes/[tripId]/pasajeros/[passengerId]">) {
   const { tripId, passengerId } = await params;
+  const locale = await getLocale();
 
   const passenger = await getPassenger(passengerId);
   const t = await getTranslations("passengers");
@@ -78,6 +80,12 @@ export default async function PassengerDetailPage({
         status={passenger.status}
         isCoordinator={passenger.isCoordinator}
         completionPercentage={passenger.completeness.completionPercentage}
+        paymentInstructions={passenger.paymentInstructions}
+        tripPaymentInstructions={pickLocalized(
+          passenger.trip.paymentInstructionsEs,
+          passenger.trip.paymentInstructionsEn,
+          locale,
+        )}
         isComplete={passenger.completeness.complete}
         blocksConfirmation={passenger.passport.blocksConfirmation}
         priceOverride={passenger.priceOverride}

@@ -170,6 +170,7 @@ model User {
   tripMemberships  TripMember[]
   auditLogs        AuditLog[]      @relation("AuditActor")
   reviewedPayments Payment[]       @relation("PaymentReviewer")
+  reviewedDeposits DepositProof[]  @relation("DepositReviewer")
   createdInvites   Invitation[]    @relation("InvitationCreator")
   createdComms     Communication[] @relation("CommunicationCreator")
   interests        Interest[]
@@ -244,6 +245,29 @@ model Trip {
   /// Negativo = antes del vencimiento. Default: 7 días antes y 1 día después.
   reminderOffsetsDays Int[] @default([-7, 1])
 
+  // ------------------------------ La seña ---------------------------------
+
+  /// Monto FIJO de la seña, en la moneda del viaje. Lo fijan las
+  /// coordinadoras en el wizard de presupuesto.
+  ///
+  /// Nulo mientras no lo hayan cargado, y eso NO es un estado inválido: un
+  /// viaje en BORRADOR todavía no sabe cuánto va a pedir. Lo que no puede
+  /// pasar es abrir la captación sin él, y eso lo verifica el servicio.
+  ///
+  /// La interesada ve este número congelado en su DepositProof al aceptar:
+  /// si después lo suben, no le cobran la diferencia a quien ya aceptó.
+  depositAmount Decimal? @db.Decimal(12, 2)
+
+  /// Cuotas por defecto al generar un plan CON seña. El default es 3: la seña
+  /// más dos. La coordinadora lo edita al generar el plan.
+  defaultInstallmentCount Int @default(3)
+
+  /// Meses entre cuotas cuando el plan arranca en la seña. Es el otro modo de
+  /// sugerir vencimientos: aquél reparte N cuotas en la ventana que queda
+  /// hasta la salida, éste dice "una cada tantos meses", que es como lo
+  /// piensan las coordinadoras cuando hubo seña.
+  installmentIntervalMonths Int @default(3)
+
   // --------------------------- Zona pública -------------------------------
 
   /// El viaje contra el que se anotan las interesadas de /interes.
@@ -304,14 +328,41 @@ model Trip {
   nextStepMessageEn String?
 
   /// Firma de los mails ("En la Lux de Alba, Laura y Lorena"). La usa el pie
-  /// de LAS SEIS plantillas, no solo las de esta fase: dos firmas distintas
+  /// de TODAS las plantillas, no solo las de esta fase: dos firmas distintas
   /// en el mismo sistema son dos voces.
+  ///
+  /// Decía "las seis" hasta que la fase 7 agregó la séptima y nadie lo
+  /// actualizó. Un número acá se desactualiza sin que nada lo note; "todas"
+  /// sigue siendo verdad la próxima vez.
   emailSignatureEs String?
   emailSignatureEn String?
 
   /// Qué se muestra en /interes cuando ningún viaje está aceptando.
   closedMessageEs String?
   closedMessageEn String?
+
+  /// LA CONDICIÓN DE NO REEMBOLSABLE que la interesada tiene que aceptar para
+  /// subir el comprobante de la seña.
+  ///
+  /// Es un texto de marca como los de arriba —lo escriben las coordinadoras,
+  /// no vive en el catálogo de i18n— pero se trata distinto en un punto: al
+  /// aceptarlo se COPIA entero a DepositProof. Editarlo después no toca las
+  /// aceptaciones ya guardadas, porque son copias y no referencias. Si dentro
+  /// de un año hay un reclamo, la pregunta es qué decía la pantalla ese día.
+  depositTermsEs String?
+  depositTermsEn String?
+
+  /// DÓNDE PAGAR. Texto libre: acá las coordinadoras pegan los datos de la
+  /// cuenta que acordaron por WhatsApp.
+  ///
+  /// Las cuentas cambian según el país de residencia y se acuerdan una por
+  /// una, así que esto es lo genérico del viaje; Passenger.paymentInstructions
+  /// lo pisa caso por caso. Una interesada todavía no tiene Passenger, así que
+  /// para la seña siempre ve éste.
+  ///
+  /// Texto plano con autolink, como infoForInterested. Nada de HTML.
+  paymentInstructionsEs String?
+  paymentInstructionsEn String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -537,8 +588,9 @@ model Interest {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trip          Trip           @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  depositProofs DepositProof[]
 
   /// Una sola vez por viaje. Volver a mandar el formulario no duplica el
   /// registro ni le pisa el estado a alguien que ya está EN_CONVERSACION.
@@ -575,6 +627,14 @@ model Passenger {
   /// Pisa priceDouble/priceSingle del viaje para este pasajero (decisión 3).
   priceOverride       Decimal? @db.Decimal(12, 2)
   priceOverrideReason String?
+
+  /// Pisa Trip.paymentInstructions para esta pasajera. Las cuentas bancarias
+  /// se acuerdan una por una por WhatsApp según el país de residencia, así que
+  /// el texto del viaje es apenas un default razonable.
+  ///
+  /// SIN idioma, a diferencia del texto del viaje: lo escribe la coordinadora
+  /// para una persona concreta, y ya sabe en qué idioma le habla.
+  paymentInstructions String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -679,12 +739,111 @@ model Payment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  plan        PaymentPlan  @relation(fields: [planId], references: [id], onDelete: Cascade)
-  installment Installment? @relation(fields: [installmentId], references: [id], onDelete: SetNull)
-  reviewedBy  User?        @relation("PaymentReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  plan         PaymentPlan   @relation(fields: [planId], references: [id], onDelete: Cascade)
+  installment  Installment?  @relation(fields: [installmentId], references: [id], onDelete: SetNull)
+  reviewedBy   User?         @relation("PaymentReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  /// La seña que este pago materializa, si lo es. Ver el modelo DepositProof.
+  depositProof DepositProof?
 
   @@index([planId])
   @@index([status])
+}
+
+// ------------------------------ La seña ------------------------------------
+
+/// El comprobante de la seña de una interesada, antes de que exista un pago.
+///
+/// ── Por qué esto no es un Payment ─────────────────────────────────────────
+///
+/// Un `Payment` cuelga de un `PaymentPlan`, que cuelga de un `Passenger`. La
+/// seña se paga ANTES de la conversión, cuando no hay ninguna de las tres
+/// cosas. Hacer `Payment.planId` nullable habría convertido a la seña en el
+/// "pago suelto" que el negocio prohíbe: no imputado a ninguna cuota, contado
+/// en ningún total, y visible como crédito en `derivePlan()`.
+///
+/// Entonces la seña vive acá mientras es una PROMESA, y se convierte en
+/// `Payment` recién cuando existe el plan que la puede alojar. El campo
+/// `paymentId` es esa materialización, y es único: la seña no se puede imputar
+/// dos veces porque lo impide un índice, no una validación.
+///
+/// ── Los tres importes, que no son el mismo ────────────────────────────────
+///
+///   shownAmount / shownCurrency  lo que le mostró la pantalla al aceptar.
+///                                Es parte del registro legal, no un dato
+///                                operativo: si dentro de un año hay un
+///                                reclamo, la pregunta es qué decía la
+///                                pantalla ese día.
+///   amount / currency            lo que declara haber transferido. Puede
+///                                estar en otra moneda: las cuentas cambian
+///                                según el país de residencia.
+///   amountInTripCurrency         lo imputado. Provisorio con la cotización
+///                                del día al subir; lo pisa la coordinadora
+///                                con el TC del extracto al confirmar. Mismo
+///                                circuito que `declarePayment`.
+///
+/// ── La aceptación se guarda entera, no como un booleano ───────────────────
+///
+/// `acceptedTermsText` guarda EL TEXTO EXACTO que se mostró, con su idioma, su
+/// fecha y el monto que acompañaba. Un booleano diría "aceptó" sin decir qué,
+/// y las coordinadoras pueden editar el texto en cualquier momento: las
+/// aceptaciones viejas conservan su versión porque es una copia y no una
+/// referencia.
+model DepositProof {
+  id         String @id @default(uuid()) @db.Uuid
+  interestId String @db.Uuid
+
+  /// Se sella en la conversión, en la misma transacción que crea el Passenger.
+  /// Es lo que le permite a `generatePaymentPlan` encontrar la seña sin
+  /// recorrer Interest → User → Person, y además impide que una misma seña
+  /// quede colgada de dos pasajeras.
+  passengerId String? @unique @db.Uuid
+
+  // --- Lo que declara la interesada ---
+  amount               Decimal       @db.Decimal(12, 2)
+  currency             Currency
+  fxRateUsed           Decimal?      @db.Decimal(18, 8)
+  fxRateSource         FxRateSource?
+  amountInTripCurrency Decimal       @db.Decimal(12, 2)
+  transferDate         DateTime      @db.Date
+  /// Path interna en el bucket privado, bajo {tripId}/{personId}/. NUNCA una URL.
+  proofFileId          String
+
+  // --- El registro legal de la aceptación ---
+  acceptedTermsText String
+  acceptedTermsLang Language
+  acceptedAt        DateTime
+  shownAmount       Decimal  @db.Decimal(12, 2)
+  shownCurrency     Currency
+
+  // --- La revisión ---
+  status          PaymentStatus @default(EN_REVISION)
+  reviewedById    String?       @db.Uuid
+  reviewedAt      DateTime?
+  rejectionReason String?
+
+  /// El Payment que la materializó al generarse el plan. Único: materializar
+  /// dos veces viola el índice. Se pone en null al regenerar un plan, que es
+  /// la única operación que la desmaterializa.
+  paymentId String? @unique @db.Uuid
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  interest   Interest @relation(fields: [interestId], references: [id], onDelete: Cascade)
+  reviewedBy User?    @relation("DepositReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  payment    Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  /// ⚠️ Hay además un índice único PARCIAL en SQL crudo que Prisma no conoce:
+  ///
+  ///   CREATE UNIQUE INDEX "DepositProof_una_vigente_por_interesada"
+  ///     ON "DepositProof" ("interestId") WHERE "status" <> 'RECHAZADO';
+  ///
+  /// Garantiza como máximo UNA seña vigente por interesada, dejando que las
+  /// rechazadas se acumulen: volver a subir después de un rechazo no puede
+  /// borrar el rastro de por qué la rechazaron. Es el mismo mecanismo y la
+  /// misma advertencia que "Trip_una_sola_captacion_abierta": si `migrate dev`
+  /// propone un DROP de este índice, borrá esa línea del SQL generado.
+  @@index([interestId, status])
 }
 
 /// Garantiza "nunca más de un aviso del mismo tipo por pasajero".

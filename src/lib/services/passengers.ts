@@ -263,6 +263,7 @@ export async function getPassenger(passengerId: string) {
       isCoordinator: true,
       priceOverride: true,
       priceOverrideReason: true,
+      paymentInstructions: true,
       // Lista explícita, no `person: true`. El porqué está en el docblock de
       // PERSON_FULL_FIELDS: acá adentro ahora hay datos de salud mental.
       person: { select: PERSON_FULL_FIELDS },
@@ -288,6 +289,8 @@ export async function getPassenger(passengerId: string) {
           status: true,
           passportValidityMonths: true,
           requireFullPassportValidity: true,
+          paymentInstructionsEs: true,
+          paymentInstructionsEn: true,
         },
       },
     },
@@ -566,6 +569,62 @@ export async function updatePersonByCoordinator(
   if (!editRequiresAudit(viewer, passengerId)) return 0;
 
   return recordAudit(viewer.userId, entries);
+}
+
+/**
+ * Dónde transferir, para ESTA pasajera. Pisa entero al texto del viaje.
+ *
+ * ── Por qué no está en COORDINATOR_EDITABLE ──────────────────────────────
+ *
+ * Tiene el mismo contrato que esa lista —lo edita la coordinadora y cada
+ * cambio va a AuditLog— pero no puede estar adentro: aquella enumera columnas
+ * de `Person` y termina en un `prisma.person.update()`, y esta columna vive en
+ * `Passenger`. Son instrucciones para un viaje concreto, no un dato de la
+ * persona: la cuenta a la que transfiere depende del país de residencia Y del
+ * viaje, y la misma persona que viaja dos veces puede tener dos.
+ *
+ * ── Por qué se audita ────────────────────────────────────────────────────
+ *
+ * No es un dato personal: es una instrucción sobre DÓNDE MANDAR PLATA. Si
+ * alguien la cambia y la pasajera transfiere a la cuenta equivocada, la
+ * pregunta va a ser quién la tocó y cuándo, y esa pregunta solo la contesta un
+ * log. Por eso se audita aunque no lo pida el invariante de datos personales.
+ *
+ * Vacío significa "usa el del viaje", y por eso se guarda `null` y no `""`:
+ * un string vacío se leería como "esta pasajera no tiene dónde pagar".
+ */
+export async function setPassengerPaymentInstructions(
+  passengerId: string,
+  instructions: string | null,
+): Promise<void> {
+  // La capability, y no solo el acceso de edición: `requirePassengerAccess`
+  // en modo "edit" también se lo concede a la propia pasajera sobre su ficha,
+  // y esto no es suyo para tocar — es dónde la escuela le pide que transfiera.
+  const { viewer, tripId } = await requirePassengerAccess(passengerId, "edit");
+  await requireCapability(tripId, "passenger:editAny");
+
+  const before = await prisma.passenger.findUniqueOrThrow({
+    where: { id: passengerId },
+    select: { paymentInstructions: true },
+  });
+
+  const next = instructions?.trim() || null;
+  if (before.paymentInstructions === next) return;
+
+  await prisma.passenger.update({
+    where: { id: passengerId },
+    data: { paymentInstructions: next },
+  });
+
+  await recordAudit(viewer.userId, [
+    {
+      entity: "Passenger",
+      entityId: passengerId,
+      field: "paymentInstructions",
+      oldValue: before.paymentInstructions,
+      newValue: next,
+    },
+  ]);
 }
 
 function normalizeForAudit(value: unknown): string | null {
@@ -1147,7 +1206,22 @@ export interface PassengerForPayments {
     paymentToleranceAmount: string;
     /** Zona en la que se decide qué día es "hoy". Ver lib/domain/calendar.ts. */
     timezone: string;
+    /** Defaults del plan CON seña. Ver domain/payments.ts. */
+    defaultInstallmentCount: number;
+    installmentIntervalMonths: number;
+    /** Dónde transferir, del viaje. `Passenger.paymentInstructions` lo pisa. */
+    paymentInstructionsEs: string | null;
+    paymentInstructionsEn: string | null;
   };
+  /**
+   * Instrucciones de pago propias de esta pasajera, si se las cargaron.
+   *
+   * Las cuentas bancarias se acuerdan una por una por WhatsApp según el país
+   * de residencia, así que el texto del viaje es apenas un default razonable y
+   * este lo pisa entero — no se concatenan. Dos juegos de datos bancarios en
+   * la misma pantalla es la forma más segura de que transfiera al equivocado.
+   */
+  paymentInstructions: string | null;
   /** El viewer es este mismo pasajero. */
   isOwnRecord: boolean;
 }
@@ -1166,6 +1240,7 @@ export async function getPassengerForPayments(
       isCoordinator: true,
       roomType: true,
       priceOverride: true,
+      paymentInstructions: true,
       person: {
         select: {
           fullName: true,
@@ -1183,6 +1258,10 @@ export async function getPassengerForPayments(
           priceSingle: true,
           paymentToleranceAmount: true,
           timezone: true,
+          defaultInstallmentCount: true,
+          installmentIntervalMonths: true,
+          paymentInstructionsEs: true,
+          paymentInstructionsEn: true,
         },
       },
     },
@@ -1209,7 +1288,12 @@ export async function getPassengerForPayments(
       priceSingle: row.trip.priceSingle?.toString() ?? null,
       paymentToleranceAmount: row.trip.paymentToleranceAmount.toString(),
       timezone: row.trip.timezone,
+      defaultInstallmentCount: row.trip.defaultInstallmentCount,
+      installmentIntervalMonths: row.trip.installmentIntervalMonths,
+      paymentInstructionsEs: row.trip.paymentInstructionsEs,
+      paymentInstructionsEn: row.trip.paymentInstructionsEn,
     },
+    paymentInstructions: row.paymentInstructions,
     isOwnRecord: viewer.ownPassengerId === row.id,
   };
 }

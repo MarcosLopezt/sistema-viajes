@@ -1,6 +1,6 @@
 # Estado del sistema
 
-Última actualización: 27 de agosto de 2026, al terminar la fase 6.
+Última actualización: 2 de septiembre de 2026, al terminar la fase 8.
 
 Este documento es para dos personas: la dueña del sistema, y quien lo agarre dentro de seis meses sin haber estado en ninguna de las conversaciones. Dice qué hace, qué deliberadamente no hace, qué todavía no se probó de verdad, y qué cosas parecen errores pero no lo son.
 
@@ -10,7 +10,9 @@ Este documento es para dos personas: la dueña del sistema, y quien lo agarre de
 
 Este sistema organiza viajes grupales cerrados: grupos de alrededor de catorce personas más dos coordinadoras, con fechas fijas y un precio cerrado por persona. La coordinadora arma el viaje —itinerario, hoteles, lo que le cuesta a ella cada cosa— y el sistema le va mostrando cuánto le queda de margen mientras carga los precios de venta. Después invita a las pasajeras por mail: cada una entra con un link, elige su contraseña y completa sus propios datos —documento, pasaporte, contacto de emergencia, cobertura médica, si es celíaca o si necesita habitación accesible— sin que la coordinadora tenga que perseguirla por WhatsApp ni cargar nada a mano.
 
-Desde la fase 7 el sistema toma el embudo antes: la página de Wix se queda como está, pero su botón de "más información" lleva a una pantalla pública donde una interesada deja sus datos y crea su cuenta. Las coordinadoras la ven aparecer en un listado, coordinan la charla por Zoom por fuera del sistema, y cuando decide venir la convierten en pasajera con un clic — sin volver a pedirle el nombre ni el teléfono, porque ya los cargó ella. Una interesada no ocupa cupo y no ve nada del sistema interno: solo la propuesta del viaje y qué tiene que hacer a continuación.
+Desde la fase 7 el sistema toma el embudo antes: la página de Wix se queda como está, pero su botón de "más información" lleva a una pantalla pública donde una interesada deja sus datos y crea su cuenta. Las coordinadoras la ven aparecer en un listado y coordinan la charla por Zoom por fuera del sistema. Una interesada no ocupa cupo y no ve nada del sistema interno: solo la propuesta del viaje, la seña, y qué tiene que hacer a continuación.
+
+Desde la fase 8, entre esa charla y la conversión está la **seña**: un monto fijo por viaje, no reembolsable salvo cancelación de las coordinadoras. La interesada lee la condición —que escriben ellas— y la acepta con el comprobante en la misma pantalla; se guarda el texto exacto que leyó, no un "sí". La coordinadora abre el comprobante, y confirmarlo es, en el mismo acto, convertirla en pasajera. La seña no queda como un pago suelto: entra al plan de cuotas como la primera, así que no se cobra dos veces.
 
 La otra mitad es la plata. Cada pasajera tiene un plan de cuotas con vencimientos; cuando transfiere, sube el comprobante y avisa desde su teléfono. La coordinadora revisa contra su extracto bancario y confirma o rechaza con un motivo. Un semáforo verde, amarillo o rojo muestra de un vistazo quién está al día y quién no, y el sistema manda solo los recordatorios de cuota y los avisos de pasaporte por vencer. Al final se descargan las planillas que pide el hotel: quiénes viajan, quién duerme con quién, y cómo viene la cobranza. Todo funciona en dos idiomas —español e inglés— y las pantallas de la pasajera están hechas para un teléfono, no para una computadora.
 
@@ -65,7 +67,7 @@ El adaptador de Brevo está implementado y el sistema tiene dos modos: `console`
 
 Lo que eso significa concretamente:
 
-- Las seis plantillas se ven bien **en un navegador**. Cómo se ven en Gmail, en Outlook o en el mail del iPhone es una incógnita: los clientes de mail rompen HTML de formas que ningún navegador reproduce. Las plantillas están hechas con tablas, estilos inline y 600px de ancho justamente por eso, pero eso es una precaución, no una verificación.
+- Las siete plantillas se ven bien **en un navegador**. Cómo se ven en Gmail, en Outlook o en el mail del iPhone es una incógnita: los clientes de mail rompen HTML de formas que ningún navegador reproduce. Las plantillas están hechas con tablas, estilos inline y 600px de ancho justamente por eso, pero eso es una precaución, no una verificación.
 - No se sabe si caen en spam.
 - No se probó el circuito completo: invitación → mail → link → canje.
 
@@ -79,6 +81,7 @@ Hay un comando para probarlo: `npm run email:test` manda las plantillas a una ca
 - **El mail de aviso de interesada nueva**, que es la séptima plantilla y comparte el destino de todas las demás: nunca llegó a una casilla real (ver arriba).
 - **El botón de Wix**: hay que pegar la URL de `/interes` en la página, y eso todavía no se hizo. La URL está a la vista en el paso 6 del wizard.
 - **El rate limiting bajo tráfico real.** El tope global diario es de 200 y está pensado como fusible, no como medida fina. Si una campaña de Instagram funciona muy bien, ese número se queda corto antes que cualquier otra cosa.
+- **La seña, entera.** Nadie subió nunca un comprobante de transferencia real desde un teléfono real. Lo que está probado contra la base es la lógica —el aislamiento, la idempotencia, la imputación como primera cuota—; lo que no se ejerció es el circuito físico: sacar la foto, que comprima, que suba al bucket, y que la coordinadora la abra desde otra computadora. Es el mismo circuito del certificado de cobertura médica, que tampoco se ejerció con gente de verdad.
 
 **Lo primero que hay que hacer antes de publicar el botón:** cargar los textos de marca desde el paso 6 del wizard. Sin ellos la pantalla muestra el nombre del viaje y el formulario, sin propuesta y sin decirle a la interesada qué sigue.
 
@@ -99,13 +102,17 @@ El checklist para desplegarlo está en [DEPLOY.md](DEPLOY.md), con una sección 
 
 ## Deuda técnica conocida
 
-### La suite de integración tarda 17 minutos
+### La suite de integración tarda 25 minutos
 
-211 tests contra la base real de Supabase. La causa **no es el código**: los tests comparten un pool de una sola conexión (`max: 1`), así que las consultas de un mismo caso se serializan y cada una paga un viaje de ida y vuelta por la red. Lo que se mide es latencia, no lentitud.
+244 tests contra la base real de Supabase. La causa **no es el código**: los tests comparten un pool de una sola conexión (`max: 1`), así que las consultas de un mismo caso se serializan y cada una paga un viaje de ida y vuelta por la red. Lo que se mide es latencia, no lentitud.
 
 **Solución conocida, no aplicada:** correrlos contra un Postgres local en Docker bajaría el tiempo un orden de magnitud.
 
-**Por qué no se hizo:** hoy 17 minutos es tolerable. Con el doble de tests no lo va a ser. Si te encontrás evitando correr la suite porque tarda, ese es el momento.
+🔴 **No corras dos veces la suite a la vez contra la misma base.** `fileParallelism: false` serializa los archivos DENTRO de una corrida, pero nada coordina dos corridas simultáneas. Y hay un recurso que es global de verdad: el flag `acceptingInterest`, que tiene un índice único sobre TODA la tabla `Trip`. Los tests del embudo y de la seña lo piden prestado y lo devuelven; dos corridas al mismo tiempo se lo roban entre sí, y el síntoma es un `Unique constraint failed on the constraint: "Trip_una_sola_captacion_abierta"` en la limpieza de un test — que falla por su `finally` y no por lo que estaba verificando. Pasó de verdad durante la fase 8, y costó un rato entenderlo porque el test que fallaba no tenía nada que ver con el problema.
+
+Lo mismo vale para correr la suite mientras se re-siembra la base.
+
+**Por qué no se hizo:** cuando eran 211 tests, 17 minutos era tolerable. En la fase 8 pasaron a 244 y la suite ya tarda unos 25. La advertencia de la versión anterior de este párrafo —"con el doble de tests no lo va a ser"— se está cumpliendo a mitad de camino. Si te encontrás evitando correr la suite porque tarda, ese es el momento.
 
 ### ~~La restauración completa del backup no se probó~~ · RESUELTA el 27/08/2026
 
@@ -136,6 +143,8 @@ La prueba dejó al descubierto algo que conviene saber antes de una emergencia: 
 Cuando alguien se anota en `/interes`, el sistema le crea una **cuenta y una `Person`** con su nombre, país y teléfono. Si esa persona nunca se convierte en pasajera —porque la descartaron, o porque no volvió a escribir— esas filas **quedan para siempre**. No hay borrado, ni automático ni a mano.
 
 **Por qué está así:** la fase 7 tenía que resolver el embudo, y un módulo de retención es un tema propio (¿a los cuántos meses?, ¿lo decide una persona o un cron?, ¿se avisa antes?). Meterlo a último momento habría sido peor que dejarlo escrito acá.
+
+🔴 **La fase 8 agravó esto y hay que decirlo:** ahora una interesada que subió la seña deja además **un archivo en el bucket** —el comprobante de una transferencia bancaria— y una fila con el texto que aceptó. Si la descartan, eso queda igual que el resto. Ya no son tres columnas de contacto: es un documento financiero de alguien que no llegó a tener ninguna relación comercial con la escuela.
 
 **Por qué importa igual, y no es lo mismo que el resto de los datos del sistema:** todas las demás personas de la base tienen una relación comercial con el cliente — pagaron, o al menos fueron invitadas a un viaje concreto. Una interesada `DESCARTADA` no tuvo ninguna. Son datos personales de gente que preguntó una vez y se fue.
 
@@ -211,9 +220,60 @@ Toda consulta a esas dos tablas pasa por `lib/services/passengers.ts`, que aplic
 
 El filtro además **falla cerrado**: para alguien sin acceso devuelve una condición imposible en vez de un `where` vacío. Si por error se omitiera el guard, la consulta trae cero filas en lugar de traerlas todas.
 
-**Hay exactamente una excepción**, en `lib/auth/passenger-bootstrap.ts`, y está en su propio archivo para que se pueda verificar de un vistazo. Existe porque `passengers.ts` necesita saber quién está mirando, y averiguarlo exige leer la tabla: es circular. Esa función no decide nada y solo devuelve ids. Si algún día necesita devolver un dato que no sea un id, dejó de ser una excepción de arranque y hay que rediscutirla.
+**Hay exactamente una excepción**, en `lib/auth/passenger-bootstrap.ts`, y está en su propio archivo para que se pueda verificar de un vistazo. En la fase 8 se le sumó el `personId` a lo que devuelve —`services/storage.ts` lo necesita para armar el prefijo de la carpeta del bucket— y eso cabe dentro de la regla tal como está escrita: es un id, no un dato que describa a nadie. Un `fullName` o un `status` no cabrían. Existe porque `passengers.ts` necesita saber quién está mirando, y averiguarlo exige leer la tabla: es circular. Esa función no decide nada y solo devuelve ids. Si algún día necesita devolver un dato que no sea un id, dejó de ser una excepción de arranque y hay que rediscutirla.
 
 `npm run check:layers` hace cumplir esta regla.
+
+---
+
+### 7. Un plan con seña SE PUEDE regenerar, aunque tenga un pago confirmado
+
+La regla general es que un plan con pagos confirmados es inmutable: reescribir las cuotas debajo de plata que ya entró deja una imputación sin sentido. Pero un plan generado para alguien que pagó la seña **nace con un pago confirmado**, y aun así se puede rehacer.
+
+Leído rápido, eso es un agujero en la regla. No lo es.
+
+**Por qué no lo es:** el `Payment` de la seña no es un hecho independiente. Es la **proyección** de una fila `DepositProof`, que es la que tiene la verdad — el importe, la fecha, el comprobante y el texto que la interesada aceptó. Al regenerar se lo borra, se pone `paymentId` en `null` y se lo vuelve a crear imputado a la nueva cuota 1, con los mismos datos de siempre. Nada de lo que la pasajera hizo se pierde ni se altera: lo único que se movió es a qué cuota apunta.
+
+La regla completa, en una línea: **no se reescriben cuotas debajo de plata que entró declarada CONTRA una cuota; la seña entró antes de que las cuotas existieran, así que se puede reimputar.**
+
+🔴 **El síntoma, si alguien lo "arregla".** Si un día alguien endurece esto de vuelta a "cualquier pago confirmado bloquea" —que es lo que dice la regla general, y por eso es una corrección tentadora— entonces **ningún plan con seña se va a poder regenerar nunca**, porque todos nacen con uno. Y el mensaje de error va a decir *"este plan ya tiene pagos confirmados y no se puede modificar"*, que es verdad y no explica nada: la coordinadora va a ver que no hay ningún pago cargado en la pantalla y va a concluir que el sistema está roto. Nadie va a relacionar el síntoma con la seña.
+
+Lo que lo sostiene son **dos tests, y hacen falta los dos** (`tests/integration/deposits.test.ts`): con la seña sola se regenera, y con seña más un pago declarado NO. Una sola mitad no fija la regla — probando solo la primera, quitar el chequeo entero pasa en verde; probando solo la segunda, endurecerlo pasa en verde. Se verificó mutando el código: con la regla endurecida, la suite falla.
+
+---
+
+### 8. `maxWait: 15_000` al confirmar una seña no es un número al azar
+
+`confirmDepositAndConvert` abre su transacción con `{ maxWait: 15_000, timeout: 20_000 }`. Los defaults de Prisma son 2 y 5 segundos, así que esto parece una exageración copiada de algún lado. No lo es.
+
+**Por qué:** el pool es de **una sola conexión** por instancia (decisión 2 de esta misma lista), y una transacción interactiva la retiene de punta a punta. Dos confirmaciones concurrentes en la misma instancia —el doble click de siempre— **no se solapan**: la segunda tiene que esperar a que la primera termine y suelte la conexión. Con el `maxWait` de 2 segundos esa espera se agota antes.
+
+🔴 **El síntoma, si alguien lo "limpia".** La coordinadora hace doble click y recibe `Unable to start a transaction in the given time` — un error de infraestructura, sin relación aparente con lo que hizo. Lo correcto es que la segunda llamada espere su turno, entre, encuentre la seña ya confirmada y salga limpio por `YA_RESUELTO`.
+
+**Y por qué cuesta descubrirlo:** no lo detecta ningún test rápido. Solo aparece bajo concurrencia real, y de un solo lado — el CAS (`UPDATE ... WHERE status='EN_REVISION'`) está perfecto y sigue estando perfecto con el `maxWait` roto. El problema está una capa más abajo, en quién consigue la conexión. Se descubrió porque el test de conversión doble concurrente falló con un error que no tenía nada que ver con lo que el test estaba mirando.
+
+---
+
+### 9. Cerrar la captación NO le impide pagar la seña a quien ya está en el embudo
+
+`acceptingInterest` en `false` cierra `/interes`: nadie nuevo se registra. Pero una interesada **ya registrada** puede seguir subiendo el comprobante de su seña. Leído rápido, eso parece un agujero — el viaje está cerrado y sin embargo alguien sigue entrando plata.
+
+**Por qué no lo es:** `acceptingInterest` controla quién ENTRA al embudo, no quién puede COMPLETAR el que ya empezó. Son dos preguntas distintas, y el flujo real las separa:
+
+> se registra → coordinan el Zoom por WhatsApp → la reunión es dos semanas después → recién ahí paga la seña
+
+Con catorce lugares, las coordinadoras van a cerrar la captación **mientras todavía hay gente a mitad de camino**. Eso no es un borde raro: es el caso normal. Si el cierre le cerrara la puerta también a quien ya está adentro, esa persona no puede pagar, no entiende por qué, y nadie del otro lado se entera hasta que escribe por WhatsApp.
+
+**Lo que sí se exige para subir** (`requireInterestAccess`, en `lib/auth/guards.ts`):
+
+- una `Interest` suya que **no** esté `DESCARTADA` — descartada es "no sigue", y quien no sigue no manda plata;
+- un viaje en un estado que admita cobrar: **ABIERTO o CERRADO**. `BORRADOR` todavía no es un viaje y `FINALIZADO` ya pasó.
+
+Quien no tiene `Interest` previa no puede hacer nada por esta puerta, y para registrarse tiene que pasar por `/interes`, que **sí** exige `acceptingInterest`. Esa puerta de entrada no se movió.
+
+Confirmar y rechazar tampoco miran `acceptingInterest`, por la misma razón y una más fuerte: ella ya pagó. Cerrar el registro no puede dejar su plata en el limbo.
+
+Lo sostienen dos tests en `tests/integration/deposit-isolation.test.ts`, y hacen falta los dos: con la captación cerrada una interesada ya registrada **sí** puede subir, y alguien sin `Interest` previa **no** puede ni registrarse ni subir.
 
 ---
 

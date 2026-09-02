@@ -184,6 +184,20 @@ export function StepPublic({
       </section>
 
       <section className="space-y-2">
+        <h3 className="font-semibold">{t("depositTermsTitle")}</h3>
+        <p className="text-muted-foreground text-sm">{t("depositTermsHelp")}</p>
+        {pair("depositTermsEs", "depositTermsEn", 5)}
+      </section>
+
+      <section className="space-y-2">
+        <h3 className="font-semibold">{t("paymentInstructionsTitle")}</h3>
+        <p className="text-muted-foreground text-sm">
+          {t("paymentInstructionsHelp")}
+        </p>
+        {pair("paymentInstructionsEs", "paymentInstructionsEn", 5)}
+      </section>
+
+      <section className="space-y-2">
         <h3 className="font-semibold">{t("closedTitle")}</h3>
         <p className="text-muted-foreground text-sm">{t("closedHelp")}</p>
         {pair("closedMessageEs", "closedMessageEn", 3)}

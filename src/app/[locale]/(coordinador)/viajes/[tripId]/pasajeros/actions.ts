@@ -22,6 +22,7 @@ import {
   confirmPassenger,
   createRoom,
   PassengerStateError,
+  setPassengerPaymentInstructions,
   setPassengerPriceOverride,
   updatePersonByCoordinator,
 } from "@/lib/services/passengers";
@@ -317,6 +318,29 @@ export async function assignRoomAction(
   roomId: string | null,
 ): Promise<ActionResult> {
   const result = await run(() => assignRoom(passengerId, roomId));
+  if (result.ok) revalidate(tripId);
+  return result;
+}
+
+/**
+ * Guarda las instrucciones de pago propias de una pasajera.
+ *
+ * `null` borra el override y devuelve la ficha al texto del viaje. Es
+ * deliberadamente el mismo valor que "el campo quedó vacío": vacío significa
+ * "usa el del viaje", no "no hay dónde pagar".
+ */
+export async function savePaymentInstructionsAction(
+  passengerId: string,
+  tripId: string,
+  instructions: string | null,
+): Promise<ActionResult> {
+  if (instructions !== null && instructions.length > 3000) {
+    return { ok: false, error: "Las instrucciones son demasiado largas." };
+  }
+
+  const result = await run(() =>
+    setPassengerPaymentInstructions(passengerId, instructions),
+  );
   if (result.ok) revalidate(tripId);
   return result;
 }

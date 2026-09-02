@@ -16,12 +16,15 @@ import {
   impute,
   lateDueDates,
   splitIntoInstallments,
+  splitWithDeposit,
   suggestDueDates,
+  suggestDueDatesFromDeposit,
   worstLight,
   MAX_INSTALLMENTS,
   type DerivedPlan,
   type PaymentInput,
   type PaymentLight,
+  type SuggestedDueDate,
 } from "@/lib/domain/payments";
 import {
   convert,
@@ -31,13 +34,14 @@ import {
   type Currency,
   type FxSnapshot,
 } from "@/lib/domain/fx";
-import { toDecimal, ZERO, roundToCents, sum } from "@/lib/domain/money";
+import { toDecimal, ZERO, roundToCents, sum, type Decimal } from "@/lib/domain/money";
 import {
   calendarDateIn,
   fromCalendarDate,
   toCalendarDate,
   type CalendarDate,
 } from "@/lib/domain/calendar";
+import { pickLocalized } from "@/lib/domain/rich-text";
 import { toIsoDate } from "@/lib/validation/trip";
 import { formatMoney } from "@/lib/format";
 import {
@@ -98,7 +102,8 @@ export class PaymentError extends Error {
       | "SIN_PLAN"
       | "CUOTA"
       | "ESTADO"
-      | "TC_FALTANTE",
+      | "TC_FALTANTE"
+      | "SENA_MAYOR_AL_PRECIO",
     /** Cuántas cuotas se reemplazarían. Alimenta el aviso de confirmación. */
     readonly installmentsAtRisk?: number,
   ) {
@@ -209,6 +214,16 @@ export interface PassengerPaymentPlan {
    */
   balanceEquivalences: { currency: Currency; amount: string }[];
   fxSnapshotDate: Date;
+  /**
+   * DÓNDE transferir, ya resuelto: el texto propio de la pasajera si se lo
+   * cargaron, y si no el del viaje.
+   *
+   * Hasta la fase 8 "Mis pagos" decía cuánto se debe y no dónde pagarlo, así
+   * que la pasajera tenía que ir a buscar la cuenta a un WhatsApp de hace tres
+   * meses. Se resuelve en el servidor y no en la pantalla para que haya un
+   * solo lugar donde se decide cuál de los dos textos manda.
+   */
+  paymentInstructions: string | null;
 }
 
 function serializeInstallment(
@@ -262,6 +277,7 @@ function toPaymentInputs(
 export async function getPaymentPlan(
   passengerId: string,
   now: Date = new Date(),
+  locale = "es",
 ): Promise<PassengerPaymentPlan | null> {
   const passenger = await getPassengerForPayments(passengerId);
 
@@ -272,7 +288,7 @@ export async function getPaymentPlan(
 
   if (!plan) return null;
 
-  return buildPlanView(plan, passenger, now);
+  return buildPlanView(plan, passenger, now, locale);
 }
 
 function buildPlanView(
@@ -309,6 +325,7 @@ function buildPlanView(
   },
   passenger: PassengerForPayments,
   now: Date,
+  locale = "es",
 ): PassengerPaymentPlan {
   // El plan de un pasajero CANCELADO se congela: no genera vencidas ni
   // recordatorios. Lo que ya pagó se sigue viendo, porque hay que devolvérselo.
@@ -377,6 +394,132 @@ function buildPlanView(
       amount: v.amount.toFixed(2),
     })),
     fxSnapshotDate: plan.fxSnapshotDate,
+    // El override de la pasajera pisa ENTERO al del viaje, no se concatenan:
+    // dos juegos de datos bancarios en la misma pantalla es la forma más
+    // segura de que transfiera al equivocado.
+    paymentInstructions:
+      passenger.paymentInstructions?.trim() ||
+      pickLocalized(
+        passenger.trip.paymentInstructionsEs,
+        passenger.trip.paymentInstructionsEn,
+        locale,
+      ),
+  };
+}
+
+// ------------------------------- La seña -----------------------------------
+
+/**
+ * La seña confirmada de una pasajera, si la hay.
+ *
+ * ── Por qué solo la CONFIRMADA ────────────────────────────────────────────
+ *
+ * Una seña EN_REVISION es un comprobante que nadie miró todavía: imputarla
+ * como cuota 1 sería dar por cobrada plata que puede no haber entrado. Y una
+ * RECHAZADA es explícitamente lo contrario. Solo la confirmada es un hecho.
+ *
+ * En la práctica no puede haber una sin confirmar acá: la conversión a
+ * pasajera ES la confirmación de la seña, así que una pasajera con seña la
+ * tiene confirmada por construcción. El filtro está igual, porque una
+ * invariante que depende de otro módulo es una invariante que se rompe el día
+ * que ese otro módulo cambia.
+ *
+ * ── Cómo se la encuentra ──────────────────────────────────────────────────
+ *
+ * Por `passengerId`, que la conversión sella en la misma transacción que crea
+ * el Passenger. La alternativa era recorrer Passenger → Person → User →
+ * Interest → DepositProof, cuatro saltos para llegar a una fila que ya sabe a
+ * quién pertenece.
+ */
+interface ConfirmedDeposit {
+  id: string;
+  /** Ya imputado en la moneda del viaje: el TC lo fijó quien confirmó. */
+  amountInTripCurrency: string;
+  transferDate: CalendarDate;
+  currency: Currency;
+  amount: string;
+  fxRateUsed: string | null;
+  fxRateSource: "SUGERIDO" | "INGRESADO" | null;
+  proofFileId: string;
+  /** El Payment que ya la materializó, si el plan se generó alguna vez. */
+  paymentId: string | null;
+}
+
+async function confirmedDepositOf(
+  passengerId: string,
+): Promise<ConfirmedDeposit | null> {
+  const deposit = await prisma.depositProof.findUnique({
+    where: { passengerId },
+    select: {
+      id: true,
+      status: true,
+      amount: true,
+      currency: true,
+      fxRateUsed: true,
+      fxRateSource: true,
+      amountInTripCurrency: true,
+      transferDate: true,
+      proofFileId: true,
+      paymentId: true,
+    },
+  });
+
+  if (!deposit || deposit.status !== "CONFIRMADO") return null;
+
+  return {
+    id: deposit.id,
+    amountInTripCurrency: deposit.amountInTripCurrency.toString(),
+    transferDate: toCalendarDate(deposit.transferDate),
+    currency: deposit.currency as Currency,
+    amount: deposit.amount.toString(),
+    fxRateUsed: deposit.fxRateUsed?.toString() ?? null,
+    fxRateSource: deposit.fxRateSource,
+    proofFileId: deposit.proofFileId,
+    paymentId: deposit.paymentId,
+  };
+}
+
+/**
+ * Los importes y las fechas del plan, con seña o sin ella.
+ *
+ * Es el único lugar donde se decide cuál de los dos modos aplica, para que la
+ * vista previa y la generación no puedan discrepar: si el preview mostrara
+ * cuotas repartidas parejo y el guardado imputara la seña como cuota 1, la
+ * coordinadora confirmaría una cosa y quedaría guardada otra.
+ */
+function planShape(
+  passenger: PassengerForPayments,
+  total: string,
+  installmentCount: number,
+  deposit: ConfirmedDeposit | null,
+  today: CalendarDate,
+): { amounts: Decimal[]; dates: SuggestedDueDate[] } {
+  if (!deposit) {
+    return {
+      amounts: splitIntoInstallments(total, installmentCount),
+      dates: suggestDueDates(installmentCount, today, passenger.trip.startDate),
+    };
+  }
+
+  if (toDecimal(deposit.amountInTripCurrency).greaterThanOrEqualTo(total)) {
+    // No es un error de programación: puede pasar de verdad si le bajan el
+    // precio a alguien después de que pagó la seña. Se corta con un motivo
+    // propio para que la pantalla sepa decir qué hacer —revisar el precio o
+    // el override— en vez de mostrar "monto inválido".
+    throw new PaymentError(
+      "La seña ya cubre el precio de esta pasajera. Revisá el precio antes de generar el plan.",
+      "SENA_MAYOR_AL_PRECIO",
+    );
+  }
+
+  return {
+    amounts: splitWithDeposit(total, deposit.amountInTripCurrency, installmentCount),
+    dates: suggestDueDatesFromDeposit(
+      installmentCount,
+      deposit.transferDate,
+      passenger.trip.installmentIntervalMonths,
+      passenger.trip.startDate,
+    ),
   };
 }
 
@@ -415,8 +558,13 @@ export interface PlanPreview {
   lateInstallments: number[];
   /** Un plan ya existente que esta generación reemplazaría. */
   existingInstallmentCount: number | null;
-  /** Tiene pagos confirmados: el plan es inmutable. */
+  /**
+   * Tiene pagos confirmados que NO son la seña: el plan es inmutable.
+   * La seña no cuenta — ver `blockingConfirmedPayments`.
+   */
   locked: boolean;
+  /** La seña ya confirmada que va a ocupar la cuota 1, si la hay. */
+  deposit: { amountInTripCurrency: string; transferDate: CalendarDate } | null;
   fxSnapshotDate: string;
   fxStale: boolean;
 }
@@ -438,11 +586,13 @@ export async function previewPaymentPlan(
   assertPlannable(passenger);
 
   const total = planTotalFor(passenger);
-  const amounts = splitIntoInstallments(total, installmentCount);
-  const dates = suggestDueDates(
+  const deposit = await confirmedDepositOf(passengerId);
+  const { amounts, dates } = planShape(
+    passenger,
+    total,
     installmentCount,
+    deposit,
     calendarDateIn(now, passenger.trip.timezone),
-    passenger.trip.startDate,
   );
 
   const existing = await prisma.paymentPlan.findUnique({
@@ -466,7 +616,18 @@ export async function previewPaymentPlan(
     })),
     lateInstallments: dates.filter((d) => d.afterDeparture).map((d) => d.number),
     existingInstallmentCount: existing?._count.installments ?? null,
-    locked: (existing?.payments.length ?? 0) > 0,
+    // El pago de la seña NO bloquea: es la proyección del DepositProof y se
+    // reimputa sola al regenerar. Ver `blockingConfirmedPayments`.
+    locked:
+      (existing?.payments ?? []).filter((p) => p.id !== deposit?.paymentId)
+        .length > 0,
+    deposit:
+      deposit === null
+        ? null
+        : {
+            amountInTripCurrency: deposit.amountInTripCurrency,
+            transferDate: deposit.transferDate,
+          },
     fxSnapshotDate: toIsoDate(snapshot.date),
     fxStale: stale,
   };
@@ -507,6 +668,28 @@ function assertPlannable(passenger: PassengerForPayments): void {
  * tampoco: al borrar las cuotas ese pago quedaría colgado de la nada. Sin
  * ninguna de las dos cosas, se puede, con confirmación explícita del
  * coordinador (`replaceExisting`) y su entrada en AuditLog.
+ *
+ * ── LA SEÑA ES LA ÚNICA EXCEPCIÓN, y hay que entender por qué ─────────────
+ *
+ * El pago de la seña NO bloquea la regeneración, aunque esté CONFIRMADO.
+ *
+ * No es un agujero en la regla: es que ese `Payment` no es un hecho
+ * independiente. Es la PROYECCIÓN de una fila `DepositProof`, que es la que
+ * tiene la verdad —el importe, la fecha, el comprobante y la aceptación—. Al
+ * regenerar se lo borra, se pone `paymentId` en null y se lo vuelve a crear
+ * imputado a la nueva cuota 1, con los mismos datos de siempre. Nada de lo que
+ * la pasajera hizo se pierde ni se altera; lo único que se movió es a qué
+ * cuota apunta.
+ *
+ * La regla completa, dicha en una línea: *no se reescriben cuotas debajo de
+ * plata que entró declarada CONTRA una cuota; la seña entró antes de que las
+ * cuotas existieran, así que se puede reimputar.*
+ *
+ * ⚠️ Si alguien endurece esto de vuelta a "cualquier pago confirmado bloquea",
+ * ningún plan con seña se va a poder regenerar NUNCA —nacen con uno—, y el
+ * mensaje de error va a decir "este plan ya tiene pagos confirmados" sin que
+ * haya forma obvia de darse cuenta de por qué. Está anotado en ESTADO.md,
+ * entre las decisiones que parecen errores.
  */
 export async function generatePaymentPlan(
   passengerId: string,
@@ -521,10 +704,17 @@ export async function generatePaymentPlan(
   assertPlannable(passenger);
 
   const total = planTotalFor(passenger);
+  const deposit = await confirmedDepositOf(passengerId);
 
   // Los importes NO se toman del cliente: se recalculan acá. Las fechas sí
   // son las que mandó el coordinador, porque son suyas para decidir.
-  const amounts = splitIntoInstallments(total, input.installmentCount);
+  const { amounts } = planShape(
+    passenger,
+    total,
+    input.installmentCount,
+    deposit,
+    calendarDateIn(now, passenger.trip.timezone),
+  );
 
   const existing = await prisma.paymentPlan.findUnique({
     where: { passengerId },
@@ -537,8 +727,11 @@ export async function generatePaymentPlan(
   });
 
   if (existing) {
+    // El pago de la seña se excluye a propósito. Ver el docblock: es la
+    // proyección del DepositProof, no un hecho independiente, y se reimputa
+    // sola unas líneas más abajo.
     const confirmed = existing.payments.filter(
-      (p) => p.status === "CONFIRMADO",
+      (p) => p.status === "CONFIRMADO" && p.id !== deposit?.paymentId,
     ).length;
     if (confirmed > 0) {
       throw new PaymentError(
@@ -580,7 +773,21 @@ export async function generatePaymentPlan(
   }));
 
   const planId = await prisma.$transaction(async (tx) => {
+    let id: string;
+
     if (existing) {
+      // La seña se DESMATERIALIZA antes de borrar las cuotas. Tiene que ir
+      // primero: el Payment de la seña apunta a una cuota que está por dejar
+      // de existir, y `onDelete: SetNull` lo dejaría confirmado, colgado de
+      // ninguna cuota y contando como crédito en derivePlan().
+      if (deposit?.paymentId) {
+        await tx.depositProof.update({
+          where: { id: deposit.id },
+          data: { paymentId: null },
+        });
+        await tx.payment.delete({ where: { id: deposit.paymentId } });
+      }
+
       // Las cuotas viejas se borran; los pagos RECHAZADOS quedan con
       // installmentId en null (onDelete: SetNull) y conservan su historia.
       await tx.installment.deleteMany({ where: { planId: existing.id } });
@@ -595,22 +802,71 @@ export async function generatePaymentPlan(
           installments: { create: installmentData },
         },
       });
-      return existing.id;
+      id = existing.id;
+    } else {
+      const created = await tx.paymentPlan.create({
+        data: {
+          passengerId,
+          totalAmount: toDecimal(total).toFixed(2),
+          currency: passenger.trip.currency,
+          installmentCount: input.installmentCount,
+          fxSnapshot,
+          fxSnapshotDate: snapshot.date,
+          installments: { create: installmentData },
+        },
+        select: { id: true },
+      });
+      id = created.id;
     }
 
-    const created = await tx.paymentPlan.create({
-      data: {
-        passengerId,
-        totalAmount: toDecimal(total).toFixed(2),
-        currency: passenger.trip.currency,
-        installmentCount: input.installmentCount,
-        fxSnapshot,
-        fxSnapshotDate: snapshot.date,
-        installments: { create: installmentData },
-      },
-      select: { id: true },
-    });
-    return created.id;
+    // ── La materialización de la seña ─────────────────────────────────────
+    //
+    // Acá y no en la conversión: hasta esta línea no existía un PaymentPlan
+    // del que colgar el pago, y crear uno provisorio en la conversión habría
+    // dejado el plan inmutable justo antes de generar el de verdad.
+    //
+    // Nace CONFIRMADO porque la seña ya se revisó —confirmarla ES lo que
+    // convirtió a la interesada en pasajera— y con los importes congelados
+    // entonces, no recalculados hoy: el TC que se usó es el que la
+    // coordinadora leyó del extracto ese día.
+    //
+    // Lo que impide cobrarla dos veces son dos cosas, y ninguna es un `if`:
+    // `DepositProof.paymentId` es ÚNICO, así que un segundo intento viola el
+    // índice; y la cuota 1 no se suma al total, lo reparte (ver
+    // splitWithDeposit).
+    if (deposit) {
+      const firstInstallment = await tx.installment.findFirstOrThrow({
+        where: { planId: id, number: 1 },
+        select: { id: true },
+      });
+
+      const payment = await tx.payment.create({
+        data: {
+          planId: id,
+          installmentId: firstInstallment.id,
+          kind: "PAGO",
+          amount: deposit.amount,
+          currency: deposit.currency,
+          fxRateUsed: deposit.fxRateUsed,
+          fxRateSource: deposit.fxRateSource,
+          amountInTripCurrency: deposit.amountInTripCurrency,
+          transferDate: fromCalendarDate(deposit.transferDate),
+          method: METHOD_TRANSFER,
+          proofFileId: deposit.proofFileId,
+          status: "CONFIRMADO",
+          reviewedById: viewer.userId,
+          reviewedAt: new Date(),
+        },
+        select: { id: true },
+      });
+
+      await tx.depositProof.update({
+        where: { id: deposit.id },
+        data: { paymentId: payment.id },
+      });
+    }
+
+    return id;
   });
 
   const late = lateDueDates(
@@ -644,6 +900,21 @@ export async function generatePaymentPlan(
             field: "cuotasDespuesDeLaSalida",
             oldValue: null,
             newValue: late.join(", "),
+          },
+        ]
+      : []),
+    // Que la seña quedó imputada a la cuota 1 tiene que poder leerse en el
+    // log: es la respuesta a "¿por qué esta pasajera arranca con una cuota
+    // pagada?", que es exactamente lo que alguien va a preguntar dentro de
+    // seis meses mirando el plan.
+    ...(deposit
+      ? [
+          {
+            entity: "PaymentPlan",
+            entityId: planId,
+            field: "senaImputadaCuota1",
+            oldValue: null,
+            newValue: `${auditMoney(deposit.amountInTripCurrency)} · deposito:${deposit.id}`,
           },
         ]
       : []),

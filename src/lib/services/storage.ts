@@ -1,7 +1,10 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
-import { requirePassengerAccess } from "@/lib/auth/guards";
+import {
+  requireInterestAccess,
+  requirePassengerAccess,
+} from "@/lib/auth/guards";
 import { ForbiddenError } from "@/lib/auth/errors";
 import { createSupabaseAdminClient, storageBucket } from "@/lib/supabase/admin";
 import {
@@ -95,19 +98,28 @@ export interface SignedUpload {
 }
 
 /**
- * Autoriza una subida y decide dónde va el archivo.
+ * ── Dos puertas de autorización, un solo mecanismo ────────────────────────
  *
- * La path la arma el servidor a partir de la persona dueña del pasajero: el
- * cliente no puede elegir sobreescribir el archivo de otra. El `personId` sale
- * del guard, nunca del input — es la misma lectura que ya autorizó el acceso.
+ * Los archivos los suben dos actores distintos: una PASAJERA, que se autoriza
+ * contra su Passenger, y una INTERESADA, que no tiene Passenger y se autoriza
+ * contra su Interest. Las dos terminan en el mismo lugar —una carpeta de
+ * persona— porque la carpeta es de la persona y no del rol.
+ *
+ * Lo que sigue debajo de las dos puertas es exactamente el mismo código: la
+ * path la arma el servidor, la subida se verifica contra el bucket, y el guard
+ * de carpeta es la misma función pura. Está escrito así, y no como dos flujos
+ * paralelos, porque dos flujos paralelos son dos lugares donde olvidarse el
+ * chequeo, y solo uno de los dos tendría un test.
+ *
+ * Lo ÚNICO que cambia entre las dos es de dónde sale el `(tripId, personId)`.
  */
-export async function createSignedUpload(
-  passengerId: string,
+async function signUploadInto(
+  tripId: string,
+  personId: string,
   kind: FileKind,
   contentType: string,
   size: number,
 ): Promise<SignedUpload> {
-  const { tripId, personId } = await requirePassengerAccess(passengerId, "edit");
   assertDeclared(contentType, size);
 
   const extension = ALLOWED_MIME[contentType]!;
@@ -129,18 +141,51 @@ export async function createSignedUpload(
 }
 
 /**
+ * Autoriza la subida de una PASAJERA y decide dónde va el archivo.
+ *
+ * El `personId` sale del guard, nunca del input: es la misma lectura que ya
+ * autorizó el acceso, así que el cliente no puede elegir sobreescribir el
+ * archivo de otra.
+ */
+export async function createSignedUpload(
+  passengerId: string,
+  kind: FileKind,
+  contentType: string,
+  size: number,
+): Promise<SignedUpload> {
+  const { tripId, personId } = await requirePassengerAccess(passengerId, "edit");
+  return signUploadInto(tripId, personId, kind, contentType, size);
+}
+
+/**
+ * Autoriza la subida de una INTERESADA: el comprobante de su seña.
+ *
+ * No recibe ningún identificador. El viaje y la persona salen enteros de la
+ * sesión —ver `requireInterestAccess`—, así que no hay ningún id del cliente
+ * que pudiera apuntar a otra persona. Es la versión más fuerte de la regla del
+ * módulo de guards, no una excepción a ella.
+ */
+export async function createSignedUploadForInterest(
+  kind: FileKind,
+  contentType: string,
+  size: number,
+): Promise<SignedUpload> {
+  const { tripId, personId } = await requireInterestAccess();
+  return signUploadInto(tripId, personId, kind, contentType, size);
+}
+
+/**
  * Verifica el archivo YA SUBIDO contra el bucket y devuelve su path.
  *
  * Se consulta el objeto real: acá no hay nada declarado por el cliente. Si el
  * archivo no cumple, se borra del bucket antes de fallar, para no dejar
  * basura colgada que nadie va a limpiar.
  */
-export async function confirmUpload(
-  passengerId: string,
+async function verifyUploadedInto(
+  tripId: string,
+  personId: string,
   path: string,
 ): Promise<string> {
-  const { tripId, personId } = await requirePassengerAccess(passengerId, "edit");
-
   // La path tiene que caer dentro de la carpeta de esta persona: sin este
   // chequeo se podría "confirmar" el archivo de otra y quedárselo.
   if (!isInsidePersonFolder(path, tripId, personId)) {
@@ -178,6 +223,26 @@ export async function confirmUpload(
   return path;
 }
 
+/** Verifica el archivo YA SUBIDO por una PASAJERA. */
+export async function confirmUpload(
+  passengerId: string,
+  path: string,
+): Promise<string> {
+  const { tripId, personId } = await requirePassengerAccess(passengerId, "edit");
+  return verifyUploadedInto(tripId, personId, path);
+}
+
+/**
+ * Verifica el archivo YA SUBIDO por una INTERESADA.
+ *
+ * Como en la subida, no recibe identificadores: el par (viaje, persona) contra
+ * el que se valida la path sale de la sesión.
+ */
+export async function confirmUploadForInterest(path: string): Promise<string> {
+  const { tripId, personId } = await requireInterestAccess();
+  return verifyUploadedInto(tripId, personId, path);
+}
+
 /**
  * URL temporal para ver o descargar un archivo.
  *
@@ -192,6 +257,34 @@ export async function createSignedDownloadUrl(
   path: string,
 ): Promise<string> {
   const { tripId, personId } = await requirePassengerAccess(passengerId, "view");
+  return signDownloadWithinPersonFolder(tripId, personId, path, passengerId);
+}
+
+/**
+ * Firma una descarga DENTRO de la carpeta de una persona.
+ *
+ * ⚠️ ESTA FUNCIÓN NO AUTORIZA A NADIE. Verifica la convención de carpeta y
+ * firma; quién puede ver el archivo lo decidió el que llama, ANTES.
+ *
+ * Existe porque los comprobantes tienen dos dueños posibles con reglas de
+ * acceso distintas: el de una pasajera se autoriza contra su Passenger
+ * (`createSignedDownloadUrl`, acá arriba), y el de la seña de una interesada
+ * se autoriza contra su Interest o contra la capability de la coordinadora
+ * —una regla de negocio que vive en `services/deposits.ts` y no acá—.
+ *
+ * El par `(tripId, personId)` que recibe TIENE que salir de una lectura del
+ * servidor, nunca del cliente. Si algún día alguien le pasa un personId que
+ * llegó en un input, este módulo firma alegremente el archivo de otra persona:
+ * la última línea de defensa que queda es la convención de carpeta, y esa solo
+ * comprueba que el par sea coherente consigo mismo, no que sea el correcto.
+ */
+export async function signDownloadWithinPersonFolder(
+  tripId: string,
+  personId: string,
+  path: string,
+  /** Solo para el log del diagnóstico. No participa de ninguna decisión. */
+  requestedBy: string,
+): Promise<string> {
 
   // ── Las dos causas de un 404, separadas en el log ──────────────────────
   //
@@ -212,7 +305,7 @@ export async function createSignedDownloadUrl(
   // persona.
   if (!isInsidePersonFolder(path, tripId, personId)) {
     console.warn(
-      `[storage] PATH_FUERA_DE_CARPETA · esperaba ${personFolder(tripId, personId)} · pasajero ${passengerId}`,
+      `[storage] PATH_FUERA_DE_CARPETA · esperaba ${personFolder(tripId, personId)} · pedido por ${requestedBy}`,
     );
     throw new ForbiddenError();
   }

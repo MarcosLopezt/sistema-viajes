@@ -315,7 +315,14 @@ export async function setTripPrices(
 
   const before = await prisma.trip.findUniqueOrThrow({
     where: { id: tripId },
-    select: { priceDouble: true, priceSingle: true, status: true },
+    select: {
+      priceDouble: true,
+      priceSingle: true,
+      depositAmount: true,
+      defaultInstallmentCount: true,
+      installmentIntervalMonths: true,
+      status: true,
+    },
   });
 
   if (!EDITABLE_STATUSES.includes(before.status)) {
@@ -326,7 +333,15 @@ export async function setTripPrices(
 
   await prisma.trip.update({
     where: { id: tripId },
-    data: { priceDouble: input.priceDouble, priceSingle: input.priceSingle },
+    data: {
+      priceDouble: input.priceDouble,
+      priceSingle: input.priceSingle,
+      depositAmount: input.depositAmount ?? null,
+      // `undefined` en un `data` de Prisma significa "no lo toques", que es
+      // exactamente lo que queremos cuando el formulario no los manda.
+      defaultInstallmentCount: input.defaultInstallmentCount,
+      installmentIntervalMonths: input.installmentIntervalMonths,
+    },
   });
 
   await recordAudit(viewer.userId, [
@@ -343,6 +358,17 @@ export async function setTripPrices(
       field: "priceSingle",
       oldValue: auditMoney(before.priceSingle),
       newValue: auditMoney(input.priceSingle),
+    },
+    // La seña también es plata y también se va a preguntar cuándo cambió.
+    // Además tiene una consecuencia que el precio no tiene: quien ya aceptó
+    // conserva el monto que se le mostró, así que después de un cambio pueden
+    // convivir dos importes legítimos.
+    {
+      entity: "Trip",
+      entityId: tripId,
+      field: "depositAmount",
+      oldValue: auditMoney(before.depositAmount),
+      newValue: input.depositAmount ? auditMoney(input.depositAmount) : null,
     },
   ]);
 }
@@ -361,6 +387,10 @@ export interface TripPublicSettings {
   emailSignatureEn: string | null;
   closedMessageEs: string | null;
   closedMessageEn: string | null;
+  depositTermsEs: string | null;
+  depositTermsEn: string | null;
+  paymentInstructionsEs: string | null;
+  paymentInstructionsEn: string | null;
 }
 
 /** Los textos de marca y el switch de captación, para el wizard. */
@@ -383,6 +413,10 @@ export async function getTripPublicSettings(
       emailSignatureEn: true,
       closedMessageEs: true,
       closedMessageEn: true,
+      depositTermsEs: true,
+      depositTermsEn: true,
+      paymentInstructionsEs: true,
+      paymentInstructionsEn: true,
     },
   });
 }
@@ -414,6 +448,10 @@ export async function setTripPublicTexts(
       emailSignatureEn: input.emailSignatureEn ?? null,
       closedMessageEs: input.closedMessageEs ?? null,
       closedMessageEn: input.closedMessageEn ?? null,
+      depositTermsEs: input.depositTermsEs ?? null,
+      depositTermsEn: input.depositTermsEn ?? null,
+      paymentInstructionsEs: input.paymentInstructionsEs ?? null,
+      paymentInstructionsEn: input.paymentInstructionsEn ?? null,
     },
   });
 }
@@ -681,6 +719,9 @@ export async function getTripBudget(tripId: string) {
       coordinatorCount: true,
       priceDouble: true,
       priceSingle: true,
+      depositAmount: true,
+      defaultInstallmentCount: true,
+      installmentIntervalMonths: true,
       passportValidityMonths: true,
       requireFullPassportValidity: true,
       stops: {
@@ -789,6 +830,9 @@ function serializeTrip(trip: {
   coordinatorCount: number;
   priceDouble: { toString(): string } | null;
   priceSingle: { toString(): string } | null;
+  depositAmount: { toString(): string } | null;
+  defaultInstallmentCount: number;
+  installmentIntervalMonths: number;
   passportValidityMonths: number;
   requireFullPassportValidity: boolean;
   stops: readonly {
@@ -826,6 +870,7 @@ function serializeTrip(trip: {
     ...trip,
     priceDouble: trip.priceDouble?.toString() ?? null,
     priceSingle: trip.priceSingle?.toString() ?? null,
+    depositAmount: trip.depositAmount?.toString() ?? null,
     stops: trip.stops.map((stop) => ({
       ...stop,
       accommodations: stop.accommodations.map((a) => ({

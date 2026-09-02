@@ -245,7 +245,12 @@ export default async function PassengerPaymentsPage({
         passengerName={name}
         currency={currency}
         locale={locale}
-        initialCount={plan?.installments.length ?? 3}
+        // Sin plan todavía, la cantidad sugerida sale del viaje. Con seña el
+        // default del negocio es 3 —la seña más dos—, y es configurable por
+        // viaje desde el paso 5 del presupuesto.
+        initialCount={
+          plan?.installments.length ?? passenger.trip.defaultInstallmentCount
+        }
         disabledReason={disabledReason}
       />
     </div>

@@ -47,6 +47,9 @@ export default async function BudgetPage({
     requireFullPassportValidity: trip.requireFullPassportValidity,
     priceDouble: trip.priceDouble,
     priceSingle: trip.priceSingle,
+    depositAmount: trip.depositAmount,
+    defaultInstallmentCount: trip.defaultInstallmentCount,
+    installmentIntervalMonths: trip.installmentIntervalMonths,
     stops: trip.stops.map((stop) => ({
       id: stop.id,
       order: stop.order,
@@ -73,6 +76,10 @@ export default async function BudgetPage({
       emailSignatureEn: publicSettings.emailSignatureEn ?? "",
       closedMessageEs: publicSettings.closedMessageEs ?? "",
       closedMessageEn: publicSettings.closedMessageEn ?? "",
+      depositTermsEs: publicSettings.depositTermsEs ?? "",
+      depositTermsEn: publicSettings.depositTermsEn ?? "",
+      paymentInstructionsEs: publicSettings.paymentInstructionsEs ?? "",
+      paymentInstructionsEn: publicSettings.paymentInstructionsEn ?? "",
     },
   };
 

@@ -58,6 +58,11 @@ export interface WizardTrip {
   requireFullPassportValidity: boolean;
   priceDouble: string | null;
   priceSingle: string | null;
+  /** La seña. Null mientras no la hayan decidido: es un estado válido. */
+  depositAmount: string | null;
+  /** Defaults del plan con seña. Solo intervienen si hay seña. */
+  defaultInstallmentCount: number;
+  installmentIntervalMonths: number;
   stops: WizardStop[];
   directCosts: WizardDirectCost[];
   indirectCosts: WizardIndirectCost[];
@@ -82,6 +87,17 @@ export interface WizardPublicZone {
   emailSignatureEn: string;
   closedMessageEs: string;
   closedMessageEn: string;
+  /**
+   * La condición de no reembolsable de la seña y dónde transferir.
+   *
+   * Van con el resto de los textos de marca porque son lo mismo: los escriben
+   * las coordinadoras, no quien programa. La condición además se COPIA a cada
+   * aceptación, así que editarla acá no toca ninguna aceptación ya guardada.
+   */
+  depositTermsEs: string;
+  depositTermsEn: string;
+  paymentInstructionsEs: string;
+  paymentInstructionsEn: string;
 }
 
 /** Mix de pasajeros confirmados, para el margen total del paso 5. */

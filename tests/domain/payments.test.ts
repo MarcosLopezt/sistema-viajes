@@ -4,9 +4,12 @@ import {
   impute,
   lateDueDates,
   splitIntoInstallments,
+  splitWithDeposit,
   suggestDueDates,
+  suggestDueDatesFromDeposit,
   worstLight,
   MAX_INSTALLMENTS,
+  MIN_INSTALLMENTS_WITH_DEPOSIT,
   PaymentPlanError,
   type PaymentInput,
 } from "@/lib/domain/payments";
@@ -112,6 +115,157 @@ describe("splitIntoInstallments · la suma cierra siempre", () => {
 });
 
 // ----------------------------- Vencimientos --------------------------------
+
+describe("splitWithDeposit · la seña es la cuota 1, no un pago aparte", () => {
+  /**
+   * El invariante es el mismo que el del plan sin seña, y por la misma razón:
+   * la plata tiene que cerrar exacto. Lo que cambia es que ahora hay un tramo
+   * fijo adelante, así que el redondeo se reparte entre una cuota menos.
+   *
+   * Se prueban montos donde la resta deja un resto feo a propósito: 3499.43
+   * menos 500 da 2999.43, cuyo tercio es periódico.
+   */
+  const CASOS = [
+    { total: "3499.43", deposit: "500.00" },
+    { total: "3499.43", deposit: "333.33" },
+    { total: "3990.00", deposit: "990.00" },
+    { total: "1234.56", deposit: "0.01" },
+    { total: "9999.99", deposit: "3333.33" },
+    { total: "100.01", deposit: "50.00" },
+    { total: "12345.67", deposit: "1000.07" },
+  ];
+
+  for (const { total, deposit } of CASOS) {
+    for (let n = MIN_INSTALLMENTS_WITH_DEPOSIT; n <= MAX_INSTALLMENTS; n += 1) {
+      it(`${total} con seña ${deposit} en ${n} cuotas suma exactamente ${total}`, () => {
+        const cuotas = splitWithDeposit(total, deposit, n);
+        expect(cuotas).toHaveLength(n);
+
+        // La primera es la seña, al centavo. Si no lo fuera, la pasajera
+        // estaría pagando de más o de menos por el tramo que ya transfirió.
+        expect(cuotas[0]!.equals(toDecimal(deposit))).toBe(true);
+
+        const suma = sum(cuotas.map((c) => c.toString()));
+        expect(suma.equals(toDecimal(total))).toBe(true);
+
+        for (const cuota of cuotas) {
+          expect(cuota.greaterThan(0)).toBe(true);
+          expect(cuota.decimalPlaces()).toBeLessThanOrEqual(2);
+        }
+      });
+    }
+  }
+
+  it("el default del negocio: seña + 2 cuotas", () => {
+    // £3.499,43 con seña de £500 deja £2.999,43 en dos. El medio centavo de
+    // 1.499,715 redondea PARA ARRIBA, así que la última absorbe hacia abajo:
+    // 1.499,71. Absorber no quiere decir "quedarse con el sobrante", quiere
+    // decir despejarse del total — la diferencia puede caer para cualquier
+    // lado y lo único que se garantiza es que la suma cierre.
+    const cuotas = splitWithDeposit("3499.43", "500.00", 3);
+    expect(cuotas.map((c) => c.toFixed(2))).toEqual([
+      "500.00",
+      "1499.72",
+      "1499.71",
+    ]);
+  });
+
+  it("la seña NO se suma al total: el plan sigue valiendo el precio", () => {
+    // Es el corazón de "no se cobra dos veces". Si la seña fuera un pago
+    // aparte, el total del plan seguiría siendo el precio entero Y además
+    // habría entrado plata sin imputar: la pasajera vería que debe todo.
+    const conSena = splitWithDeposit("3000.00", "600.00", 3);
+    const sinSena = splitIntoInstallments("3000.00", 3);
+
+    expect(sum(conSena.map((c) => c.toString())).toFixed(2)).toBe(
+      sum(sinSena.map((c) => c.toString())).toFixed(2),
+    );
+  });
+
+  it("rechaza una seña que cubre el precio entero", () => {
+    // Repartir cero entre las restantes daría cuotas de 0,00, que nadie sabe
+    // interpretar en una pantalla de pagos.
+    expect(() => splitWithDeposit("1000.00", "1000.00", 3)).toThrow(
+      PaymentPlanError,
+    );
+    expect(() => splitWithDeposit("1000.00", "1200.00", 3)).toThrow(
+      PaymentPlanError,
+    );
+  });
+
+  it("rechaza una seña de cero o negativa", () => {
+    expect(() => splitWithDeposit("1000.00", "0", 3)).toThrow(PaymentPlanError);
+    expect(() => splitWithDeposit("1000.00", "-10.00", 3)).toThrow(
+      PaymentPlanError,
+    );
+  });
+
+  it("rechaza un plan de una sola cuota: con seña hacen falta dos", () => {
+    // Una sola cuota que ES la seña significa que la seña era el precio, y eso
+    // ya lo rechaza el caso de arriba. El límite está para que el error salga
+    // por la cantidad de cuotas y no por un reparto vacío.
+    expect(() => splitWithDeposit("1000.00", "300.00", 1)).toThrow(
+      PaymentPlanError,
+    );
+    expect(() =>
+      splitWithDeposit("1000.00", "300.00", MAX_INSTALLMENTS + 1),
+    ).toThrow(PaymentPlanError);
+  });
+});
+
+describe("suggestDueDatesFromDeposit", () => {
+  const SALIDA = "2027-07-10";
+
+  it("la cuota 1 vence el día de la seña, y el resto a intervalo fijo", () => {
+    const fechas = suggestDueDatesFromDeposit(3, "2027-01-15", 3, SALIDA);
+
+    expect(fechas.map((f) => f.dueDate)).toEqual([
+      "2027-01-15",
+      "2027-04-15",
+      "2027-07-15",
+    ]);
+    expect(fechas.map((f) => f.number)).toEqual([1, 2, 3]);
+  });
+
+  it("marca las que caen después de la salida en vez de moverlas", () => {
+    // Seña en enero, tres meses de intervalo, viaje el 10 de julio: la tercera
+    // cae el 15 de julio, con el grupo ya viajando. No se corrige ni se
+    // esconde — es información para la coordinadora, que puede mover la fecha.
+    const fechas = suggestDueDatesFromDeposit(3, "2027-01-15", 3, SALIDA);
+
+    expect(fechas.map((f) => f.afterDeparture)).toEqual([false, false, true]);
+    expect(lateDueDates(fechas, SALIDA)).toEqual([3]);
+  });
+
+  it("hereda el recorte de fin de mes de addCalendarMonths", () => {
+    // Seña el 31 de enero: las cuotas siguientes no se van a marzo.
+    const fechas = suggestDueDatesFromDeposit(3, "2027-01-31", 1, SALIDA);
+
+    expect(fechas.map((f) => f.dueDate)).toEqual([
+      "2027-01-31",
+      "2027-02-28",
+      "2027-03-31",
+    ]);
+  });
+
+  it("rechaza intervalos que no son enteros o quedan fuera de rango", () => {
+    expect(() =>
+      suggestDueDatesFromDeposit(3, "2027-01-15", 0, SALIDA),
+    ).toThrow(PaymentPlanError);
+    expect(() =>
+      suggestDueDatesFromDeposit(3, "2027-01-15", 1.5, SALIDA),
+    ).toThrow(PaymentPlanError);
+    expect(() =>
+      suggestDueDatesFromDeposit(3, "2027-01-15", 13, SALIDA),
+    ).toThrow(PaymentPlanError);
+  });
+
+  it("rechaza menos de dos cuotas", () => {
+    expect(() =>
+      suggestDueDatesFromDeposit(1, "2027-01-15", 3, SALIDA),
+    ).toThrow(PaymentPlanError);
+  });
+});
 
 describe("suggestDueDates", () => {
   const today = day("2026-08-26");

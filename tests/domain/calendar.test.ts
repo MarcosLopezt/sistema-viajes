@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addCalendarDays,
+  addCalendarMonths,
   calendarDateIn,
   CalendarError,
   compareCalendarDates,
@@ -245,5 +246,55 @@ describe("una cuota no vence antes de que termine el día del pasajero", () => {
 
     expect(state.installments[0]!.state).toBe("PENDIENTE");
     expect(state.installments[0]!.daysUntilDue).toBe(0);
+  });
+});
+
+describe("addCalendarMonths", () => {
+  it("suma meses sin tocar el día cuando el día existe en el destino", () => {
+    expect(addCalendarMonths("2026-03-15", 3)).toBe("2026-06-15");
+    expect(addCalendarMonths("2026-01-01", 1)).toBe("2026-02-01");
+  });
+
+  it("cruza el año, para adelante y para atrás", () => {
+    expect(addCalendarMonths("2026-11-20", 3)).toBe("2027-02-20");
+    expect(addCalendarMonths("2026-02-10", -3)).toBe("2025-11-10");
+  });
+
+  it("RECORTA al último día del mes en vez de desbordar", () => {
+    // Este es el bug que la función existe para no tener. `new Date()` acepta
+    // el 31 de febrero y devuelve marzo sin avisar: es el MISMO desborde
+    // silencioso contra el que existe isRealIsoDate(). Con vencimientos de
+    // cuota, eso los corre a otro mes y nadie lo nota hasta el reclamo.
+    expect(addCalendarMonths("2026-01-31", 1)).toBe("2026-02-28");
+    expect(addCalendarMonths("2026-03-31", 1)).toBe("2026-04-30");
+    expect(addCalendarMonths("2026-08-31", 6)).toBe("2027-02-28");
+  });
+
+  it("respeta los años bisiestos al recortar", () => {
+    // 2028 sí es bisiesto; 2026 no. Que el resultado dependa del año destino
+    // es lo que descarta una tabla fija de días por mes.
+    expect(addCalendarMonths("2028-01-31", 1)).toBe("2028-02-29");
+    expect(addCalendarMonths("2026-01-31", 1)).toBe("2026-02-28");
+  });
+
+  it("sumar cero no mueve nada", () => {
+    expect(addCalendarMonths("2026-01-31", 0)).toBe("2026-01-31");
+  });
+
+  it("recortar NO es reversible, y eso es correcto", () => {
+    // Ida y vuelta desde el 31 no vuelve al 31: se perdió el día en el
+    // recorte. Se afirma explícitamente para que nadie lo "arregle" más
+    // adelante creyendo que es un bug — el 28 de febrero menos un mes es el
+    // 28 de enero, que es exactamente lo que dice el calendario.
+    const ida = addCalendarMonths("2026-01-31", 1);
+    expect(addCalendarMonths(ida, -1)).toBe("2026-01-28");
+  });
+
+  it("rechaza una cantidad de meses que no sea entera", () => {
+    expect(() => addCalendarMonths("2026-01-15", 1.5)).toThrow(CalendarError);
+  });
+
+  it("rechaza una fecha que no es de calendario", () => {
+    expect(() => addCalendarMonths("2026-02-31", 1)).toThrow(CalendarError);
   });
 });

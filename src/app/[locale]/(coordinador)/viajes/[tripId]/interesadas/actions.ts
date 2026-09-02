@@ -10,6 +10,15 @@ import {
   setInterestStatus,
   setMeetingDone,
 } from "@/lib/services/interest";
+import {
+  confirmDepositAndConvert,
+  DepositError,
+  rejectDeposit,
+} from "@/lib/services/deposits";
+import {
+  confirmDepositSchema,
+  rejectDepositSchema,
+} from "@/lib/validation/deposit";
 
 /**
  * Server Actions del embudo de interesadas.
@@ -33,7 +42,7 @@ async function run(fn: () => Promise<unknown>): Promise<ActionResult> {
     await fn();
     return { ok: true };
   } catch (error) {
-    if (error instanceof InterestError) {
+    if (error instanceof InterestError || error instanceof DepositError) {
       return { ok: false, error: error.message };
     }
     if (error instanceof ForbiddenError || error instanceof UnauthorizedError) {
@@ -105,6 +114,60 @@ export async function convertInterestAction(
   const result = await run(() =>
     convertInterestToPassenger(interestId, parsed.data),
   );
+  if (result.ok) revalidate(tripId);
+  return result;
+}
+
+// ------------------------------ La seña ------------------------------------
+
+/**
+ * Confirma la seña y, en el mismo acto, convierte a la interesada en pasajera.
+ *
+ * El `tripId` que llega se usa SOLO para revalidar la ruta: la autorización
+ * sale del `depositId`, igual que en el resto de este archivo.
+ *
+ * Devuelve el resultado con `alreadyResolved` para que la pantalla pueda
+ * distinguir "la confirmaste vos" de "alguien llegó primero". Las dos son
+ * éxitos —el estado que la coordinadora quería ya está— pero el mensaje no es
+ * el mismo, y decirle "convertida" cuando la convirtió su compañera hace
+ * pensar que hay dos pasajeras.
+ */
+export async function confirmDepositAction(
+  tripId: string,
+  input: unknown,
+): Promise<ActionResult & { alreadyResolved?: boolean }> {
+  const parsed = confirmDepositSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: "Revisá los datos de la confirmación." };
+  }
+
+  let alreadyResolved = false;
+  const result = await run(async () => {
+    const outcome = await confirmDepositAndConvert(parsed.data);
+    alreadyResolved = outcome.outcome === "YA_RESUELTO";
+  });
+
+  if (result.ok) {
+    revalidate(tripId);
+    return { ok: true, alreadyResolved };
+  }
+  return result;
+}
+
+/** Rechaza la seña. El motivo es obligatorio y se le notifica. */
+export async function rejectDepositAction(
+  tripId: string,
+  input: unknown,
+): Promise<ActionResult> {
+  const parsed = rejectDepositSchema.safeParse(input);
+  if (!parsed.success) {
+    const first = Object.values(
+      parsed.error.flatten().fieldErrors as Record<string, string[]>,
+    )[0]?.[0];
+    return { ok: false, error: first ?? "Escribí el motivo del rechazo." };
+  }
+
+  const result = await run(() => rejectDeposit(parsed.data));
   if (result.ok) revalidate(tripId);
   return result;
 }

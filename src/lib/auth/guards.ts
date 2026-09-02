@@ -171,3 +171,83 @@ export async function requirePassengerAccess(
 
   return { viewer, tripId: passenger.tripId, personId: passenger.personId };
 }
+
+/**
+ * Exige que quien mira sea una interesada, y devuelve LO SUYO.
+ *
+ * ── No recibe ningún identificador, y eso es el punto ─────────────────────
+ *
+ * Ni interestId, ni tripId, ni personId. Todo sale de la sesión. Es la misma
+ * regla que el resto del módulo —el viewer nunca llega del cliente— llevada a
+ * su forma más estricta: acá no hay un "recurso" que validar contra el viewer,
+ * porque el recurso ES el viewer. Una interesada no puede pedir la Interest de
+ * otra ni equivocándose de id, porque no hay id que pasar.
+ *
+ * ── Por qué NO exige `acceptingInterest` ─────────────────────────────────
+ *
+ * Porque `acceptingInterest` controla quién ENTRA al embudo, no quién puede
+ * COMPLETAR el que ya empezó. Son dos preguntas distintas y confundirlas rompe
+ * el flujo normal del negocio, no un borde:
+ *
+ *   se registra → coordinan el Zoom por WhatsApp → la reunión es dos semanas
+ *   después → recién ahí paga la seña
+ *
+ * Con catorce lugares, las coordinadoras van a cerrar la captación mientras
+ * todavía hay gente a mitad de camino. Si el cierre le cerrara también la
+ * puerta a quien ya está adentro, esa persona queda sin poder pagar y sin
+ * entender por qué — y nadie del otro lado se entera hasta que escribe.
+ *
+ * Entonces lo que se exige es lo que de verdad hace falta para cobrarle:
+ *
+ *   · una Interest suya que no esté DESCARTADA — descartada es "no sigue", y
+ *     alguien que no sigue no tiene por qué poder mandar plata;
+ *   · un viaje en un estado que admita cobrar: ABIERTO o CERRADO. BORRADOR
+ *     todavía no es un viaje, y FINALIZADO ya pasó.
+ *
+ * Quien NO tiene Interest previa sigue sin poder hacer nada acá, y para
+ * registrarse tiene que ir a `/interes`, que sí exige `acceptingInterest`. Esa
+ * es la puerta de entrada y no se movió.
+ *
+ * Devuelve solo ids, igual que el bootstrap del pasajero, y por la misma
+ * razón: quien llama los usa para construir una path o una consulta, nunca
+ * para saltear una verificación.
+ */
+export interface InterestAccess {
+  userId: string;
+  interestId: string;
+  tripId: string;
+  /** El segundo segmento de sus paths en el bucket. Ver domain/storage-paths.ts. */
+  personId: string;
+}
+
+/** Estados de viaje en los que todavía tiene sentido cobrar una seña. */
+const TRIP_STATES_THAT_COLLECT = ["ABIERTO", "CERRADO"] as const;
+
+export async function requireInterestAccess(): Promise<InterestAccess> {
+  const user = await requireSessionUser();
+
+  // `personId` es una columna de User, no una consulta a Person: es la clave
+  // foránea que ya trae la sesión.
+  if (!user.personId) throw new ForbiddenError();
+
+  const interest = await prisma.interest.findFirst({
+    where: {
+      userId: user.id,
+      status: { not: "DESCARTADA" },
+      trip: { status: { in: [...TRIP_STATES_THAT_COLLECT] } },
+    },
+    // La más reciente: una misma persona puede haberse anotado en el viaje del
+    // año pasado y en el de este.
+    orderBy: { createdAt: "desc" },
+    select: { id: true, tripId: true },
+  });
+
+  if (!interest) throw new ForbiddenError();
+
+  return {
+    userId: user.id,
+    interestId: interest.id,
+    tripId: interest.tripId,
+    personId: user.personId,
+  };
+}

@@ -122,6 +122,15 @@ export const tripPublicTextsSchema = z.object({
   emailSignatureEn: brandText(300),
   closedMessageEs: brandText(2000),
   closedMessageEn: brandText(2000),
+  /**
+   * La condición de no reembolsable. Más larga que los demás textos porque es
+   * el único que además de comunicar tiene que decir exactamente qué pasa si
+   * el viaje se cancela, y ese párrafo no se puede escribir en dos líneas.
+   */
+  depositTermsEs: brandText(5000),
+  depositTermsEn: brandText(5000),
+  paymentInstructionsEs: brandText(3000),
+  paymentInstructionsEn: brandText(3000),
 });
 
 export type TripPublicTextsInput = z.infer<typeof tripPublicTextsSchema>;

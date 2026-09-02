@@ -15,6 +15,7 @@ import type { CurrencyCode } from "@/lib/format";
 import {
   cancelPassengerAction,
   confirmPassengerAction,
+  savePaymentInstructionsAction,
   setPriceOverrideAction,
   updatePassengerDataAction,
 } from "../actions";
@@ -41,6 +42,8 @@ export function PassengerEditor({
   blocksConfirmation,
   priceOverride,
   priceOverrideReason,
+  paymentInstructions,
+  tripPaymentInstructions,
   values,
   hasDietaryRestrictions,
   hasMobilityRestrictions,
@@ -58,6 +61,10 @@ export function PassengerEditor({
   blocksConfirmation: boolean;
   priceOverride: string | null;
   priceOverrideReason: string | null;
+  /** Lo propio de esta pasajera. Null = usa el del viaje. */
+  paymentInstructions: string | null;
+  /** El del viaje, ya resuelto al idioma. Para mostrar cuál rige hoy. */
+  tripPaymentInstructions: string | null;
   values: EditableValues;
   hasDietaryRestrictions: boolean;
   hasMobilityRestrictions: boolean;
@@ -361,6 +368,15 @@ export function PassengerEditor({
           reason={priceOverrideReason}
         />
       ) : null}
+
+      {!isCoordinator ? (
+        <PaymentInstructions
+          tripId={tripId}
+          passengerId={passengerId}
+          value={paymentInstructions}
+          tripValue={tripPaymentInstructions}
+        />
+      ) : null}
     </div>
   );
 }
@@ -496,6 +512,129 @@ function PriceOverride({
               onClick={() => save(true)}
             >
               {t("priceOverrideClear")}
+            </Button>
+          ) : null}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * Dónde transferir, para esta pasajera.
+ *
+ * ── Por qué va en su propia tarjeta, lejos del nombre y el pasaporte ─────
+ *
+ * Porque no es un dato de la persona: es una instrucción de la escuela sobre
+ * dónde mandar plata. Editarlo en el mismo bloque que el número de pasaporte
+ * sugeriría que es algo que ella declaró y que acá se corrige, cuando es
+ * exactamente al revés — lo escribe la coordinadora y ella lo lee.
+ *
+ * ── Un campo vacío NO quiere decir "no hay instrucciones" ────────────────
+ *
+ * Quiere decir "usa el del viaje", y esa diferencia importa: alguien que ve un
+ * textarea en blanco y no sabe que hay un texto general detrás va a pegar los
+ * datos bancarios de nuevo acá, y a partir de ahí van a existir dos copias que
+ * se van a desincronizar. Por eso la tarjeta dice SIEMPRE cuál está rigiendo
+ * hoy, y cuando rige el del viaje lo muestra entero.
+ */
+function PaymentInstructions({
+  tripId,
+  passengerId,
+  value,
+  tripValue,
+}: {
+  tripId: string;
+  passengerId: string;
+  value: string | null;
+  tripValue: string | null;
+}) {
+  const t = useTranslations("passengers");
+  const [pending, startTransition] = useTransition();
+  const [text, setText] = useState(value ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState<string | null>(value);
+
+  const usingOwn = saved !== null && saved.trim() !== "";
+
+  function save(clear: boolean) {
+    setError(null);
+    startTransition(async () => {
+      const next = clear ? null : text.trim() || null;
+      const result = await savePaymentInstructionsAction(
+        passengerId,
+        tripId,
+        next,
+      );
+      if (result.ok) {
+        setSaved(next);
+        if (clear) setText("");
+      } else {
+        setError(result.error);
+      }
+    });
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-xl">{t("paymentInstructionsTitle")}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-muted-foreground text-base text-balance">
+          {t("paymentInstructionsHelp")}
+        </p>
+
+        {/* Cuál rige HOY. Va arriba del campo y no debajo: es lo que hay que
+            saber ANTES de escribir nada. */}
+        <div
+          className={
+            usingOwn
+              ? "border-status-warning/40 bg-status-warning-surface space-y-2 rounded-lg border p-4"
+              : "border-border bg-muted/40 space-y-2 rounded-lg border p-4"
+          }
+        >
+          <p className="text-base font-medium">
+            {usingOwn
+              ? t("paymentInstructionsUsingOwn")
+              : t("paymentInstructionsUsingTrip")}
+          </p>
+          {!usingOwn ? (
+            tripValue ? (
+              <p className="whitespace-pre-line text-sm">{tripValue}</p>
+            ) : (
+              <p className="text-muted-foreground text-sm">
+                {t("paymentInstructionsTripEmpty")}
+              </p>
+            )
+          ) : null}
+        </div>
+
+        {error ? (
+          <Alert variant="destructive" role="alert">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        <Field label={t("paymentInstructions")}>
+          {(props) => (
+            <Textarea
+              {...props}
+              rows={5}
+              value={text}
+              placeholder={t("paymentInstructionsPlaceholder")}
+              onChange={(event) => setText(event.target.value)}
+            />
+          )}
+        </Field>
+
+        <div className="flex flex-wrap gap-2">
+          <Button disabled={pending} onClick={() => save(false)}>
+            {t("paymentInstructionsSave")}
+          </Button>
+          {usingOwn ? (
+            <Button variant="ghost" disabled={pending} onClick={() => save(true)}>
+              {t("paymentInstructionsClear")}
             </Button>
           ) : null}
         </div>

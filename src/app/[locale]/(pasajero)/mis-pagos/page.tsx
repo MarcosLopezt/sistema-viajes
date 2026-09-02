@@ -9,6 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PaymentStatusBadge } from "@/components/payments/payment-badges";
+import { PlainText } from "@/components/public/plain-text";
 import { PaymentsPanel, type InstallmentView } from "./payments-panel";
 
 /**
@@ -38,7 +39,7 @@ export default async function MyPaymentsPage() {
     return <EmptyState title={t("noPlanTitle")} body={t("noPlanBody")} />;
   }
 
-  const plan = await getPaymentPlan(passenger.id);
+  const plan = await getPaymentPlan(passenger.id, new Date(), locale);
   if (!plan) {
     return <EmptyState title={t("noPlanTitle")} body={t("noPlanBody")} />;
   }
@@ -117,6 +118,27 @@ export default async function MyPaymentsPage() {
         {" — "}
         {tPayments("rateNote", { date: formatDate(plan.fxSnapshotDate) })}
       </p>
+
+      {/* ── DÓNDE pagar ──────────────────────────────────────────────────
+          Hasta la fase 8 esta pantalla decía cuánto se debe y no dónde
+          pagarlo, así que la pasajera tenía que ir a buscar la cuenta a un
+          WhatsApp de hace tres meses. Va inmediatamente después del saldo y
+          antes del desglose: es lo segundo que necesita, después de saber
+          cuánto.
+
+          El texto lo escriben las coordinadoras y puede estar pisado por uno
+          propio de la pasajera — las cuentas cambian según el país. Cuál de
+          los dos manda se decide en el servicio, no acá. */}
+      {plan.paymentInstructions ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">{t("whereToPay")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <PlainText text={plan.paymentInstructions} className="text-base" />
+          </CardContent>
+        </Card>
+      ) : null}
 
       {Number(plan.credit) > 0 ? (
         <Alert>
