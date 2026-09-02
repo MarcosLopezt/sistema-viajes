@@ -6,7 +6,7 @@ Aplicación para organizar viajes grupales cerrados (14 pasajeros + 2 coordinado
 
 | Si venís a… | Andá a |
 |---|---|
-| **usar** el sistema | [Operación](#operación--guía-para-usar-el-sistema) — escrita para quien no programa |
+| **usar** el sistema | [Operación](#operación--guía-para-usar-el-sistema) — escrita para quien no program |
 | **ponerlo en producción** | [DEPLOY.md](DEPLOY.md) — checklist paso a paso |
 | **desarrollarlo** | [Setup desde cero](#setup-desde-cero) y [Arquitectura](#arquitectura) |
 | **restaurar un backup** | [Backups](#backups) |
