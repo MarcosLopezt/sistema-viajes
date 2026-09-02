@@ -13,6 +13,14 @@ Sistema de viajes grupales. Next.js 16 + Prisma 7 (@prisma/adapter-pg) +
 Supabase + next-intl. Se trabaja POR FASES: parar al terminar cada una,
 mostrar el resultado, no avanzar sin confirmación. No commitear sin pedido.
 
+## Qué leer según el caso
+CONTEXTO.md para el negocio (quién es el cliente, el embudo, el glosario).
+SESION.md para retomar después de un /clear o de tiempo sin tocar el
+proyecto — es el único de los cuatro que se sobrescribe, no es histórico.
+PROGRESO.md para el histórico de fases, con commits y hallazgos.
+TAREAS.md para saber qué sigue y de quién es. README.md para el porqué
+técnico de cada decisión. ESTADO.md para la deuda y lo no verificado.
+
 ## Comandos
 dev · build · test · check:db · check:i18n · check:layers · db:migrate ·
 db:seed · verify (corre todo, incluida la suite de integración)
