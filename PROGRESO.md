@@ -6,6 +6,10 @@ Está en otro lado: el estado actual y la deuda pendiente en
 [ESTADO.md](ESTADO.md), el detalle de arquitectura y de cada decisión en
 [README.md](README.md), qué sigue en [TAREAS.md](TAREAS.md).
 
+**Es histórico, para una persona — no para cargarlo entero al retomar una
+sesión.** Buscá la fase que te importa (`Ctrl+F "Fase N"`) y no leas el
+resto. Para retomar, andá primero a [SESION.md](SESION.md).
+
 Los commits y las fechas de esta bitácora salen de `git log`, no de memoria.
 
 ---

@@ -13,17 +13,25 @@ Sistema de viajes grupales. Next.js 16 + Prisma 7 (@prisma/adapter-pg) +
 Supabase + next-intl. Se trabaja POR FASES: parar al terminar cada una,
 mostrar el resultado, no avanzar sin confirmación. No commitear sin pedido.
 
-## Qué leer según el caso
-CONTEXTO.md para el negocio (quién es el cliente, el embudo, el glosario).
-SESION.md para retomar después de un /clear o de tiempo sin tocar el
-proyecto — es el único de los cuatro que se sobrescribe, no es histórico.
-PROGRESO.md para el histórico de fases, con commits y hallazgos.
-TAREAS.md para saber qué sigue y de quién es. README.md para el porqué
-técnico de cada decisión. ESTADO.md para la deuda y lo no verificado.
+## Qué leer, según la tarea
+- Retomar una sesión         → SESION.md (siempre, primero)
+- Antes de tocar código      → ESTADO.md §decisiones
+- Tarea sobre el negocio,
+  el embudo o los usuarios   → CONTEXTO.md
+- Decidir qué sigue          → TAREAS.md
+- Histórico de fases         → PROGRESO.md — NO leer completo,
+                               buscar la fase puntual
+- Porqué técnico de una
+  decisión ya tomada         → README.md
+No leas un documento que la tarea no necesita.
+
+Al cerrar una fase: actualizar SESION.md y TAREAS.md sin que lo pidan.
+Un SESION.md desactualizado es peor que no tenerlo.
 
 ## Comandos
-dev · build · test · check:db · check:i18n · check:layers · db:migrate ·
-db:seed · verify (corre todo, incluida la suite de integración)
+dev · build · test · test:db · check:db · check:i18n · check:layers ·
+db:migrate · db:seed · email:test · verify (corre todo, incluida la
+suite de integración: unos 25 minutos)
 
 ## Invariantes — no los violes ni los "mejores" sin avisar
 - Autorización: ningún guard ni servicio acepta un identificador de
@@ -63,6 +71,13 @@ db:seed · verify (corre todo, incluida la suite de integración)
   COORDINATOR_EDITABLE: todo campo editable escribe su valor en claro en
   AuditLog, y estos no pueden llegar a un log. Los corrige solo la pasajera.
   Tampoco salen en exportaciones: lo verifica un test con control positivo.
+- COORDINATOR_EDITABLE enumera columnas de Person y termina en un
+  person.update(). Passenger.paymentInstructions NO está ahí y no es un
+  olvido: la columna vive en Passenger. Tiene el mismo contrato —lo edita
+  la coordinadora, cada cambio va a AuditLog— en su propia función,
+  setPassengerPaymentInstructions(). Se audita aunque no sea un dato
+  personal: es dónde mandar plata, y si alguien lo cambia y la pasajera
+  transfiere mal, la pregunta es quién lo tocó.
 - Como máximo un Trip con acceptingInterest. Lo garantiza un índice único
   PARCIAL en SQL crudo, no el servicio. Prisma no lo conoce: si migrate dev
   propone un DROP de "Trip_una_sola_captacion_abierta", borrá esa línea.
