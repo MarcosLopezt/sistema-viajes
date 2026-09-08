@@ -59,9 +59,18 @@ const EDITABLE_STATUSES: readonly TripStatus[] = [
   "CERRADO",
 ];
 
-/** Transiciones permitidas. Cualquier otra se rechaza. */
-const ALLOWED_TRANSITIONS: Readonly<Record<TripStatus, readonly TripStatus[]>> =
-  {
+/**
+ * Transiciones permitidas. Cualquier otra se rechaza.
+ *
+ * Se exporta para que la UI muestre solo las opciones válidas desde el estado
+ * actual: no tiene sentido ofrecer un botón que el servidor va a rechazar. La
+ * tabla sigue siendo la única fuente de verdad — `updateTripStatus` la vuelve
+ * a consultar, así que la UI no puede "colarse" con una transición inválida
+ * aunque el prop llegue desactualizado.
+ */
+export const ALLOWED_TRANSITIONS: Readonly<
+  Record<TripStatus, readonly TripStatus[]>
+> = {
     BORRADOR: ["ABIERTO"],
     ABIERTO: ["CERRADO", "BORRADOR"],
     CERRADO: ["FINALIZADO", "ABIERTO"],

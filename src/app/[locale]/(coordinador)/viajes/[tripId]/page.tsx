@@ -1,16 +1,16 @@
 import { getLocale, getTranslations } from "next-intl/server";
 import { CalendarRange, Megaphone, Pencil, Receipt, Users } from "lucide-react";
 import { Link } from "@/i18n/navigation";
-import { getTripBudget } from "@/lib/services/trip";
+import { ALLOWED_TRANSITIONS, getTripBudget } from "@/lib/services/trip";
 import { countPassengersByStatus } from "@/lib/services/passengers";
 import { getTripPaymentsOverview } from "@/lib/services/payments";
 import { listCommunications } from "@/lib/services/communications";
 import { formatDate, formatMoney, type LocaleCode } from "@/lib/format";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PaymentLightBadge } from "@/components/payments/payment-badges";
+import { TripStatusControl } from "./trip-status-control";
 
 /**
  * Detalle del viaje.
@@ -36,7 +36,6 @@ export default async function TripDetailPage({
   const t = await getTranslations("budget.detail");
   const tPanel = await getTranslations("budget.panel");
   const tPrices = await getTranslations("budget.prices");
-  const tStatus = await getTranslations("tripStatus");
   const tPassengers = await getTranslations("passengers");
   const tInterests = await getTranslations("interests");
   const tPaymentsAdmin = await getTranslations("paymentsAdmin");
@@ -64,7 +63,11 @@ export default async function TripDetailPage({
             </span>
           </p>
         </div>
-        <Badge variant="secondary">{tStatus(trip.status)}</Badge>
+        <TripStatusControl
+          tripId={trip.id}
+          status={trip.status}
+          allowedTransitions={ALLOWED_TRANSITIONS[trip.status]}
+        />
       </div>
 
       <Tabs defaultValue="budget">
