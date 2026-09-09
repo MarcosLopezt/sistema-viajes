@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { AlertTriangle, TrendingUp } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -12,7 +12,7 @@ import {
   type TripCostBreakdown,
 } from "@/lib/domain/pricing";
 import { Field } from "@/components/form/field";
-import type { WizardPassengerMix } from "./types";
+import type { StepFlushRef, WizardPassengerMix } from "./types";
 
 /**
  * Paso 5 — revisión y precios.
@@ -39,6 +39,7 @@ export function StepPrices({
   passengersWithActivePlan,
   disabled,
   onSave,
+  flushRef,
 }: {
   breakdown: TripCostBreakdown;
   currency: CurrencyCode;
@@ -59,6 +60,13 @@ export function StepPrices({
     defaultInstallmentCount: number;
     installmentIntervalMonths: number;
   }) => Promise<{ ok: boolean; error?: string }>;
+  /**
+   * Le deja al wizard una función para guardar este borrador antes de
+   * cambiar de paso — así salir por "Siguiente", "Anterior" o las pestañas
+   * de arriba, sin haber tocado el botón "Guardar precios", no descarta lo
+   * cargado en silencio.
+   */
+  flushRef?: StepFlushRef;
 }) {
   const t = useTranslations("budget.prices");
   const locale = useLocale() as LocaleCode;
@@ -99,20 +107,40 @@ export function StepPrices({
 
   const hasSavedPrices = savedPriceDouble !== null || savedPriceSingle !== null;
 
+  /** Única puerta de guardado: la usan el botón y `flushRef`. */
+  async function persist(): Promise<boolean> {
+    const result = await onSave({
+      priceDouble,
+      priceSingle,
+      depositAmount: depositAmount.trim() || null,
+      defaultInstallmentCount: Number(installmentCount),
+      installmentIntervalMonths: Number(intervalMonths),
+    });
+    if (!result.ok) {
+      setError(result.error ?? null);
+      return false;
+    }
+    setError(null);
+    return true;
+  }
+
+  // Se reasigna en cada render para que siempre guarde lo último tipeado, y
+  // se limpia al desmontar para que un wizard en otro paso no la encuentre.
+  useEffect(() => {
+    if (flushRef) flushRef.current = persist;
+  });
+  useEffect(() => {
+    return () => {
+      if (flushRef) flushRef.current = null;
+    };
+  }, [flushRef]);
+
   return (
     <form
       className="space-y-6"
       onSubmit={async (event) => {
         event.preventDefault();
-        const result = await onSave({
-          priceDouble,
-          priceSingle,
-          depositAmount: depositAmount.trim() || null,
-          defaultInstallmentCount: Number(installmentCount),
-          installmentIntervalMonths: Number(intervalMonths),
-        });
-        if (!result.ok) setError(result.error ?? null);
-        else setError(null);
+        await persist();
       }}
     >
       <p className="text-muted-foreground text-base text-balance">

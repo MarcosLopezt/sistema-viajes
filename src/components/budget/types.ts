@@ -11,6 +11,7 @@ import type { CurrencyCode } from "@/lib/format";
 export interface WizardAccommodation {
   id: string;
   hotelName: string;
+  hotelUrl: string | null;
   nights: number;
   pricePerNightDouble: string;
   pricePerNightSingle: string;
@@ -102,11 +103,18 @@ export interface WizardPublicZone {
 
 /** Mix de pasajeros confirmados, para el margen total del paso 5. */
 export interface WizardPassengerMix {
-  roomType: "DOBLE" | "SINGLE";
+  roomType: "DOBLE" | "SINGLE" | null;
   isCoordinator: boolean;
   status: "INVITADO" | "REGISTRADO" | "CONFIRMADO" | "CANCELADO";
   priceOverride: string | null;
 }
+
+/**
+ * Ref que un paso con formulario entero (precios, zona pública) usa para
+ * dejarle al wizard una función que guarde su borrador ANTES de cambiar de
+ * paso. Ver el comentario sobre `goToStep` en budget-wizard.tsx.
+ */
+export type StepFlushRef = { current: (() => Promise<boolean>) | null };
 
 export const WIZARD_STEPS = [
   "general",

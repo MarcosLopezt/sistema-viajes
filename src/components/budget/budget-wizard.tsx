@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Check, ChevronLeft, ChevronRight } from "lucide-react";
@@ -22,8 +22,8 @@ import {
   saveStopAction,
   setAcceptingInterestAction,
 } from "@/app/[locale]/(coordinador)/viajes/actions";
+import { SaveIndicator, useSave } from "@/components/form/save-state";
 import { CostPanel } from "./cost-panel";
-import { SaveIndicator, useSave } from "./save-state";
 import { StepCosts, type CostRow } from "./step-costs";
 import { StepGeneral, generalValuesFrom, type GeneralValues } from "./step-general";
 import { StepItinerary } from "./step-itinerary";
@@ -31,6 +31,7 @@ import { StepPrices } from "./step-prices";
 import { StepPublic } from "./step-public";
 import {
   WIZARD_STEPS,
+  type StepFlushRef,
   type WizardAccommodation,
   type WizardPassengerMix,
   type WizardStop,
@@ -56,6 +57,24 @@ import {
  *
  *  - El paso vive en la URL (?paso=3): recargar no devuelve al principio, y el
  *    coordinador puede dejar la pestaña abierta y volver.
+ *
+ *  - `goToStep` es el ÚNICO lugar por el que se cambia de paso — Siguiente,
+ *    Anterior y las pestañas de arriba pasan los tres por acá— y antes de
+ *    moverse fuerza el guardado de lo que haya quedado pendiente en el paso
+ *    en el que se está parado. Si eso falla, no navega: si navegara igual,
+ *    cualquier salida que no fuera el botón "Siguiente" (las pestañas, sobre
+ *    todo) perdería lo cargado en silencio.
+ *
+ *    Hay dos razones distintas por las que un paso puede tener algo
+ *    pendiente, y las dos pasan por `flushCurrentStep`:
+ *      · "General", "precios" y "zona pública" son formularios ENTEROS que
+ *        solo se escriben al guardar — sin este mecanismo, ese guardado
+ *        dependía de tocar "Siguiente" y nada más.
+ *      · "Itinerario" y los dos pasos de costos autoguardan cada fila
+ *        apenas se confirma, pero pueden tener un formulario de "agregar"
+ *        ABIERTO y a medio llenar — eso es lo que arregla el punto 4 del
+ *        pedido: vacío no hace nada, incompleto frena la salida y dice qué
+ *        falta, completo se agrega solo.
  */
 export function BudgetWizard({
   initialTrip,
@@ -84,12 +103,37 @@ export function BudgetWizard({
   >();
   const { status, error, save } = useSave();
 
+  // Lo usa el paso que esté montado (precios, zona pública, itinerario o
+  // costos) para exponerle a `goToStep` una función que guarde lo pendiente
+  // con los valores más recientes. Ninguno levanta su estado hasta acá
+  // arriba: alcanza con que avise cómo guardarse antes de que el wizard lo
+  // saque de pantalla. Ver el comentario grande sobre `goToStep` más abajo.
+  const flushCurrentStep: StepFlushRef = useRef<
+    (() => Promise<boolean>) | null
+  >(null);
+
   const readOnly = trip.status === "FINALIZADO";
 
   const stepIndex = clampStep(Number(searchParams.get("paso") ?? "1"));
   const step = WIZARD_STEPS[stepIndex - 1]!;
 
-  function goToStep(next: number) {
+  async function goToStep(next: number) {
+    if (!readOnly) {
+      // "general" vive lifted acá arriba: guardarlo es directo.
+      if (step === "general") {
+        const ok = await saveGeneral();
+        if (!ok) return;
+      } else if (flushCurrentStep.current) {
+        // El paso montado ("prices", "publicZone", "itinerary",
+        // "directCosts" o "indirectCosts") dejó su propia función de
+        // guardado en la ref. Si no hay nada registrado, no hay nada
+        // pendiente: itinerario y costos ya guardaron fila por fila y no
+        // había ningún formulario de "agregar" abierto.
+        const ok = await flushCurrentStep.current();
+        if (!ok) return;
+      }
+    }
+
     const params = new URLSearchParams(searchParams.toString());
     params.set("paso", String(clampStep(next)));
     router.replace(`${pathname}?${params.toString()}`, { scroll: true });
@@ -177,6 +221,7 @@ export function BudgetWizard({
       saveAccommodationAction(trip.id, stopId, {
         ...(accommodation.id ? { id: accommodation.id } : {}),
         hotelName: accommodation.hotelName,
+        hotelUrl: accommodation.hotelUrl,
         nights: accommodation.nights,
         pricePerNightDouble: accommodation.pricePerNightDouble,
         pricePerNightSingle: accommodation.pricePerNightSingle,
@@ -291,7 +336,7 @@ export function BudgetWizard({
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
       <div className="min-w-0 space-y-6">
-        <StepNav current={stepIndex} onSelect={goToStep} />
+        <StepNav current={stepIndex} onSelect={(n) => void goToStep(n)} />
 
         <div className="flex min-h-6 items-center justify-between gap-3">
           <h2 className="text-2xl font-semibold">{t(`steps.${step}`)}</h2>
@@ -311,7 +356,10 @@ export function BudgetWizard({
           <StepItinerary
             stops={trip.stops}
             currency={trip.currency}
+            tripStartDate={trip.startDate}
+            tripEndDate={trip.endDate}
             disabled={readOnly}
+            flushRef={flushCurrentStep}
             onSaveStop={handleSaveStop}
             onDeleteStop={handleDeleteStop}
             onSaveAccommodation={handleSaveAccommodation}
@@ -324,6 +372,7 @@ export function BudgetWizard({
             namespace="directCosts"
             currency={trip.currency}
             disabled={readOnly}
+            flushRef={flushCurrentStep}
             types={["COMIDA", "EVENTO", "TRANSPORTE", "OTRO"]}
             rows={trip.directCosts.map((c) => ({
               id: c.id,
@@ -351,6 +400,7 @@ export function BudgetWizard({
             namespace="indirectCosts"
             currency={trip.currency}
             disabled={readOnly}
+            flushRef={flushCurrentStep}
             types={["CHARTER", "TRANSFER", "HOSPEDAJE_COORDINADOR", "OTRO"]}
             rows={trip.indirectCosts.map((c) => ({
               id: c.id,
@@ -377,6 +427,7 @@ export function BudgetWizard({
 
         {step === "prices" ? (
           <StepPrices
+            flushRef={flushCurrentStep}
             breakdown={breakdown}
             currency={trip.currency}
             budgetedPassengers={general.budgetedPassengers}
@@ -403,6 +454,7 @@ export function BudgetWizard({
 
         {step === "publicZone" ? (
           <StepPublic
+            flushRef={flushCurrentStep}
             values={trip.publicZone}
             publicUrl={publicUrl}
             disabled={readOnly}
@@ -450,24 +502,14 @@ export function BudgetWizard({
           <Button
             variant="outline"
             disabled={stepIndex === 1}
-            onClick={() => goToStep(stepIndex - 1)}
+            onClick={() => void goToStep(stepIndex - 1)}
           >
             <ChevronLeft aria-hidden="true" />
             {tActions("previous")}
           </Button>
 
           {stepIndex < WIZARD_STEPS.length ? (
-            <Button
-              onClick={async () => {
-                // El paso 1 guarda al avanzar; los demás ya autoguardaron
-                // cada fila al confirmarla.
-                if (step === "general" && !readOnly) {
-                  const ok = await saveGeneral();
-                  if (!ok) return;
-                }
-                goToStep(stepIndex + 1);
-              }}
-            >
+            <Button onClick={() => void goToStep(stepIndex + 1)}>
               {tActions("next")}
               <ChevronRight aria-hidden="true" />
             </Button>

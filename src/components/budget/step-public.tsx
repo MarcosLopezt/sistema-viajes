@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { AlertTriangle, ExternalLink, Globe } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { WizardPublicZone } from "./types";
+import type { StepFlushRef, WizardPublicZone } from "./types";
 
 /**
  * Paso 6 — la zona pública.
@@ -37,6 +37,7 @@ export function StepPublic({
   disabled,
   onSaveTexts,
   onToggleAccepting,
+  flushRef,
 }: {
   values: WizardPublicZone;
   /** URL de /interes, para copiar al botón de Wix. */
@@ -48,6 +49,12 @@ export function StepPublic({
   onToggleAccepting: (
     accepting: boolean,
   ) => Promise<{ ok: boolean; error?: string }>;
+  /**
+   * Le deja al wizard una función para guardar los textos antes de cambiar
+   * de paso — el switch de captación no la necesita: se guarda solo, al
+   * tocarlo.
+   */
+  flushRef?: StepFlushRef;
 }) {
   const t = useTranslations("budget.publicZone");
 
@@ -58,13 +65,26 @@ export function StepPublic({
   const set = (key: keyof WizardPublicZone, value: string) =>
     setDraft((current) => ({ ...current, [key]: value }));
 
-  async function handleSave() {
+  async function handleSave(): Promise<boolean> {
     setBusy(true);
     setError(null);
     const result = await onSaveTexts(draft);
     setBusy(false);
-    if (!result.ok) setError(result.error ?? t("saveFailed"));
+    if (!result.ok) {
+      setError(result.error ?? t("saveFailed"));
+      return false;
+    }
+    return true;
   }
+
+  useEffect(() => {
+    if (flushRef) flushRef.current = handleSave;
+  });
+  useEffect(() => {
+    return () => {
+      if (flushRef) flushRef.current = null;
+    };
+  }, [flushRef]);
 
   async function handleToggle() {
     const next = !draft.acceptingInterest;
@@ -203,7 +223,11 @@ export function StepPublic({
         {pair("closedMessageEs", "closedMessageEn", 3)}
       </section>
 
-      <Button type="button" disabled={disabled || busy} onClick={handleSave}>
+      <Button
+        type="button"
+        disabled={disabled || busy}
+        onClick={() => void handleSave()}
+      >
         {t("save")}
       </Button>
     </div>

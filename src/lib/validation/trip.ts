@@ -108,6 +108,26 @@ export const accommodationSchema = z
   .object({
     id: z.uuid().optional(),
     hotelName: z.string().trim().min(1, "Poné el nombre del hotel."),
+    /**
+     * Link a la web del hotel. Opcional, y si viene tiene que ser http(s):
+     * es lo único que se acepta al renderizarlo, para no terminar abriendo
+     * un `javascript:` o un esquema raro desde un link que en teoría solo
+     * lleva a un hotel.
+     */
+    hotelUrl: z
+      .string()
+      .trim()
+      .max(2000)
+      .refine((value) => {
+        try {
+          const url = new URL(value);
+          return url.protocol === "http:" || url.protocol === "https:";
+        } catch {
+          return false;
+        }
+      }, "El link tiene que empezar con http:// o https://.")
+      .nullable()
+      .optional(),
     nights: z.coerce
       .number()
       .int("Tiene que ser un número entero de noches.")

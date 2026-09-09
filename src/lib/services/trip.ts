@@ -599,6 +599,7 @@ export async function upsertAccommodation(
   const data = {
     stopId,
     hotelName: input.hotelName,
+    hotelUrl: input.hotelUrl ?? null,
     nights: input.nights,
     pricePerNightDouble: input.pricePerNightDouble,
     pricePerNightSingle: input.pricePerNightSingle,
@@ -747,6 +748,7 @@ export async function getTripBudget(tripId: string) {
             select: {
               id: true,
               hotelName: true,
+              hotelUrl: true,
               nights: true,
               pricePerNightDouble: true,
               pricePerNightSingle: true,
@@ -855,6 +857,7 @@ function serializeTrip(trip: {
     accommodations: readonly {
       id: string;
       hotelName: string;
+      hotelUrl: string | null;
       nights: number;
       pricePerNightDouble: { toString(): string };
       pricePerNightSingle: { toString(): string };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Plus, Receipt } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,8 +13,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatMoney, type CurrencyCode, type LocaleCode } from "@/lib/format";
+import { isBlankCost } from "@/lib/domain/itinerary";
 import { Field } from "@/components/form/field";
 import { ConfirmDelete } from "./confirm-delete";
+import type { StepFlushRef } from "./types";
 
 /**
  * Pasos 3 y 4 — comidas y eventos, y costos del grupo.
@@ -42,6 +44,7 @@ export function StepCosts({
   disabled,
   onSave,
   onDelete,
+  flushRef,
 }: {
   /** "budget.directCosts" o "budget.indirectCosts". */
   namespace: "directCosts" | "indirectCosts";
@@ -51,6 +54,12 @@ export function StepCosts({
   disabled?: boolean;
   onSave: (row: CostRow) => Promise<{ ok: boolean; error?: string }>;
   onDelete: (id: string) => void;
+  /**
+   * Del wizard: guardar la fila que esté a medio cargar ANTES de cambiar de
+   * paso. Vacía no hace nada, incompleta frena la salida y muestra qué
+   * falta, completa se agrega solo y recién ahí se avanza.
+   */
+  flushRef?: StepFlushRef;
 }) {
   const t = useTranslations(`budget.${namespace}`);
   const tActions = useTranslations("budget.actions");
@@ -69,14 +78,33 @@ export function StepCosts({
     type: types[0]!,
   });
 
-  async function submit(row: CostRow) {
+  // `CostForm` guarda su propio borrador (lo que se está tipeando, no lo que
+  // había al abrir "Editar"), así que es EL QUIEN se registra en esta ref
+  // interna — acá arriba solo se reenvía al wizard.
+  const costFlushRef: StepFlushRef = useRef<(() => Promise<boolean>) | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (!flushRef) return;
+    flushRef.current = async () =>
+      costFlushRef.current ? costFlushRef.current() : true;
+  });
+  useEffect(() => {
+    return () => {
+      if (flushRef) flushRef.current = null;
+    };
+  }, [flushRef]);
+
+  async function submit(row: CostRow): Promise<boolean> {
     const result = await onSave(row);
     if (result.ok) {
       setEditing(null);
       setError(null);
-    } else {
-      setError(result.error ?? tActions("saveError"));
+      return true;
     }
+    setError(result.error ?? tActions("saveError"));
+    return false;
   }
 
   return (
@@ -140,6 +168,7 @@ export function StepCosts({
           namespace={namespace}
           amountLabel={amountLabel}
           error={error}
+          flushRef={costFlushRef}
           onCancel={() => {
             setEditing(null);
             setError(null);
@@ -166,6 +195,7 @@ function CostForm({
   namespace,
   amountLabel,
   error,
+  flushRef,
   onCancel,
   onSubmit,
 }: {
@@ -174,20 +204,39 @@ function CostForm({
   namespace: "directCosts" | "indirectCosts";
   amountLabel: string;
   error: string | null;
+  flushRef?: StepFlushRef;
   onCancel: () => void;
-  onSubmit: (row: CostRow) => void;
+  onSubmit: (row: CostRow) => Promise<boolean>;
 }) {
   const t = useTranslations(`budget.${namespace}`);
   const tActions = useTranslations("budget.actions");
   const tCommon = useTranslations("common");
   const [draft, setDraft] = useState(row);
 
+  /** Única puerta de guardado: la usan el botón "Agregar" y `flushRef`. */
+  async function persist(): Promise<boolean> {
+    if (isBlankCost(draft)) {
+      onCancel();
+      return true;
+    }
+    return onSubmit(draft);
+  }
+
+  useEffect(() => {
+    if (flushRef) flushRef.current = persist;
+  });
+  useEffect(() => {
+    return () => {
+      if (flushRef) flushRef.current = null;
+    };
+  }, [flushRef]);
+
   return (
     <form
       className="border-border space-y-4 rounded-xl border p-4"
       onSubmit={(event) => {
         event.preventDefault();
-        onSubmit(draft);
+        void persist();
       }}
     >
       <Field label={t("concept")} required>

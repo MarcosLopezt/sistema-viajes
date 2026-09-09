@@ -3,16 +3,26 @@
 import { useCallback, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { AlertCircle, Check, Loader2 } from "lucide-react";
-import type { ActionResult } from "@/app/[locale]/(coordinador)/viajes/actions";
 
 /**
- * Estado de guardado compartido por todos los pasos del wizard.
+ * Estado de guardado compartido por cualquier wizard con autoguardado por
+ * paso o por fila (presupuesto del coordinador, datos de la pasajera).
  *
- * El autoguardado tiene que ser visible sin ser molesto: el coordinador
- * necesita saber que lo que cargó quedó guardado antes de pasar al paso
- * siguiente o cerrar la pestaña, pero un cartel por cada tecla sería ruido.
- * Por eso el indicador es chico y persistente, no un toast.
+ * El autoguardado tiene que ser visible sin ser molesto: quien está cargando
+ * datos necesita saber que lo que hizo quedó guardado antes de avanzar o
+ * cerrar la pestaña, pero un cartel por cada tecla sería ruido. Por eso el
+ * indicador es chico y persistente, no un toast — y un guardado que falla
+ * se muestra igual de visible, nunca en silencio.
+ *
+ * El tipo de resultado es estructural a propósito: no importa el
+ * `ActionResult` de ninguna ruta puntual, para poder usarse desde
+ * cualquier árbol de Server Actions sin acoplar un módulo de componentes a
+ * otro.
  */
+export type SaveActionResult<T = void> =
+  | ({ ok: true } & (T extends void ? { data?: undefined } : { data: T }))
+  | { ok: false; error: string; fieldErrors?: Record<string, string[]> };
+
 export type SaveStatus = "idle" | "saving" | "saved" | "error";
 
 export interface UseSaveResult {
@@ -24,7 +34,7 @@ export interface UseSaveResult {
    * Devuelve el resultado para que quien llama pueda actualizar su estado
    * local con el id que asignó el servidor.
    */
-  save: <T>(action: () => Promise<ActionResult<T>>) => Promise<ActionResult<T>>;
+  save: <T>(action: () => Promise<SaveActionResult<T>>) => Promise<SaveActionResult<T>>;
 }
 
 export function useSave(): UseSaveResult {
@@ -33,7 +43,7 @@ export function useSave(): UseSaveResult {
   const [pending, startTransition] = useTransition();
 
   const save = useCallback(
-    <T,>(action: () => Promise<ActionResult<T>>): Promise<ActionResult<T>> => {
+    <T,>(action: () => Promise<SaveActionResult<T>>): Promise<SaveActionResult<T>> => {
       setStatus("saving");
       setError(null);
 
@@ -59,11 +69,14 @@ export function useSave(): UseSaveResult {
 export function SaveIndicator({
   status,
   error,
+  namespace = "budget.actions",
 }: {
   status: SaveStatus;
   error: string | null;
+  /** Namespace de i18n con las claves saving/saved/saveError. */
+  namespace?: string;
 }) {
-  const t = useTranslations("budget.actions");
+  const t = useTranslations(namespace);
 
   if (status === "idle") return null;
 
