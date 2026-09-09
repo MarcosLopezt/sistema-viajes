@@ -425,6 +425,9 @@ async function main() {
             accommodations: {
               create: {
                 hotelName: "The Bloomsbury Rooms",
+                // Único con link en el seed a propósito: deja ver los dos
+                // estados (con y sin) en el mismo viaje de ejemplo.
+                hotelUrl: "https://example.com/the-bloomsbury-rooms",
                 nights: 4,
                 pricePerNightDouble: "95.00",
                 pricePerNightSingle: "150.00",
@@ -529,7 +532,6 @@ async function main() {
               emergencyContactRelationship: "Hermana",
               emergencyContactPhone: "+54 9 11 4444 0000",
               medicalAssuranceCompany: "Asistencia Global",
-              medicalAssuranceId: "POL-99881",
               medicalAssurancePhone: "+54 11 3333 0000",
               medicalAssuranceEmail: "asistencia@ejemplo.test",
               hasDietaryRestrictions: seed.key === "ana",

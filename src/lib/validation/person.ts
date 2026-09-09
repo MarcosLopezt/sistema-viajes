@@ -67,7 +67,6 @@ export const personDraftSchema = z.object({
   emergencyContactRelationship: draftText(80),
   emergencyContactPhone: draftText(40),
   medicalAssuranceCompany: draftText(200),
-  medicalAssuranceId: draftText(80),
   medicalAssurancePhone: draftText(40),
   medicalAssuranceEmail: draftText(200),
 
@@ -184,7 +183,6 @@ export const personStrictSchema = z
       "Poné el nombre de tu cobertura médica.",
       200,
     ),
-    medicalAssuranceId: required("Poné tu número de socio o de póliza.", 80),
     medicalAssurancePhone: phone("Poné el teléfono de asistencia de tu cobertura."),
     medicalAssuranceEmail: z.email(
       "Escribí un email válido, con arroba.",
@@ -287,7 +285,6 @@ export const PERSON_STEP_FIELDS = {
     "emergencyContactRelationship",
     "emergencyContactPhone",
     "medicalAssuranceCompany",
-    "medicalAssuranceId",
     "medicalAssurancePhone",
     "medicalAssuranceEmail",
     "hasDietaryRestrictions",

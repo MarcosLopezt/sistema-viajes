@@ -26,7 +26,6 @@ function completePerson(
     emergencyContactRelationship: "Hermano",
     emergencyContactPhone: "+54 9 11 4444 4444",
     medicalAssuranceCompany: "Cobertura SA",
-    medicalAssuranceId: "POL-99881",
     medicalAssurancePhone: "+54 11 3333 3333",
     medicalAssuranceEmail: "asistencia@cobertura.example",
     hasDietaryRestrictions: false,
@@ -212,14 +211,14 @@ describe("porcentaje de completitud", () => {
     const result = evaluatePersonCompleteness(
       completePerson({
         residenceCity: null,
-        medicalAssuranceId: null,
+        emergencyContactPhone: null,
         medicalAssuranceFileId: null,
       }),
     );
     expect(result.firstIncompleteStep).toBe(1);
     expect(result.missing).toEqual([
       "residenceCity",
-      "medicalAssuranceId",
+      "emergencyContactPhone",
       "medicalAssuranceFileId",
     ]);
   });

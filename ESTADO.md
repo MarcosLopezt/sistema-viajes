@@ -158,6 +158,26 @@ Si el sistema manda desde una dirección de un dominio que no está autenticado,
 
 **Mientras tanto:** el sistema está diseñado para que un mail perdido no rompa nada. Todo lo que se avisa por mail está también en la pantalla de la pasajera, y el link de invitación se muestra en pantalla al crearla, para mandarlo por WhatsApp. Eso es una mitigación, no una solución.
 
+### El autoguardado por paso no cubre cerrar la pestaña a mitad de paso
+
+Todo formulario de esta app que autoguarda "por paso" —los datos de la pasajera en `/mis-datos`, y los pasos "general", "precios" y "zona pública" del wizard de presupuesto— dispara ese guardado al CAMBIAR de paso (Siguiente, Anterior, o una pestaña del wizard), no en cada tecla. Si quien está completando el formulario **cierra la pestaña, se le corta la conexión o el teléfono se apaga antes de cambiar de paso**, lo que escribió en el paso en el que estaba se pierde: nunca llegó a viajar al servidor.
+
+**Qué SÍ se arregló, y por qué no es lo mismo:** hasta ahora ese guardado por paso podía fallar en silencio —de red, de sesión vencida— y el formulario avanzaba igual, mostrando el 100% de progreso sobre datos que en realidad no se habían guardado. Eso está resuelto: si el guardado falla, no se avanza de paso y el error queda visible (`SaveIndicator`, en `components/form/save-state.tsx`). Lo que sigue abierto es distinto: el guardado nunca se INTENTA si no hay cambio de paso de por medio.
+
+**Por qué no se resolvió ahora:** la solución de fondo es autoguardado por campo (on-blur o con debounce), y es un cambio de alcance mayor al que motivó esta vuelta —que era el guardado silencioso, no la falta de autoguardado más fino.
+
+**Alcance real, para no exagerarlo:** solo se pierde el paso en el que se está parado en ese momento. Los pasos ya confirmados —al cambiar de paso una vez— quedan guardados en la base.
+
+### La exportación a la agencia ya no lleva el número de póliza
+
+Se sacó `medicalAssuranceId` del modelo, del formulario, de la ficha del coordinador y de las exportaciones (fase de septiembre 2026). El resto del bloque de cobertura médica —empresa, teléfono y mail de asistencia— sigue igual, y el comprobante adjunto sigue siendo obligatorio para confirmar.
+
+**Qué significa esto en la práctica:** el número de socio o de póliza de cada pasajera ya no existe como dato estructurado en ningún lado del sistema. El **único registro que queda es el archivo adjunto** (el certificado o la credencial que subió cada una), y ese archivo **no entra en ninguna planilla** — las exportaciones nunca lo llevaron como columna, ni antes ni ahora.
+
+**La consecuencia real:** si la agencia (Wedelltravel) alguna vez pide el número de póliza de alguien por escrito, no hay una consulta que lo devuelva. Hay que abrir el comprobante de esa persona a mano, uno por uno, desde la ficha del pasajero.
+
+**Por qué se decidió así:** fue un pedido explícito del cliente, no un descuido. El resto de los datos de la cobertura (con quién contratar, a qué teléfono llamar, a qué mail escribir en una emergencia) sigue siendo dato estructurado porque hace falta para actuar rápido; el número de póliza en sí no lo pedía nadie por fuera del comprobante mismo.
+
 ---
 
 ## Decisiones que parecen errores y no lo son

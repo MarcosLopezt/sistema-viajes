@@ -35,7 +35,6 @@ export interface PersonCompletenessInput {
   emergencyContactRelationship?: string | null;
   emergencyContactPhone?: string | null;
   medicalAssuranceCompany?: string | null;
-  medicalAssuranceId?: string | null;
   medicalAssurancePhone?: string | null;
   medicalAssuranceEmail?: string | null;
 
@@ -100,7 +99,6 @@ const STEP_2: readonly PersonField[] = [
   "emergencyContactRelationship",
   "emergencyContactPhone",
   "medicalAssuranceCompany",
-  "medicalAssuranceId",
   "medicalAssurancePhone",
   "medicalAssuranceEmail",
 ];

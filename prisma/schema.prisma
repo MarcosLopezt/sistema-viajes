@@ -402,6 +402,8 @@ model Accommodation {
   stopId String @db.Uuid
 
   hotelName           String
+  /// Link a la web del hotel. Opcional; se muestra como link, nunca como HTML.
+  hotelUrl            String?
   nights              Int
   /// Precio por noche POR PERSONA en habitación doble.
   pricePerNightDouble Decimal @db.Decimal(12, 2)
@@ -484,7 +486,6 @@ model Person {
   emergencyContactRelationship String?
   emergencyContactPhone        String?
   medicalAssuranceCompany      String?
-  medicalAssuranceId           String?
   medicalAssurancePhone        String?
   medicalAssuranceEmail        String?
 
@@ -616,7 +617,11 @@ model Passenger {
   tripId   String @db.Uuid
   personId String @db.Uuid
 
-  roomType RoomType
+  /// Null hasta que la pasajera lo elige en su formulario (o, si vino por
+  /// invitación directa, hasta que la coordinadora lo precarga al invitar —
+  /// ahí sigue siendo un precargado editable, no una decisión final). Pasa a
+  /// ser obligatorio recién para CONFIRMADO: ver `confirmPassenger`.
+  roomType RoomType?
   roomId   String?         @db.Uuid
   status   PassengerStatus @default(INVITADO)
 

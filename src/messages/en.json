@@ -184,7 +184,7 @@
     "steps": {
       "general": "General details",
       "itinerary": "Itinerary and hotels",
-      "directCosts": "Meals and events",
+      "directCosts": "Costs per passenger",
       "indirectCosts": "Group costs",
       "prices": "Review and pricing",
       "publicZone": "Public zone"
@@ -195,7 +195,7 @@
       "costSingle": "Single room",
       "breakdown": "What makes it up",
       "lodging": "Hotels",
-      "extras": "Meals and events",
+      "extras": "Costs per passenger",
       "indirect": "Group costs, per passenger",
       "indirectTotal": "Total group costs",
       "residue": "Left over from rounding: {amount}",
@@ -234,9 +234,14 @@
       "toDate": "Departure",
       "notes": "Notes",
       "empty": "You haven't added any destinations yet. Start with the first one.",
+      "outOfRangeTitle": "These stops fell outside the trip's dates. Nothing is blocked, but they're worth a look.",
+      "outOfRangeItem": "{city}: {from} — {to}",
       "hotels": "Hotels",
       "addHotel": "Add hotel",
       "hotelName": "Hotel name",
+      "hotelUrl": "Hotel link",
+      "hotelUrlHelp": "Optional. The hotel's website, so whoever looks it up can go straight there.",
+      "hotelUrlLink": "View hotel",
       "nights": "Nights",
       "pricePerNightDouble": "Per night, shared",
       "pricePerNightSingle": "Per night, single",
@@ -413,7 +418,9 @@
     "singleExplained": "Single room — the room is just for you",
     "yourRoom": "Your room",
     "roommate": "You're sharing a room with {name}",
-    "roommatePending": "We haven't assigned you a roommate yet."
+    "roommatePending": "We haven't assigned you a roommate yet.",
+    "notChosen": "Not chosen yet",
+    "choosePrompt": "Choose your room type in your details so we can confirm your spot."
   },
   "register": {
     "title": "Your details",
@@ -425,8 +432,15 @@
       "3": "Documents"
     },
     "savedAutomatically": "We've saved what you entered. You can carry on later.",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "saveError": "We couldn't save that. Please try again.",
     "step1": {
       "intro": "Let's start with the basics. Copy the details exactly as they appear in your passport.",
+      "roomTypeTitle": "Room type",
+      "roomTypeSave": "Save",
+      "roomTypeSaved": "Saved",
+      "roomTypeConfirmedNote": "You're already confirmed. If you need to change this, ask your coordinator.",
       "language": "Language",
       "languageHelp": "We'll write to you in this language.",
       "fullName": "Full name",
@@ -453,7 +467,6 @@
       "emergencyContactPhone": "Phone",
       "assuranceTitle": "Medical cover",
       "medicalAssuranceCompany": "Company",
-      "medicalAssuranceId": "Member or policy number",
       "medicalAssurancePhone": "Assistance phone",
       "medicalAssuranceEmail": "Assistance email",
       "healthTitle": "Health and food",
@@ -561,7 +574,12 @@
     "paymentInstructionsUsingTrip": "Currently in effect: the trip's general text.",
     "paymentInstructionsTripEmpty": "The trip has no instructions yet. They're set in step 6 of the budget.",
     "paymentInstructionsSave": "Save",
-    "paymentInstructionsClear": "Go back to the trip's text"
+    "paymentInstructionsClear": "Go back to the trip's text",
+    "roomTypeTitle": "Room type",
+    "roomTypeHelp": "The passenger chooses this in her own form. You can correct it before confirming; once CONFIRMED, changing it is exclusive to this screen and gets logged.",
+    "roomTypeNotChosen": "Not chosen yet. She can't be confirmed until this has a value.",
+    "roomTypeConfirmedWarning": "Already confirmed. Changing this does NOT update a payment plan that was already generated — if needed, regenerate it separately.",
+    "roomTypeSave": "Save"
   },
   "rooms": {
     "title": "Rooms",
@@ -591,7 +609,6 @@
       "emergencyContactName": "emergency contact",
       "emergencyContactPhone": "emergency phone",
       "medicalAssuranceCompany": "medical cover",
-      "medicalAssuranceId": "member number",
       "medicalAssurancePhone": "assistance phone",
       "medicalAssuranceEmail": "assistance email",
       "dietaryRestrictionsDetail": "dietary restrictions",

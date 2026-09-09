@@ -184,7 +184,7 @@
     "steps": {
       "general": "Datos generales",
       "itinerary": "Itinerario y hoteles",
-      "directCosts": "Comidas y eventos",
+      "directCosts": "Costos por pasajero",
       "indirectCosts": "Costos del grupo",
       "prices": "Revisión y precios",
       "publicZone": "Zona pública"
@@ -195,7 +195,7 @@
       "costSingle": "Habitación individual",
       "breakdown": "Cómo se compone",
       "lodging": "Hoteles",
-      "extras": "Comidas y eventos",
+      "extras": "Costos por pasajero",
       "indirect": "Costos del grupo, por pasajero",
       "indirectTotal": "Total de costos del grupo",
       "residue": "Sobrante por redondeo: {amount}",
@@ -234,9 +234,14 @@
       "toDate": "Salida",
       "notes": "Notas",
       "empty": "Todavía no cargaste ningún destino. Empezá por el primero.",
+      "outOfRangeTitle": "Estas paradas quedaron fuera de las fechas del viaje. No bloquean nada, pero conviene revisarlas.",
+      "outOfRangeItem": "{city}: {from} — {to}",
       "hotels": "Hoteles",
       "addHotel": "Agregar hotel",
       "hotelName": "Nombre del hotel",
+      "hotelUrl": "Link del hotel",
+      "hotelUrlHelp": "Opcional. La web del hotel, para que quien lo mire pueda entrar directo.",
+      "hotelUrlLink": "Ver hotel",
       "nights": "Noches",
       "pricePerNightDouble": "Por noche, compartida",
       "pricePerNightSingle": "Por noche, individual",
@@ -413,7 +418,9 @@
     "singleExplained": "Habitación individual — la habitación es solo para vos",
     "yourRoom": "Tu habitación",
     "roommate": "Compartís habitación con {name}",
-    "roommatePending": "Todavía no te asignamos compañero de habitación."
+    "roommatePending": "Todavía no te asignamos compañero de habitación.",
+    "notChosen": "Todavía no elegiste",
+    "choosePrompt": "Elegí tu tipo de habitación en tus datos para poder confirmar tu lugar."
   },
   "register": {
     "title": "Tus datos",
@@ -425,8 +432,15 @@
       "3": "Documentos"
     },
     "savedAutomatically": "Guardamos lo que cargaste. Podés seguir en otro momento.",
+    "saving": "Guardando…",
+    "saved": "Guardado",
+    "saveError": "No pudimos guardar. Probá de nuevo.",
     "step1": {
       "intro": "Empecemos por lo básico. Copiá los datos tal como figuran en tu pasaporte.",
+      "roomTypeTitle": "Tipo de habitación",
+      "roomTypeSave": "Guardar",
+      "roomTypeSaved": "Guardado",
+      "roomTypeConfirmedNote": "Ya estás confirmada. Si necesitás cambiarlo, pedíselo a la coordinadora.",
       "language": "Idioma",
       "languageHelp": "En este idioma te vamos a escribir.",
       "fullName": "Nombre y apellido",
@@ -453,7 +467,6 @@
       "emergencyContactPhone": "Teléfono",
       "assuranceTitle": "Cobertura médica",
       "medicalAssuranceCompany": "Empresa",
-      "medicalAssuranceId": "Número de socio o póliza",
       "medicalAssurancePhone": "Teléfono de asistencia",
       "medicalAssuranceEmail": "Email de asistencia",
       "healthTitle": "Salud y alimentación",
@@ -561,7 +574,12 @@
     "paymentInstructionsUsingTrip": "Hoy rige: el texto general del viaje.",
     "paymentInstructionsTripEmpty": "El viaje todavía no tiene instrucciones cargadas. Se cargan en el paso 6 del presupuesto.",
     "paymentInstructionsSave": "Guardar",
-    "paymentInstructionsClear": "Volver al texto del viaje"
+    "paymentInstructionsClear": "Volver al texto del viaje",
+    "roomTypeTitle": "Tipo de habitación",
+    "roomTypeHelp": "Lo elige la pasajera en su formulario. Podés corregirlo antes de confirmar; una vez CONFIRMADA, cambiarlo es exclusivo de acá y queda registrado.",
+    "roomTypeNotChosen": "Todavía no lo eligió. No se la puede confirmar hasta que esto tenga un valor.",
+    "roomTypeConfirmedWarning": "Ya está confirmada. Cambiar esto NO actualiza un plan de pagos que ya se haya generado — si hace falta, hay que regenerarlo aparte.",
+    "roomTypeSave": "Guardar"
   },
   "rooms": {
     "title": "Habitaciones",
@@ -591,7 +609,6 @@
       "emergencyContactName": "contacto de emergencia",
       "emergencyContactPhone": "teléfono de emergencia",
       "medicalAssuranceCompany": "cobertura médica",
-      "medicalAssuranceId": "número de socio",
       "medicalAssurancePhone": "teléfono de asistencia",
       "medicalAssuranceEmail": "email de asistencia",
       "dietaryRestrictionsDetail": "restricciones con la comida",
