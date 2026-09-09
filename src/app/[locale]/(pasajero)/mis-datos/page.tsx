@@ -53,7 +53,6 @@ export default async function MyDataPage() {
     emergencyContactRelationship: person.emergencyContactRelationship ?? "",
     emergencyContactPhone: person.emergencyContactPhone ?? "",
     medicalAssuranceCompany: person.medicalAssuranceCompany ?? "",
-    medicalAssuranceId: person.medicalAssuranceId ?? "",
     medicalAssurancePhone: person.medicalAssurancePhone ?? "",
     medicalAssuranceEmail: person.medicalAssuranceEmail ?? "",
     hasDietaryRestrictions: person.hasDietaryRestrictions,
@@ -104,6 +103,11 @@ export default async function MyDataPage() {
       <RegistrationForm
         passengerId={passenger.id}
         initialValues={initialValues}
+        roomType={passenger.roomType}
+        passengerStatus={passenger.status}
+        currency={passenger.trip.currency}
+        priceDouble={passenger.trip.priceDouble}
+        priceSingle={passenger.trip.priceSingle}
       />
     </div>
   );

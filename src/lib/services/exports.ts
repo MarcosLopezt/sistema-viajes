@@ -95,6 +95,16 @@ const ROOM_TYPE_LABEL: Record<string, string> = {
   SINGLE: "Individual",
 };
 
+/**
+ * Nunca un default silencioso: alguien sin tipo de habitación todavía no lo
+ * eligió, y decir "Compartida" en su lugar sería inventarle una respuesta
+ * que no dio. Distinto es un cuarto SIN ocupantes (nadie para leerle el tipo
+ * a nadie): ese caso lo decide cada llamador, no esta función.
+ */
+function roomTypeLabel(roomType: "DOBLE" | "SINGLE" | null): string {
+  return roomType === null ? "Sin elegir" : (ROOM_TYPE_LABEL[roomType] ?? roomType);
+}
+
 // ---------------------------------------------------------------------------
 // 1 · Listado de pasajeros para el hotel o el mayorista
 // ---------------------------------------------------------------------------
@@ -149,7 +159,7 @@ export async function buildPassengerListExport(
         passenger.emergencyContactName,
         passenger.emergencyContactPhone,
         passenger.roomLabel,
-        ROOM_TYPE_LABEL[passenger.roomType] ?? passenger.roomType,
+        roomTypeLabel(passenger.roomType),
         passenger.isCoordinator ? "Coordinador" : passenger.status,
       ],
     })),
@@ -309,7 +319,12 @@ export async function buildRoomingExport(
     ...rooming.rooms.map((room) => ({
       cells: [
         room.roomLabel,
-        ROOM_TYPE_LABEL[room.occupants[0]?.roomType ?? "DOBLE"] ?? null,
+        // Un cuarto sin ocupantes no tiene tipo que leerle a nadie: "Compartida"
+        // acá es un rótulo genérico para una fila vacía, no una respuesta
+        // inventada sobre una persona — por eso NO pasa por `roomTypeLabel`.
+        room.occupants.length === 0
+          ? roomTypeLabel("DOBLE")
+          : roomTypeLabel(room.occupants[0]!.roomType),
         room.occupants[0]?.fullName ?? null,
         room.occupants[1]?.fullName ?? null,
         room.occupants.length,
@@ -327,7 +342,7 @@ export async function buildRoomingExport(
       ...rooming.unassigned.map((passenger) => ({
         cells: [
           null,
-          ROOM_TYPE_LABEL[passenger.roomType] ?? passenger.roomType,
+          roomTypeLabel(passenger.roomType),
           passenger.fullName,
         ],
       })),

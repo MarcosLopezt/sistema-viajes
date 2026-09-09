@@ -10,7 +10,8 @@ export interface PassengerRow {
   id: string;
   fullName: string | null;
   nationality: string | null;
-  roomType: "DOBLE" | "SINGLE";
+  /** Null hasta que se elige. Ver el comentario en `schema.prisma`. */
+  roomType: "DOBLE" | "SINGLE" | null;
   roomId: string | null;
   roomLabel: string | null;
   status: "INVITADO" | "REGISTRADO" | "CONFIRMADO" | "CANCELADO";

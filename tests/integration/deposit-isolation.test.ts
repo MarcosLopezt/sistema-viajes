@@ -732,13 +732,11 @@ describe("conversión doble concurrente", () => {
     const [a, b] = await Promise.all([
       confirmDepositAndConvert({
         depositId,
-        roomType: "DOBLE",
         fxRateUsed: null,
         fxRateSource: null,
       }),
       confirmDepositAndConvert({
         depositId,
-        roomType: "DOBLE",
         fxRateUsed: null,
         fxRateSource: null,
       }),
@@ -766,7 +764,6 @@ describe("conversión doble concurrente", () => {
     actAs(coty);
     const { passengerId } = await confirmDepositAndConvert({
       depositId,
-      roomType: "SINGLE",
       fxRateUsed: null,
       fxRateSource: null,
     });
@@ -814,7 +811,6 @@ describe("conversión doble concurrente", () => {
     actAs(otto);
     const { outcome, passengerId } = await confirmDepositAndConvert({
       depositId,
-      roomType: "DOBLE",
       fxRateUsed: null,
       fxRateSource: null,
     });
@@ -842,7 +838,6 @@ describe("conversión doble concurrente", () => {
     await expect(
       confirmDepositAndConvert({
         depositId,
-        roomType: "DOBLE",
         fxRateUsed: null,
         fxRateSource: null,
       }),

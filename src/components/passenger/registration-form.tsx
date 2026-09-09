@@ -17,10 +17,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Field } from "@/components/form/field";
+import { SaveIndicator, useSave } from "@/components/form/save-state";
 import { evaluatePersonCompleteness } from "@/lib/domain/person";
+import { formatMoney, type CurrencyCode } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import {
   finishRegistrationAction,
   saveDraftAction,
+  setRoomTypeAction,
 } from "@/app/[locale]/(pasajero)/mis-datos/actions";
 import { MedicalFileUpload } from "./file-upload";
 
@@ -38,6 +42,13 @@ import { MedicalFileUpload } from "./file-upload";
  *
  * La validación de verdad corre una sola vez, al tocar "Terminar", y sus
  * errores se muestran al lado del campo que los causó.
+ *
+ * Si el guardado del borrador falla (red caída, sesión vencida), NO se
+ * avanza de paso ni se llega a "Terminar" en silencio: `SaveIndicator`
+ * muestra el error y el paso se queda donde está, con lo cargado todavía en
+ * memoria. Avanzar igual dejaría a la pasajera un paso más allá de lo que
+ * en verdad quedó guardado, y creería que perdió lo que escribió cuando en
+ * realidad nunca se fue.
  */
 
 export interface PersonValues {
@@ -57,7 +68,6 @@ export interface PersonValues {
   emergencyContactRelationship: string;
   emergencyContactPhone: string;
   medicalAssuranceCompany: string;
-  medicalAssuranceId: string;
   medicalAssurancePhone: string;
   medicalAssuranceEmail: string;
   hasDietaryRestrictions: boolean;
@@ -81,10 +91,21 @@ const TOTAL_STEPS = 3;
 export function RegistrationForm({
   passengerId,
   initialValues,
+  roomType,
+  passengerStatus,
+  currency,
+  priceDouble,
+  priceSingle,
   onFinished,
 }: {
   passengerId: string;
   initialValues: PersonValues;
+  /** Null hasta que se elige. Ver el comentario en schema.prisma. */
+  roomType: "DOBLE" | "SINGLE" | null;
+  passengerStatus: "INVITADO" | "REGISTRADO" | "CONFIRMADO" | "CANCELADO";
+  currency: CurrencyCode;
+  priceDouble: string | null;
+  priceSingle: string | null;
   onFinished?: () => void;
 }) {
   const t = useTranslations("register");
@@ -94,7 +115,10 @@ export function RegistrationForm({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
-  const [pending, startTransition] = useTransition();
+  const [finishing, startFinishTransition] = useTransition();
+  const { status: saveStatus, error: saveError, pending: savePending, save } =
+    useSave();
+  const pending = finishing || savePending;
 
   const set = <K extends keyof PersonValues>(key: K, value: PersonValues[K]) =>
     setValues((current) => ({ ...current, [key]: value }));
@@ -116,58 +140,64 @@ export function RegistrationForm({
     [values],
   );
 
-  /** Guarda lo que haya. No valida: para eso está "Terminar". */
-  function saveDraft(): Promise<void> {
-    return new Promise((resolve) => {
-      startTransition(async () => {
-        await saveDraftAction(passengerId, {
-          fullName: values.fullName,
-          birthDate: values.birthDate,
-          nationalityCountry: values.nationalityCountry,
-          passportIssuingCountry: values.passportIssuingCountry,
-          residenceCountry: values.residenceCountry,
-          residenceAddress: values.residenceAddress,
-          residenceCity: values.residenceCity,
-          mobilePhone: values.mobilePhone,
-          documentNumber: values.documentNumber,
-          passportNumber: values.passportNumber,
-          passportExpiryDate: values.passportExpiryDate,
-          profession: values.profession,
-          emergencyContactName: values.emergencyContactName,
-          emergencyContactRelationship: values.emergencyContactRelationship,
-          emergencyContactPhone: values.emergencyContactPhone,
-          medicalAssuranceCompany: values.medicalAssuranceCompany,
-          medicalAssuranceId: values.medicalAssuranceId,
-          medicalAssurancePhone: values.medicalAssurancePhone,
-          medicalAssuranceEmail: values.medicalAssuranceEmail,
-          hasDietaryRestrictions: values.hasDietaryRestrictions,
-          dietaryRestrictionsDetail: values.dietaryRestrictionsDetail,
-          hasMobilityRestrictions: values.hasMobilityRestrictions,
-          mobilityRestrictionsDetail: values.mobilityRestrictionsDetail,
-          takesMedication: values.takesMedication,
-          takesMedicationDetail: values.takesMedicationDetail,
-          psychTreatment: values.psychTreatment,
-          psychTreatmentDetail: values.psychTreatmentDetail,
-          anxietyOrPanic: values.anxietyOrPanic,
-          anxietyOrPanicDetail: values.anxietyOrPanicDetail,
-          otherHealthNotes: values.otherHealthNotes,
-          additionalInfo: values.additionalInfo,
-          preferredLanguage: values.preferredLanguage,
-        });
-        resolve();
-      });
-    });
+  /**
+   * Guarda lo que haya. No valida: para eso está "Terminar".
+   *
+   * Devuelve si el guardado tuvo éxito. Quien llama NO debe avanzar de paso
+   * si esto da `false`: el error ya quedó visible en `SaveIndicator`, y lo
+   * cargado sigue en `values` — no se perdió, solo no llegó todavía al
+   * servidor.
+   */
+  async function saveDraft(): Promise<boolean> {
+    const result = await save(() =>
+      saveDraftAction(passengerId, {
+        fullName: values.fullName,
+        birthDate: values.birthDate,
+        nationalityCountry: values.nationalityCountry,
+        passportIssuingCountry: values.passportIssuingCountry,
+        residenceCountry: values.residenceCountry,
+        residenceAddress: values.residenceAddress,
+        residenceCity: values.residenceCity,
+        mobilePhone: values.mobilePhone,
+        documentNumber: values.documentNumber,
+        passportNumber: values.passportNumber,
+        passportExpiryDate: values.passportExpiryDate,
+        profession: values.profession,
+        emergencyContactName: values.emergencyContactName,
+        emergencyContactRelationship: values.emergencyContactRelationship,
+        emergencyContactPhone: values.emergencyContactPhone,
+        medicalAssuranceCompany: values.medicalAssuranceCompany,
+        medicalAssurancePhone: values.medicalAssurancePhone,
+        medicalAssuranceEmail: values.medicalAssuranceEmail,
+        hasDietaryRestrictions: values.hasDietaryRestrictions,
+        dietaryRestrictionsDetail: values.dietaryRestrictionsDetail,
+        hasMobilityRestrictions: values.hasMobilityRestrictions,
+        mobilityRestrictionsDetail: values.mobilityRestrictionsDetail,
+        takesMedication: values.takesMedication,
+        takesMedicationDetail: values.takesMedicationDetail,
+        psychTreatment: values.psychTreatment,
+        psychTreatmentDetail: values.psychTreatmentDetail,
+        anxietyOrPanic: values.anxietyOrPanic,
+        anxietyOrPanicDetail: values.anxietyOrPanicDetail,
+        otherHealthNotes: values.otherHealthNotes,
+        additionalInfo: values.additionalInfo,
+        preferredLanguage: values.preferredLanguage,
+      }),
+    );
+    return result.ok;
   }
 
   async function goToStep(next: number) {
-    await saveDraft();
+    const saved = await saveDraft();
+    if (!saved) return;
     setStep(Math.min(Math.max(next, 1), TOTAL_STEPS));
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function finish() {
-    startTransition(async () => {
-      await saveDraft();
+    startFinishTransition(async () => {
+      const saved = await saveDraft();
+      if (!saved) return;
 
       const result = await finishRegistrationAction(passengerId, {
         ...values,
@@ -230,7 +260,17 @@ export function RegistrationForm({
       ) : null}
 
       {step === 1 ? (
-        <Step1 values={values} set={set} errorOf={errorOf} />
+        <Step1
+          passengerId={passengerId}
+          values={values}
+          set={set}
+          errorOf={errorOf}
+          roomType={roomType}
+          passengerStatus={passengerStatus}
+          currency={currency}
+          priceDouble={priceDouble}
+          priceSingle={priceSingle}
+        />
       ) : null}
       {step === 2 ? (
         <Step2 values={values} set={set} errorOf={errorOf} />
@@ -244,9 +284,12 @@ export function RegistrationForm({
         />
       ) : null}
 
-      <p className="text-muted-foreground text-sm">
-        {t("savedAutomatically")}
-      </p>
+      <div className="space-y-1.5">
+        <p className="text-muted-foreground text-sm">
+          {t("savedAutomatically")}
+        </p>
+        <SaveIndicator status={saveStatus} error={saveError} namespace="register" />
+      </div>
 
       <div className="flex items-center gap-3">
         {step > 1 ? (
@@ -334,13 +377,25 @@ type SetValue = <K extends keyof PersonValues>(
 type ErrorOf = (field: keyof PersonValues) => string | undefined;
 
 function Step1({
+  passengerId,
   values,
   set,
   errorOf,
+  roomType,
+  passengerStatus,
+  currency,
+  priceDouble,
+  priceSingle,
 }: {
+  passengerId: string;
   values: PersonValues;
   set: SetValue;
   errorOf: ErrorOf;
+  roomType: "DOBLE" | "SINGLE" | null;
+  passengerStatus: "INVITADO" | "REGISTRADO" | "CONFIRMADO" | "CANCELADO";
+  currency: CurrencyCode;
+  priceDouble: string | null;
+  priceSingle: string | null;
 }) {
   const t = useTranslations("register.step1");
 
@@ -349,6 +404,15 @@ function Step1({
       <p className="text-muted-foreground text-base text-balance">
         {t("intro")}
       </p>
+
+      <RoomTypeChoice
+        passengerId={passengerId}
+        roomType={roomType}
+        passengerStatus={passengerStatus}
+        currency={currency}
+        priceDouble={priceDouble}
+        priceSingle={priceSingle}
+      />
 
       <Field label={t("language")} help={t("languageHelp")}>
         {(props) => (
@@ -554,6 +618,128 @@ function Step1({
   );
 }
 
+/**
+ * Tipo de habitación.
+ *
+ * Vive en `Passenger`, no en `Person` —por eso no pasa por `saveDraft()` ni
+ * por `saveDraftAction`— y por eso guarda sola, con su propio botón: es un
+ * dato de OTRA tabla, con su propia autorización
+ * (`setPassengerRoomType`, en lib/services/passengers.ts).
+ *
+ * Una vez CONFIRMADA, esa misma función la rechaza a ella: acá se muestra
+ * de solo lectura en vez de ofrecer un control que el servidor va a negar.
+ */
+function RoomTypeChoice({
+  passengerId,
+  roomType,
+  passengerStatus,
+  currency,
+  priceDouble,
+  priceSingle,
+}: {
+  passengerId: string;
+  roomType: "DOBLE" | "SINGLE" | null;
+  passengerStatus: "INVITADO" | "REGISTRADO" | "CONFIRMADO" | "CANCELADO";
+  currency: CurrencyCode;
+  priceDouble: string | null;
+  priceSingle: string | null;
+}) {
+  const t = useTranslations("register.step1");
+  const tRooms = useTranslations("roomTypes");
+  const [pending, startTransition] = useTransition();
+  const [choice, setChoice] = useState<"DOBLE" | "SINGLE">(roomType ?? "DOBLE");
+  const [saved, setSaved] = useState(roomType);
+  const [error, setError] = useState<string | null>(null);
+
+  const priceOf = (option: "DOBLE" | "SINGLE") =>
+    option === "DOBLE" ? priceDouble : priceSingle;
+
+  if (passengerStatus === "CONFIRMADO") {
+    return (
+      <div className="border-border space-y-1 rounded-lg border p-4">
+        <p className="text-base font-medium">{t("roomTypeTitle")}</p>
+        <p className="text-muted-foreground text-sm">
+          {roomType === "DOBLE"
+            ? tRooms("doubleExplained")
+            : tRooms("singleExplained")}
+        </p>
+        <p className="text-muted-foreground text-sm">
+          {t("roomTypeConfirmedNote")}
+        </p>
+      </div>
+    );
+  }
+
+  function save() {
+    setError(null);
+    startTransition(async () => {
+      const result = await setRoomTypeAction(passengerId, choice);
+      if (result.ok) setSaved(choice);
+      else setError(result.error);
+    });
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-base font-medium">{t("roomTypeTitle")}</p>
+
+      {error ? (
+        <Alert variant="destructive" role="alert">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        {(["DOBLE", "SINGLE"] as const).map((option) => {
+          const price = priceOf(option);
+          return (
+            <label
+              key={option}
+              className={cn(
+                "border-border cursor-pointer space-y-1 rounded-lg border p-4",
+                choice === option && "border-primary bg-primary/5",
+              )}
+            >
+              <span className="flex items-start gap-2">
+                <input
+                  type="radio"
+                  name="roomType"
+                  className="mt-1"
+                  checked={choice === option}
+                  onChange={() => setChoice(option)}
+                />
+                <span className="text-base font-medium">{tRooms(option)}</span>
+              </span>
+              <p className="text-muted-foreground text-sm">
+                {tRooms(option === "DOBLE" ? "doubleExplained" : "singleExplained")}
+              </p>
+              <p className="text-base font-medium">
+                {price !== null ? formatMoney(price, currency) : "—"}
+              </p>
+            </label>
+          );
+        })}
+      </div>
+
+      <Button
+        type="button"
+        variant="outline"
+        disabled={pending || saved === choice}
+        onClick={save}
+      >
+        {saved === choice ? (
+          <>
+            <Check aria-hidden="true" />
+            {t("roomTypeSaved")}
+          </>
+        ) : (
+          t("roomTypeSave")
+        )}
+      </Button>
+    </div>
+  );
+}
+
 function Step2({
   values,
   set,
@@ -636,20 +822,6 @@ function Step2({
               {...props}
               value={values.medicalAssuranceCompany}
               onChange={(e) => set("medicalAssuranceCompany", e.target.value)}
-            />
-          )}
-        </Field>
-
-        <Field
-          label={t("medicalAssuranceId")}
-          error={errorOf("medicalAssuranceId")}
-          required
-        >
-          {(props) => (
-            <Input
-              {...props}
-              value={values.medicalAssuranceId}
-              onChange={(e) => set("medicalAssuranceId", e.target.value)}
             />
           )}
         </Field>

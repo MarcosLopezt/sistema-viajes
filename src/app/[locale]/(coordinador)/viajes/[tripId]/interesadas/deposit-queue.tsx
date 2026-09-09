@@ -7,13 +7,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { formatDate, formatMoney } from "@/lib/format";
 import { confirmDepositAction, rejectDepositAction } from "./actions";
 
@@ -130,7 +123,6 @@ function DepositCard({
   const t = useTranslations("depositReview");
   const [pending, startTransition] = useTransition();
 
-  const [roomType, setRoomType] = useState<"DOBLE" | "SINGLE">("DOBLE");
   const [fxRate, setFxRate] = useState(row.suggestedFxRate ?? "");
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
@@ -145,7 +137,6 @@ function DepositCard({
     startTransition(async () => {
       const result = await confirmDepositAction(tripId, {
         depositId: row.depositId,
-        roomType,
         fxRateUsed: converts ? fxRate.trim() || null : null,
         // Si el coordinador dejó la sugerencia intacta, la procedencia es
         // SUGERIDO; si la tipeó mirando el extracto, INGRESADO. La distinción
@@ -292,29 +283,6 @@ function DepositCard({
         </div>
       ) : (
         <div className="flex flex-wrap items-end gap-3">
-          <div className="space-y-1.5">
-            <label className="text-base font-medium" id={`rt-${row.depositId}`}>
-              {t("roomType")}
-            </label>
-            <Select
-              value={roomType}
-              onValueChange={(value) =>
-                setRoomType(value as "DOBLE" | "SINGLE")
-              }
-            >
-              <SelectTrigger
-                aria-labelledby={`rt-${row.depositId}`}
-                className="w-40"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="DOBLE">{t("roomDouble")}</SelectItem>
-                <SelectItem value="SINGLE">{t("roomSingle")}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
           <Button disabled={pending} onClick={confirm}>
             {t("confirmAndConvert")}
           </Button>

@@ -75,10 +75,14 @@ export const submitDepositSchema = z.object({
 
 export type SubmitDepositInput = z.infer<typeof submitDepositSchema>;
 
-/** Confirmar la seña es, al mismo tiempo, convertirla en pasajera. */
+/**
+ * Confirmar la seña es, al mismo tiempo, convertirla en pasajera.
+ *
+ * No pide `roomType`: nace sin él. Lo elige ella en su formulario de datos,
+ * no la coordinadora al confirmar la transferencia.
+ */
 export const confirmDepositSchema = z.object({
   depositId: z.uuid(),
-  roomType: z.enum(["DOBLE", "SINGLE"]),
   /** Del extracto bancario. Obligatorio solo si la moneda difiere. */
   fxRateUsed: z
     .string()

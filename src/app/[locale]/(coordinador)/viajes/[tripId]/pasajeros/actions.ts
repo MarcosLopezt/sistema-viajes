@@ -24,6 +24,7 @@ import {
   PassengerStateError,
   setPassengerPaymentInstructions,
   setPassengerPriceOverride,
+  setPassengerRoomType,
   updatePersonByCoordinator,
 } from "@/lib/services/passengers";
 import { personDraftSchema } from "@/lib/validation/person";
@@ -230,6 +231,32 @@ export async function cancelPassengerAction(
   passengerId: string,
 ): Promise<ActionResult> {
   const result = await run(() => cancelPassenger(passengerId));
+  if (result.ok) revalidate(tripId);
+  return result;
+}
+
+const roomTypeSchema = z.enum(["DOBLE", "SINGLE"]);
+
+/**
+ * Fija o cambia el tipo de habitación desde la ficha.
+ *
+ * Antes de CONFIRMADO es una corrección más; después, es la ÚNICA puerta —
+ * `setPassengerRoomType` rechaza a la pasajera a partir de ahí. Ver el
+ * docblock de esa función en lib/services/passengers.ts.
+ */
+export async function setRoomTypeAction(
+  tripId: string,
+  passengerId: string,
+  roomType: unknown,
+): Promise<ActionResult> {
+  const parsed = roomTypeSchema.safeParse(roomType);
+  if (!parsed.success) {
+    return failure("Elegí el tipo de habitación.");
+  }
+
+  const result = await run(() =>
+    setPassengerRoomType(passengerId, parsed.data),
+  );
   if (result.ok) revalidate(tripId);
   return result;
 }

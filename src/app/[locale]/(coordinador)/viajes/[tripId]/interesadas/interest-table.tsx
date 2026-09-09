@@ -62,11 +62,9 @@ export function InterestTable({
   rows: InterestRow[];
 }) {
   const t = useTranslations("interests");
-  const tRooms = useTranslations("roomTypes");
 
   const [error, setError] = useState<string | null>(null);
   const [converting, setConverting] = useState<string | null>(null);
-  const [roomType, setRoomType] = useState<"DOBLE" | "SINGLE">("DOBLE");
   const [pending, startTransition] = useTransition();
 
   const handle = (fn: () => Promise<{ ok: boolean; error?: string }>) =>
@@ -182,38 +180,19 @@ export function InterestTable({
                   </SelectContent>
                 </Select>
 
-                {/* La conversión pide el tipo de habitación antes de ejecutar:
-                    es el único dato que el sistema no puede deducir, y crear
-                    la pasajera sin él obligaría a corregirlo después. */}
+                {/* El tipo de habitación ya no se pide acá: nace sin él y lo
+                    elige ella en su formulario de datos. */}
                 {row.alreadyPassenger ? (
                   <span className="text-muted-foreground text-sm">
                     {t("alreadyPassenger")}
                   </span>
                 ) : converting === row.id ? (
                   <div className="flex items-center gap-2">
-                    <Select
-                      value={roomType}
-                      onValueChange={(v) =>
-                        setRoomType(v as "DOBLE" | "SINGLE")
-                      }
-                    >
-                      <SelectTrigger className="w-40">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="DOBLE">{tRooms("DOBLE")}</SelectItem>
-                        <SelectItem value="SINGLE">
-                          {tRooms("SINGLE")}
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
                     <Button
                       size="sm"
                       disabled={pending}
                       onClick={() =>
-                        handle(() =>
-                          convertInterestAction(row.id, tripId, roomType),
-                        )
+                        handle(() => convertInterestAction(row.id, tripId))
                       }
                     >
                       {t("confirmConvert")}

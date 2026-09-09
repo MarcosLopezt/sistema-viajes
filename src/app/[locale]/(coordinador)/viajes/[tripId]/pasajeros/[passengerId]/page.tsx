@@ -49,9 +49,9 @@ export default async function PassengerDetailPage({
         </div>
 
         <p className="text-muted-foreground text-base">
-          {passenger.roomType === "DOBLE"
-            ? tRooms("DOBLE")
-            : tRooms("SINGLE")}
+          {passenger.roomType === null
+            ? tRooms("notChosen")
+            : tRooms(passenger.roomType)}
           {passenger.room ? ` · ${passenger.room.label}` : ""}
           {passenger.roommateName
             ? ` · ${tRooms("roommate", { name: passenger.roommateName })}`
@@ -79,6 +79,9 @@ export default async function PassengerDetailPage({
         currency={passenger.trip.currency}
         status={passenger.status}
         isCoordinator={passenger.isCoordinator}
+        roomType={passenger.roomType}
+        priceDouble={passenger.trip.priceDouble}
+        priceSingle={passenger.trip.priceSingle}
         completionPercentage={passenger.completeness.completionPercentage}
         paymentInstructions={passenger.paymentInstructions}
         tripPaymentInstructions={pickLocalized(
@@ -109,7 +112,6 @@ export default async function PassengerDetailPage({
           emergencyContactRelationship: person.emergencyContactRelationship ?? "",
           emergencyContactPhone: person.emergencyContactPhone ?? "",
           medicalAssuranceCompany: person.medicalAssuranceCompany ?? "",
-          medicalAssuranceId: person.medicalAssuranceId ?? "",
           medicalAssurancePhone: person.medicalAssurancePhone ?? "",
           medicalAssuranceEmail: person.medicalAssuranceEmail ?? "",
           dietaryRestrictionsDetail: person.dietaryRestrictionsDetail ?? "",

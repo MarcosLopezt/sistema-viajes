@@ -8,6 +8,7 @@ import {
   finalizeRegistration,
   PassengerStateError,
   savePersonDraft,
+  setPassengerRoomType,
 } from "@/lib/services/passengers";
 import {
   createSignedDownloadUrl,
@@ -104,6 +105,27 @@ export async function finishRegistrationAction(
     revalidatePath("/[locale]/mis-datos", "page");
     revalidatePath("/[locale]/inicio", "page");
   }
+  return result;
+}
+
+// --------------------------- Tipo de habitación -----------------------------
+
+const roomTypeSchema = z.enum(["DOBLE", "SINGLE"]);
+
+/**
+ * Elige o cambia el tipo de habitación. Antes de CONFIRMADO es suyo para
+ * tocar; después, `setPassengerRoomType` la rechaza — a partir de ahí es
+ * exclusivo de la coordinadora, desde la ficha.
+ */
+export async function setRoomTypeAction(
+  passengerId: string,
+  roomType: unknown,
+): Promise<ActionResult> {
+  const parsed = roomTypeSchema.safeParse(roomType);
+  if (!parsed.success) return failure("Elegí el tipo de habitación.");
+
+  const result = await run(() => setPassengerRoomType(passengerId, parsed.data));
+  if (result.ok) revalidatePath("/[locale]/mis-datos", "page");
   return result;
 }
 

@@ -405,6 +405,28 @@ describe("margen total — el mix nunca queda implícito", () => {
     }
   });
 
+  it("un CONFIRMADO sin roomType se omite, nunca se cuenta como DOBLE por default", () => {
+    // No debería poder pasar —`confirmPassenger` exige roomType antes de
+    // confirmar— pero si pasara, un default silencioso le inventaría un
+    // ingreso y un costo que nadie fijó. Se omite, como un precio faltante.
+    const result = calculateTripMargin(
+      breakdown,
+      prices,
+      [
+        passenger({ roomType: "SINGLE" }),
+        passenger({ roomType: null }),
+      ],
+      14,
+    );
+
+    expect(result.totals[0]!.basis).toEqual({
+      kind: "CONFIRMADOS",
+      doubleCount: 0,
+      singleCount: 1,
+    });
+    expect(result.totals[0]!.revenue.toString()).toBe("4890");
+  });
+
   it("respeta el priceOverride de un pasajero", () => {
     const result = calculateTripMargin(
       breakdown,

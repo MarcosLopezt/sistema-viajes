@@ -147,11 +147,20 @@ export default async function PassengerHomePage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-1">
-          <p className="text-base">
-            {passenger.roomType === "DOBLE"
-              ? tRooms("doubleExplained")
-              : tRooms("singleExplained")}
-          </p>
+          {passenger.roomType === null ? (
+            <>
+              <p className="text-base">{tRooms("notChosen")}</p>
+              <p className="text-muted-foreground text-base">
+                {tRooms("choosePrompt")}
+              </p>
+            </>
+          ) : (
+            <p className="text-base">
+              {passenger.roomType === "DOBLE"
+                ? tRooms("doubleExplained")
+                : tRooms("singleExplained")}
+            </p>
+          )}
           {passenger.roomType === "DOBLE" ? (
             <p className="text-muted-foreground text-base">
               {passenger.roommateName

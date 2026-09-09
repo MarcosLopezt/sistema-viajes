@@ -677,7 +677,6 @@ export async function confirmDepositAndConvert(
       tripId,
       personId,
       userId: deposit.interest.userId,
-      roomType: input.roomType,
     });
 
     // El sello que le permite a `generatePaymentPlan` encontrar la seña sin
@@ -746,7 +745,7 @@ export async function confirmDepositAndConvert(
       entityId: result.id,
       field: "creadoDesdeSena",
       oldValue: null,
-      newValue: `deposito:${deposit.id} · ${input.roomType}`,
+      newValue: `deposito:${deposit.id}`,
     },
   ]);
 

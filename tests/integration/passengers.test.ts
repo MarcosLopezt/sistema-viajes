@@ -22,6 +22,7 @@ import {
   listPassengers,
   PassengerStateError,
   savePersonDraft,
+  setPassengerRoomType,
   updatePersonByCoordinator,
 } from "@/lib/services/passengers";
 import { createSignedDownloadUrl } from "@/lib/services/storage";
@@ -66,7 +67,6 @@ const COMPLETE_PERSON = {
   emergencyContactRelationship: "Hermano",
   emergencyContactPhone: "+54 9 11 4444 4444",
   medicalAssuranceCompany: "Cobertura SA",
-  medicalAssuranceId: "POL-99881",
   medicalAssurancePhone: "+54 11 3333 3333",
   medicalAssuranceEmail: "asistencia@cobertura.example",
   hasDietaryRestrictions: false,
@@ -425,6 +425,39 @@ describe("transición a CONFIRMADO", () => {
     );
   });
 
+  it("se bloquea si falta elegir el tipo de habitación", async () => {
+    actAs(coordinator);
+
+    // Datos completos y pasaporte lejos de vencer: lo ÚNICO que le falta es
+    // roomType, para aislar ese chequeo del resto de las condiciones.
+    await prisma.person.update({
+      where: { id: beto.personId },
+      data: {
+        ...COMPLETE_PERSON,
+        fullName: `Beto ${SUFFIX}`,
+        documentNumber: `97${SUFFIX.slice(0, 6)}`,
+        passportExpiryDate: new Date("2032-01-01T00:00:00.000Z"),
+      },
+    });
+    await prisma.passenger.update({
+      where: { id: betoPassengerId },
+      data: { roomType: null },
+    });
+
+    await expect(confirmPassenger(betoPassengerId)).rejects.toSatisfy(
+      (error: unknown) =>
+        error instanceof PassengerStateError &&
+        error.reason === "SIN_ROOM_TYPE",
+    );
+
+    // Se restaura para no afectar los tests siguientes, que asumen a Beto
+    // con un tipo de habitación ya elegido.
+    await prisma.passenger.update({
+      where: { id: betoPassengerId },
+      data: { roomType: "DOBLE" },
+    });
+  });
+
   it("se bloquea por pasaporte vencido antes del viaje", async () => {
     actAs(coordinator);
 
@@ -433,9 +466,8 @@ describe("transición a CONFIRMADO", () => {
       data: {
         ...COMPLETE_PERSON,
         fullName: `Beto ${SUFFIX}`,
-        // Valores propios de Beto: sirven para comprobar que NADA suyo se
+        // Valor propio de Beto: sirve para comprobar que NADA suyo se
         // filtra en la respuesta que recibe su compañera de habitación.
-        medicalAssuranceId: `SOLO-BETO-${SUFFIX}`,
         documentNumber: `99${SUFFIX.slice(0, 6)}`,
         // Vence el 01/05/2027, antes de que el viaje termine (24/05/2027).
         passportExpiryDate: new Date("2027-05-01T00:00:00.000Z"),
@@ -541,6 +573,90 @@ describe("transición a CONFIRMADO", () => {
 
 // ---------------------------------------------------------------------------
 
+describe("setPassengerRoomType · quién puede cambiar el tipo de habitación", () => {
+  it("antes de confirmar, la pasajera lo elige ella misma sin quedar auditado", async () => {
+    await prisma.passenger.update({
+      where: { id: betoPassengerId },
+      data: { status: "REGISTRADO" },
+    });
+
+    actAs(beto);
+    await setPassengerRoomType(betoPassengerId, "SINGLE");
+
+    const passenger = await prisma.passenger.findUniqueOrThrow({
+      where: { id: betoPassengerId },
+      select: { roomType: true },
+    });
+    expect(passenger.roomType).toBe("SINGLE");
+
+    const entries = await prisma.auditLog.findMany({
+      where: { entity: "Passenger", entityId: betoPassengerId, field: "roomType" },
+    });
+    expect(entries).toHaveLength(0);
+  });
+
+  it("antes de confirmar, la coordinadora también lo puede corregir, y SÍ queda auditado", async () => {
+    actAs(coordinator);
+    await setPassengerRoomType(betoPassengerId, "DOBLE");
+
+    const passenger = await prisma.passenger.findUniqueOrThrow({
+      where: { id: betoPassengerId },
+      select: { roomType: true },
+    });
+    expect(passenger.roomType).toBe("DOBLE");
+
+    const entries = await prisma.auditLog.findMany({
+      where: { entity: "Passenger", entityId: betoPassengerId, field: "roomType" },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(entries[0]).toMatchObject({ oldValue: "SINGLE", newValue: "DOBLE" });
+
+    await prisma.passenger.update({
+      where: { id: betoPassengerId },
+      data: { status: "CONFIRMADO" },
+    });
+  });
+
+  it("una vez CONFIRMADA, ella ya no lo puede cambiar", async () => {
+    actAs(beto);
+    await expect(
+      setPassengerRoomType(betoPassengerId, "SINGLE"),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+
+    const passenger = await prisma.passenger.findUniqueOrThrow({
+      where: { id: betoPassengerId },
+      select: { roomType: true },
+    });
+    // No cambió: el intento de ella no tuvo ningún efecto.
+    expect(passenger.roomType).toBe("DOBLE");
+  });
+
+  it("una vez CONFIRMADA, la coordinadora sí puede, y queda en AuditLog", async () => {
+    actAs(coordinator);
+    await setPassengerRoomType(betoPassengerId, "SINGLE");
+
+    const passenger = await prisma.passenger.findUniqueOrThrow({
+      where: { id: betoPassengerId },
+      select: { roomType: true },
+    });
+    expect(passenger.roomType).toBe("SINGLE");
+
+    const entries = await prisma.auditLog.findMany({
+      where: { entity: "Passenger", entityId: betoPassengerId, field: "roomType" },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(entries[0]).toMatchObject({ oldValue: "DOBLE", newValue: "SINGLE" });
+
+    // Se restaura para no afectar el resto de la suite.
+    await prisma.passenger.update({
+      where: { id: betoPassengerId },
+      data: { roomType: "DOBLE" },
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+
 describe("habitaciones", () => {
   it("no admite una tercera persona", async () => {
     actAs(coordinator);
@@ -617,7 +733,6 @@ describe("habitaciones", () => {
     // respuesta. Se buscan valores que son exclusivamente de Beto.
     const serialized = JSON.stringify(passenger);
     expect(serialized).not.toContain(beto.email);
-    expect(serialized).not.toContain(`SOLO-BETO-${SUFFIX}`);
     expect(serialized).not.toContain(`99${SUFFIX.slice(0, 6)}`);
   });
 

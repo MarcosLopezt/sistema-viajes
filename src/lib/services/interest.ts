@@ -28,7 +28,7 @@ import {
 } from "./notifications";
 import { newInterestEmail } from "@/lib/email/templates";
 import { pickLocalized } from "@/lib/domain/rich-text";
-import type { InterestStatus, RoomType } from "@/generated/prisma/enums";
+import type { InterestStatus } from "@/generated/prisma/enums";
 import type { Prisma } from "@/generated/prisma/client";
 
 /**
@@ -726,13 +726,11 @@ export async function convertWithinTransaction(
     tripId: string;
     personId: string;
     userId: string;
-    roomType: RoomType;
   },
 ): Promise<{ id: string }> {
   const created = await enrollPassengerFromInterest(tx, {
     tripId: input.tripId,
     personId: input.personId,
-    roomType: input.roomType,
   });
 
   // Esta es la línea que efectivamente le abre el sistema: hasta acá no tenía
@@ -773,10 +771,13 @@ export async function convertWithinTransaction(
  * NO se manda invitación: ya tiene cuenta y contraseña desde que se registró.
  * Ese es exactamente el ahorro de haberla hecho pasar por Person desde el
  * principio.
+ *
+ * No recibe `roomType`: nace sin él. Lo elige ella, en su formulario de
+ * datos (`setPassengerRoomType`, en passengers.ts) — a diferencia de la
+ * invitación directa, donde la coordinadora lo precarga al invitar.
  */
 export async function convertInterestToPassenger(
   interestId: string,
-  roomType: RoomType,
 ): Promise<{ passengerId: string }> {
   const tripId = await tripOf(interestId);
   const viewer = await requireCapability(tripId, "interest:manage");
@@ -815,7 +816,6 @@ export async function convertInterestToPassenger(
       tripId,
       personId,
       userId: interest.userId,
-      roomType,
     }),
   );
 
@@ -832,7 +832,7 @@ export async function convertInterestToPassenger(
       entityId: passenger.id,
       field: "creadoDesdeInteres",
       oldValue: null,
-      newValue: `interest:${interestId} · ${roomType}`,
+      newValue: `interest:${interestId}`,
     },
   ]);
 

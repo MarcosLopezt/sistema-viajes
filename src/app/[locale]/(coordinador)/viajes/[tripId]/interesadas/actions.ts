@@ -34,7 +34,6 @@ export type ActionResult =
   | { ok: false; error: string };
 
 const statusSchema = z.enum(["REGISTRADA", "EN_CONVERSACION", "DESCARTADA"]);
-const roomTypeSchema = z.enum(["DOBLE", "SINGLE"]);
 
 /** Traduce las excepciones conocidas a un resultado; deja pasar el resto. */
 async function run(fn: () => Promise<unknown>): Promise<ActionResult> {
@@ -100,20 +99,14 @@ export async function setInterestNotesAction(
  * El `tripId` que llega acá se usa SOLO para revalidar la ruta. La
  * autorización la resuelve el servicio desde el `interestId`, así que mandar
  * el de otro viaje no sirve para nada.
+ *
+ * No pide `roomType`: nace sin él. Lo elige ella en su formulario de datos.
  */
 export async function convertInterestAction(
   interestId: string,
   tripId: string,
-  roomType: unknown,
 ): Promise<ActionResult> {
-  const parsed = roomTypeSchema.safeParse(roomType);
-  if (!parsed.success) {
-    return { ok: false, error: "Elegí el tipo de habitación." };
-  }
-
-  const result = await run(() =>
-    convertInterestToPassenger(interestId, parsed.data),
-  );
+  const result = await run(() => convertInterestToPassenger(interestId));
   if (result.ok) revalidate(tripId);
   return result;
 }

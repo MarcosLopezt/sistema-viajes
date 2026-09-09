@@ -150,7 +150,9 @@ export type RoomType = "DOBLE" | "SINGLE";
  * pero no paga. Contarlo inflaría los ingresos.
  */
 export interface PassengerMixInput {
-  roomType: RoomType;
+  /** Null hasta que se elige. Nunca llega null entre los CONFIRMADOS: lo
+   * exige `confirmPassenger`. Ver el comentario en el loop de abajo. */
+  roomType: RoomType | null;
   isCoordinator: boolean;
   status: "INVITADO" | "REGISTRADO" | "CONFIRMADO" | "CANCELADO";
   /** Precio pactado para este pasajero. Pisa el precio de lista del viaje. */
@@ -261,9 +263,9 @@ export function calculateTripMargin(
   const costOf = (roomType: RoomType): Decimal =>
     roomType === "SINGLE" ? breakdown.totalSingle : breakdown.totalDouble;
 
-  const priceOf = (p: PassengerMixInput): Decimal | null => {
-    if (p.priceOverride != null) return toDecimal(p.priceOverride);
-    return p.roomType === "SINGLE" ? priceSingle : priceDouble;
+  const priceOf = (priceOverride: MoneyInput | null | undefined, roomType: RoomType): Decimal | null => {
+    if (priceOverride != null) return toDecimal(priceOverride);
+    return roomType === "SINGLE" ? priceSingle : priceDouble;
   };
 
   // Sin precios fijados no hay margen que calcular.
@@ -278,15 +280,23 @@ export function calculateTripMargin(
     let singleCount = 0;
 
     for (const passenger of billable) {
-      const price = priceOf(passenger);
+      // Un CONFIRMADO sin `roomType` no debería poder existir —lo exige
+      // `confirmPassenger`, en lib/services/passengers.ts— así que esto es
+      // una red de seguridad, no el caso esperado. Se omite del total en vez
+      // de inventarle un tipo: un default silencioso acá le cobraría a
+      // alguien el precio de DOBLE sin que lo haya elegido.
+      const { roomType } = passenger;
+      if (roomType === null) continue;
+
+      const price = priceOf(passenger.priceOverride, roomType);
       // Un pasajero cuyo tipo de habitación todavía no tiene precio fijado se
       // omite del total en vez de contarse como ingreso cero, que mostraría
       // un margen falsamente negativo.
       if (price === null) continue;
 
       revenue = revenue.plus(price);
-      cost = cost.plus(costOf(passenger.roomType));
-      if (passenger.roomType === "SINGLE") singleCount += 1;
+      cost = cost.plus(costOf(roomType));
+      if (roomType === "SINGLE") singleCount += 1;
       else doubleCount += 1;
     }
 

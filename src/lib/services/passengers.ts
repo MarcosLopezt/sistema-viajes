@@ -50,7 +50,12 @@ import type { Prisma } from "@/generated/prisma/client";
 export class PassengerStateError extends Error {
   constructor(
     message: string,
-    readonly reason: "DATOS_INCOMPLETOS" | "PASAPORTE" | "TRANSICION" | "CUARTO",
+    readonly reason:
+      | "DATOS_INCOMPLETOS"
+      | "PASAPORTE"
+      | "TRANSICION"
+      | "CUARTO"
+      | "SIN_ROOM_TYPE",
   ) {
     super(message);
     this.name = "PassengerStateError";
@@ -94,7 +99,6 @@ const PERSON_COMPLETENESS_FIELDS = {
   emergencyContactRelationship: true,
   emergencyContactPhone: true,
   medicalAssuranceCompany: true,
-  medicalAssuranceId: true,
   medicalAssurancePhone: true,
   medicalAssuranceEmail: true,
   hasDietaryRestrictions: true,
@@ -143,7 +147,10 @@ const PERSON_FULL_FIELDS = {
 
 export interface PassengerListItem {
   id: string;
-  roomType: RoomType;
+  /** Null hasta que la pasajera lo elige, o hasta que la coordinadora la
+   * invita directamente con un tipo precargado. Ver el comentario en
+   * `schema.prisma`. */
+  roomType: RoomType | null;
   status: PassengerStatus;
   isCoordinator: boolean;
   roomId: string | null;
@@ -291,6 +298,10 @@ export async function getPassenger(passengerId: string) {
           requireFullPassportValidity: true,
           paymentInstructionsEs: true,
           paymentInstructionsEn: true,
+          // Para que la ficha pueda mostrar el precio de cada tipo de
+          // habitación al lado del control que la cambia.
+          priceDouble: true,
+          priceSingle: true,
         },
       },
     },
@@ -321,6 +332,12 @@ export async function getPassenger(passengerId: string) {
     room: passenger.room
       ? { id: passenger.room.id, label: passenger.room.label }
       : null,
+    // Prisma.Decimal no cruza a un Client Component: ver AGENTS.md.
+    trip: {
+      ...passenger.trip,
+      priceDouble: passenger.trip.priceDouble?.toString() ?? null,
+      priceSingle: passenger.trip.priceSingle?.toString() ?? null,
+    },
     roommateName,
     completeness: evaluatePersonCompleteness(passenger.person),
     passport,
@@ -500,7 +517,6 @@ const COORDINATOR_EDITABLE = [
   "emergencyContactRelationship",
   "emergencyContactPhone",
   "medicalAssuranceCompany",
-  "medicalAssuranceId",
   "medicalAssurancePhone",
   "medicalAssuranceEmail",
   "dietaryRestrictionsDetail",
@@ -625,6 +641,60 @@ export async function setPassengerPaymentInstructions(
       newValue: next,
     },
   ]);
+}
+
+/**
+ * Fija o cambia el tipo de habitación.
+ *
+ * Antes de CONFIRMADO lo puede tocar la propia pasajera —en su formulario de
+ * datos, o corrigiendo el precargado de una invitación directa— o la
+ * coordinadora, desde la ficha. Una vez CONFIRMADA se congela: si se pudiera
+ * seguir cambiando después de confirmar, el precio de un plan ya generado se
+ * movería sin que nadie lo pidiera a propósito (`planTotalFor`, en
+ * `lib/services/payments.ts`, lo lee de acá). A partir de ahí es exclusivo
+ * de la coordinadora.
+ *
+ * `requirePassengerAccess(..., "edit")` ya deja pasar a las dos; lo que hace
+ * falta acá es la excepción que ESE guard no conoce —no mira el status— y
+ * por eso se resuelve en esta función y no ahí.
+ *
+ * Se audita cuando lo toca un tercero, igual que el resto de los campos de
+ * `Passenger` — nunca cuando la pasajera edita lo suyo.
+ */
+export async function setPassengerRoomType(
+  passengerId: string,
+  roomType: RoomType,
+): Promise<void> {
+  const { viewer, tripId } = await requirePassengerAccess(passengerId, "edit");
+
+  const passenger = await prisma.passenger.findUnique({
+    where: { id: passengerId },
+    select: { status: true, roomType: true },
+  });
+  if (!passenger) throw new ForbiddenError();
+
+  if (passenger.status === "CONFIRMADO") {
+    await requireCapability(tripId, "passenger:editAny");
+  }
+
+  if (passenger.roomType === roomType) return;
+
+  await prisma.passenger.update({
+    where: { id: passengerId },
+    data: { roomType },
+  });
+
+  if (editRequiresAudit(viewer, passengerId)) {
+    await recordAudit(viewer.userId, [
+      {
+        entity: "Passenger",
+        entityId: passengerId,
+        field: "roomType",
+        oldValue: passenger.roomType,
+        newValue: roomType,
+      },
+    ]);
+  }
 }
 
 function normalizeForAudit(value: unknown): string | null {
@@ -791,10 +861,13 @@ export async function listEnrolledPersonIds(
  * acceso al viaje, y el paso de la Interest a CONVERTIDA. Si el Passenger se
  * creara aparte y algo fallara después, quedaría una pasajera que el embudo
  * sigue contando como interesada sin convertir.
+ *
+ * Nace SIN `roomType`: por este camino lo elige ella, en su propio
+ * formulario (`setOwnRoomType`, más abajo) — no la coordinadora al convertir.
  */
 export async function enrollPassengerFromInterest(
   tx: Prisma.TransactionClient,
-  input: { tripId: string; personId: string; roomType: RoomType },
+  input: { tripId: string; personId: string },
 ): Promise<{ id: string }> {
   return tx.passenger.upsert({
     where: {
@@ -804,7 +877,6 @@ export async function enrollPassengerFromInterest(
     create: {
       tripId: input.tripId,
       personId: input.personId,
-      roomType: input.roomType,
       status: "INVITADO",
     },
     select: { id: true },
@@ -822,6 +894,15 @@ export async function enrollPassengerFromInterest(
  *
  * Es un `upsert` sobre (tripId, personId): reabrir un link ya canjeado no
  * duplica al pasajero ni le pisa el estado.
+ *
+ * El `roomType` de la invitación es un PRECARGADO, no una decisión final: la
+ * invitada lo ve elegido en su formulario y lo puede cambiar mientras no esté
+ * CONFIRMADA, igual que quien entra por `/interes` — `setOwnRoomType` es el
+ * mismo camino para las dos. La única diferencia entre los dos flujos es si
+ * el campo arranca con valor o vacío, y esa diferencia es a propósito: una
+ * invitación directa suele ir acompañada de un acuerdo ya hablado (dos
+ * amigas que avisaron que comparten), y el embudo público no tiene ese
+ * contexto.
  */
 export async function enrollPassengerFromInvitation(
   tx: Prisma.TransactionClient,
@@ -857,9 +938,9 @@ const ALLOWED_TRANSITIONS: Readonly<
 /**
  * Confirma a un pasajero.
  *
- * Dos condiciones, las dos validadas ACÁ y no en la UI: los datos tienen que
- * estar completos y el pasaporte no puede ser bloqueante. Un botón
- * deshabilitado en pantalla no protege nada.
+ * Tres condiciones, las tres validadas ACÁ y no en la UI: los datos tienen
+ * que estar completos, tiene que saberse dónde duerme, y el pasaporte no
+ * puede ser bloqueante. Un botón deshabilitado en pantalla no protege nada.
  */
 export async function confirmPassenger(passengerId: string): Promise<void> {
   const passenger = await prisma.passenger.findUnique({
@@ -867,6 +948,7 @@ export async function confirmPassenger(passengerId: string): Promise<void> {
     select: {
       tripId: true,
       status: true,
+      roomType: true,
       person: { select: PERSON_COMPLETENESS_FIELDS },
       trip: {
         select: {
@@ -892,6 +974,15 @@ export async function confirmPassenger(passengerId: string): Promise<void> {
     throw new PassengerStateError(
       "Le faltan datos obligatorios. No se puede confirmar todavía.",
       "DATOS_INCOMPLETOS",
+    );
+  }
+
+  // No se puede confirmar a alguien sin saber dónde duerme: de eso depende
+  // el precio de su plan de pagos (`planTotalFor`, en payments.ts).
+  if (passenger.roomType === null) {
+    throw new PassengerStateError(
+      "Todavía no eligió tipo de habitación. No se puede confirmar todavía.",
+      "SIN_ROOM_TYPE",
     );
   }
 
@@ -1184,7 +1275,9 @@ export interface PassengerForPayments {
   tripId: string;
   status: PassengerStatus;
   isCoordinator: boolean;
-  roomType: RoomType;
+  /** Null hasta que se elige. `generatePaymentPlan` lo exige antes de armar
+   * el plan — ver `planTotalFor` en payments.ts. */
+  roomType: RoomType | null;
   /** Precio pactado que pisa el de lista. String o null. */
   priceOverride: string | null;
   fullName: string | null;
@@ -1302,7 +1395,7 @@ export interface PassengerForPaymentsList {
   id: string;
   fullName: string | null;
   status: PassengerStatus;
-  roomType: RoomType;
+  roomType: RoomType | null;
 }
 
 /**
@@ -1357,7 +1450,7 @@ export interface PassengerExportRow {
   emergencyContactName: string | null;
   emergencyContactPhone: string | null;
   roomLabel: string | null;
-  roomType: RoomType;
+  roomType: RoomType | null;
   status: PassengerStatus;
   isCoordinator: boolean;
 }
@@ -1432,7 +1525,7 @@ export async function listPassengersForExport(
 
 export interface RoomingRow {
   roomLabel: string;
-  occupants: { fullName: string | null; roomType: RoomType }[];
+  occupants: { fullName: string | null; roomType: RoomType | null }[];
 }
 
 /**

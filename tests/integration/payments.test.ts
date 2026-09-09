@@ -285,6 +285,30 @@ describe("generación del plan", () => {
     expect(total.toFixed(2)).toBe("3499.43");
   });
 
+  it("sin roomType, no genera el plan y no le cobra el precio de doble", async () => {
+    // `join()` siempre crea con roomType "DOBLE"; se lo saca para reproducir
+    // a alguien que todavía no lo eligió — el estado real de una pasajera
+    // recién convertida por /interes, antes de pasar por su formulario.
+    const sinElegir = await createActor("sinelegir");
+    const sinElegirId = await join(tripA, sinElegir, "PASAJERO");
+    await prisma.passenger.update({
+      where: { id: sinElegirId },
+      data: { roomType: null },
+    });
+
+    actAs(coty);
+
+    // Rechazo explícito con SU propio motivo — nunca el ternario
+    // `roomType === "SINGLE" ? ... : priceDouble` que le cobraría el precio
+    // de DOBLE en silencio a alguien que no eligió nada.
+    await expect(makePlan(sinElegirId, 3)).rejects.toMatchObject({
+      reason: "SIN_ROOM_TYPE",
+    });
+
+    // Y no quedó ningún plan a medio generar con ese precio.
+    expect(await getPaymentPlan(sinElegirId)).toBeNull();
+  });
+
   it("cambiar el precio del viaje NO reescribe un plan ya generado", async () => {
     actAs(coty);
     await makePlan(betoId, 2);

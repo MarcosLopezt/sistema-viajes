@@ -11,12 +11,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field } from "@/components/form/field";
 import { ConfirmDelete } from "@/components/budget/confirm-delete";
 import { getFileUrlAction } from "@/app/[locale]/(pasajero)/mis-datos/actions";
-import type { CurrencyCode } from "@/lib/format";
+import { formatMoney, type CurrencyCode } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import {
   cancelPassengerAction,
   confirmPassengerAction,
   savePaymentInstructionsAction,
   setPriceOverrideAction,
+  setRoomTypeAction,
   updatePassengerDataAction,
 } from "../actions";
 
@@ -40,6 +42,9 @@ export function PassengerEditor({
   completionPercentage,
   isComplete,
   blocksConfirmation,
+  roomType,
+  priceDouble,
+  priceSingle,
   priceOverride,
   priceOverrideReason,
   paymentInstructions,
@@ -59,6 +64,11 @@ export function PassengerEditor({
   completionPercentage: number;
   isComplete: boolean;
   blocksConfirmation: boolean;
+  /** Null hasta que se elige. Ver el comentario en schema.prisma. */
+  roomType: "DOBLE" | "SINGLE" | null;
+  /** Precio de lista del viaje, para mostrar el impacto de cada opción. */
+  priceDouble: string | null;
+  priceSingle: string | null;
   priceOverride: string | null;
   priceOverrideReason: string | null;
   /** Lo propio de esta pasajera. Null = usa el del viaje. */
@@ -232,7 +242,6 @@ export function PassengerEditor({
                 <TextField label={tStep2("emergencyContactRelationship")} field="emergencyContactRelationship" draft={draft} set={set} />
                 <TextField label={tStep2("emergencyContactPhone")} field="emergencyContactPhone" draft={draft} set={set} type="tel" />
                 <TextField label={tStep2("medicalAssuranceCompany")} field="medicalAssuranceCompany" draft={draft} set={set} />
-                <TextField label={tStep2("medicalAssuranceId")} field="medicalAssuranceId" draft={draft} set={set} />
                 <TextField label={tStep2("medicalAssurancePhone")} field="medicalAssurancePhone" draft={draft} set={set} type="tel" />
                 <TextField label={tStep2("medicalAssuranceEmail")} field="medicalAssuranceEmail" draft={draft} set={set} type="email" />
               </div>
@@ -300,7 +309,6 @@ export function PassengerEditor({
               <ReadOnly label={tStep2("emergencyContactRelationship")} value={values["emergencyContactRelationship"]} />
               <ReadOnly label={tStep2("emergencyContactPhone")} value={values["emergencyContactPhone"]} />
               <ReadOnly label={tStep2("medicalAssuranceCompany")} value={values["medicalAssuranceCompany"]} />
-              <ReadOnly label={tStep2("medicalAssuranceId")} value={values["medicalAssuranceId"]} />
               {hasDietaryRestrictions ? (
                 <ReadOnly label={tStep2("dietaryRestrictionsDetail")} value={values["dietaryRestrictionsDetail"]} />
               ) : null}
@@ -358,6 +366,16 @@ export function PassengerEditor({
           )}
         </CardContent>
       </Card>
+
+      <RoomTypeEditor
+        tripId={tripId}
+        passengerId={passengerId}
+        currency={currency}
+        status={status}
+        value={roomType}
+        priceDouble={priceDouble}
+        priceSingle={priceSingle}
+      />
 
       {!isCoordinator ? (
         <PriceOverride
@@ -638,6 +656,125 @@ function PaymentInstructions({
             </Button>
           ) : null}
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * Tipo de habitación.
+ *
+ * La elige la pasajera en su propio formulario; esto es la EXCEPCIÓN —
+ * corregirla antes de confirmar, o cambiarla después, cuando ya es la única
+ * puerta que queda. `setRoomTypeAction` (vía `setPassengerRoomType`, en
+ * lib/services/passengers.ts) es quien de verdad decide si este coordinador
+ * puede escribir: acá no se repite esa lógica, solo se muestra el resultado.
+ */
+function RoomTypeEditor({
+  tripId,
+  passengerId,
+  currency,
+  status,
+  value,
+  priceDouble,
+  priceSingle,
+}: {
+  tripId: string;
+  passengerId: string;
+  currency: CurrencyCode;
+  status: "INVITADO" | "REGISTRADO" | "CONFIRMADO" | "CANCELADO";
+  value: "DOBLE" | "SINGLE" | null;
+  priceDouble: string | null;
+  priceSingle: string | null;
+}) {
+  const t = useTranslations("passengers");
+  const tRooms = useTranslations("roomTypes");
+  const [pending, startTransition] = useTransition();
+  const [roomType, setRoomType] = useState<"DOBLE" | "SINGLE">(value ?? "DOBLE");
+  const [saved, setSaved] = useState(value);
+  const [error, setError] = useState<string | null>(null);
+
+  function save() {
+    setError(null);
+    startTransition(async () => {
+      const result = await setRoomTypeAction(tripId, passengerId, roomType);
+      if (result.ok) setSaved(roomType);
+      else setError(result.error);
+    });
+  }
+
+  const priceOf = (option: "DOBLE" | "SINGLE") =>
+    option === "DOBLE" ? priceDouble : priceSingle;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-xl">{t("roomTypeTitle")}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-muted-foreground text-base text-balance">
+          {t("roomTypeHelp")}
+        </p>
+
+        {saved === null ? (
+          <Alert className="border-status-warning/40 bg-status-warning-surface">
+            <AlertDescription>{t("roomTypeNotChosen")}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {/* Cambiarlo acá NO reescribe un plan de pagos ya generado —
+            `generatePaymentPlan` solo lee el precio al crearlo, no cuando
+            `roomType` cambia después. Sin este aviso, alguien podría creer
+            que corregir esto ya ajustó lo que la pasajera debe. */}
+        {status === "CONFIRMADO" ? (
+          <p className="text-muted-foreground text-sm">
+            {t("roomTypeConfirmedWarning")}
+          </p>
+        ) : null}
+
+        {error ? (
+          <Alert variant="destructive" role="alert">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          {(["DOBLE", "SINGLE"] as const).map((option) => {
+            const price = priceOf(option);
+            return (
+              <label
+                key={option}
+                className={cn(
+                  "border-border cursor-pointer space-y-1 rounded-lg border p-4",
+                  roomType === option && "border-primary bg-primary/5",
+                )}
+              >
+                <span className="flex items-start gap-2">
+                  <input
+                    type="radio"
+                    name={`roomType-${passengerId}`}
+                    className="mt-1"
+                    checked={roomType === option}
+                    onChange={() => setRoomType(option)}
+                  />
+                  <span className="text-base font-medium">
+                    {tRooms(option)}
+                  </span>
+                </span>
+                <p className="text-muted-foreground text-sm">
+                  {tRooms(option === "DOBLE" ? "doubleExplained" : "singleExplained")}
+                </p>
+                <p className="text-base font-medium">
+                  {price !== null ? formatMoney(price, currency) : "—"}
+                </p>
+              </label>
+            );
+          })}
+        </div>
+
+        <Button disabled={pending || saved === roomType} onClick={save}>
+          {t("roomTypeSave")}
+        </Button>
       </CardContent>
     </Card>
   );

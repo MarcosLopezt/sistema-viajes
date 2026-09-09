@@ -94,6 +94,7 @@ export class PaymentError extends Error {
     message: string,
     readonly reason:
       | "SIN_PRECIO"
+      | "SIN_ROOM_TYPE"
       | "COORDINADOR"
       | "CANCELADO"
       | "PLAN_INMUTABLE"
@@ -528,6 +529,18 @@ function planShape(
 /** Precio congelado del pasajero: su override, o el de lista según el cuarto. */
 function planTotalFor(passenger: PassengerForPayments): string {
   if (passenger.priceOverride !== null) return passenger.priceOverride;
+
+  // Rechazo explícito, no un default: `roomType === "SINGLE" ? ... : priceDouble`
+  // le cobraría el precio de DOBLE a alguien que todavía no eligió nada. Este
+  // caso no debería llegar hasta acá — `confirmPassenger` exige `roomType`
+  // antes de confirmar — pero un plan se puede intentar generar sin haber
+  // confirmado todavía, así que el chequeo tiene que estar acá también.
+  if (passenger.roomType === null) {
+    throw new PaymentError(
+      "Todavía no eligió tipo de habitación. No se puede generar el plan.",
+      "SIN_ROOM_TYPE",
+    );
+  }
 
   const listed =
     passenger.roomType === "SINGLE"

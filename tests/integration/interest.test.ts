@@ -367,7 +367,7 @@ describe("aislamiento de la interesada · por servicio", () => {
       select: { id: true },
     });
     await expect(
-      convertInterestToPassenger(interest.id, "DOBLE"),
+      convertInterestToPassenger(interest.id),
     ).rejects.toBeInstanceOf(ForbiddenError);
   });
 
@@ -795,7 +795,7 @@ describe("convertir una interesada en pasajera", () => {
     ).toBe(0);
 
     actAs(coordinator);
-    const { passengerId } = await convertInterestToPassenger(convertibleId, "SINGLE");
+    const { passengerId } = await convertInterestToPassenger(convertibleId);
 
     const passenger = await prisma.passenger.findUniqueOrThrow({
       where: { id: passengerId },
@@ -803,7 +803,9 @@ describe("convertir una interesada en pasajera", () => {
     });
 
     expect(passenger.status).toBe("INVITADO");
-    expect(passenger.roomType).toBe("SINGLE");
+    // Nace SIN roomType: lo elige ella en su formulario, no la coordinadora
+    // al convertir.
+    expect(passenger.roomType).toBeNull();
     expect(passenger.tripId).toBe(tripId);
     // Reutiliza la MISMA Person: es el ahorro de haberla creado en el registro.
     expect(passenger.personId).toBe(user.personId);
@@ -838,7 +840,7 @@ describe("convertir una interesada en pasajera", () => {
     actAs(coordinator);
     const antes = await prisma.passenger.count({ where: { tripId } });
 
-    await convertInterestToPassenger(convertibleId, "SINGLE");
+    await convertInterestToPassenger(convertibleId);
 
     expect(await prisma.passenger.count({ where: { tripId } })).toBe(antes);
   });
@@ -861,7 +863,7 @@ describe("convertir una interesada en pasajera", () => {
     await setInterestStatus(interest.id, "DESCARTADA");
 
     await expect(
-      convertInterestToPassenger(interest.id, "DOBLE"),
+      convertInterestToPassenger(interest.id),
     ).rejects.toMatchObject({ reason: "NO_CONVERTIBLE" });
 
     await setInterestStatus(interest.id, "REGISTRADA");
