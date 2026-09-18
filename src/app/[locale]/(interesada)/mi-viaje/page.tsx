@@ -67,13 +67,15 @@ export default async function MyTripPage() {
 
       <main
         id="contenido"
-        className="mx-auto w-full max-w-xl flex-1 space-y-8 px-5 py-10"
+        className="mx-auto w-full max-w-xl flex-1 space-y-10 px-5 py-12 sm:py-16"
       >
-        <header className="space-y-2">
+        <header className="space-y-3">
           <p className="text-muted-foreground text-sm tracking-wide uppercase">
             {t("eyebrow")}
           </p>
-          <h1 className="text-4xl leading-tight">{view.tripName}</h1>
+          <h1 className="text-4xl leading-tight sm:text-5xl">
+            {view.tripName}
+          </h1>
         </header>
 
         {view.infoForInterested ? (
@@ -88,10 +90,18 @@ export default async function MyTripPage() {
             formulario de pago sin importe, o una aceptación sin texto que
             aceptar, son peores que la ausencia de la sección. */}
         {deposit && deposit.amount && deposit.terms ? (
-          <section className="border-border bg-card space-y-5 rounded-lg border p-5">
-            <div className="space-y-1">
-              <h2 className="text-xl">{tDeposit("title")}</h2>
-              <p className="text-3xl font-semibold">
+          <section className="border-border bg-card space-y-6 rounded-xl border p-6 sm:p-8">
+            <div className="space-y-2">
+              <h2 className="text-muted-foreground text-sm tracking-wide uppercase">
+                {tDeposit("title")}
+              </h2>
+              {/* El monto es el elemento dominante de esta pantalla: es la
+                  única cifra de plata que ve una interesada, así que no
+                  compite con nada. Sin equivalencias ni fecha de cotización
+                  al pie —a diferencia de "Mis pagos"— porque este monto es
+                  fijo y lo definen las coordinadoras: no viene de una
+                  conversión de tipo de cambio que haya que fechar. */}
+              <p className="money-amount text-5xl leading-none font-semibold sm:text-6xl">
                 {formatMoney(deposit.amount, deposit.currency, localeCode)}
               </p>
             </div>
@@ -117,7 +127,7 @@ export default async function MyTripPage() {
                 {deposit.lastRejection ? (
                   <div
                     role="alert"
-                    className="border-status-danger/40 bg-status-danger-surface space-y-2 rounded-lg border p-4"
+                    className="border-status-danger/40 bg-status-danger-surface space-y-2 rounded-xl border p-4"
                   >
                     <p className="text-status-danger flex items-center gap-2 text-base font-medium">
                       <TriangleAlert className="size-5 shrink-0" aria-hidden="true" />
@@ -135,7 +145,7 @@ export default async function MyTripPage() {
                 {/* Dónde transferir. Va ARRIBA del formulario: primero hay que
                     poder pagar, después subir el comprobante de haberlo hecho. */}
                 {deposit.paymentInstructions ? (
-                  <div className="border-border bg-muted/40 space-y-2 rounded-lg border p-4">
+                  <div className="border-border bg-muted/40 space-y-2 rounded-xl border p-4">
                     <h3 className="text-base font-medium">
                       {tDeposit("whereToPay")}
                     </h3>
@@ -165,7 +175,7 @@ export default async function MyTripPage() {
             cerró la pestaña en ese momento, este es el único lugar donde
             vuelve a encontrar el número de WhatsApp. Se renderiza siempre,
             con el mismo texto de reserva. */}
-        <section className="border-border bg-card rounded-lg border p-5">
+        <section className="border-border bg-card rounded-xl border p-6">
           <h2 className="mb-2 text-xl">{t("nextStepTitle")}</h2>
           <PlainText text={view.nextStepMessage ?? t("nextStepFallback")} />
         </section>
@@ -191,8 +201,8 @@ function DepositStatus({
     <div
       className={
         review
-          ? "border-status-warning/40 bg-status-warning-surface space-y-1 rounded-lg border p-4"
-          : "border-status-ok/40 bg-status-ok-surface space-y-1 rounded-lg border p-4"
+          ? "border-status-warning/40 bg-status-warning-surface space-y-1 rounded-xl border p-4"
+          : "border-status-ok/40 bg-status-ok-surface space-y-1 rounded-xl border p-4"
       }
     >
       <p

@@ -176,3 +176,25 @@
   font-weight: 500;
   letter-spacing: -0.01em;
 }
+
+/* ---------------------------------------------------------------------------
+ * Zona interna — la pasajera ya confirmada: home, mis datos, mis pagos,
+ * novedades.
+ * ---------------------------------------------------------------------------
+ *
+ * A diferencia de la zona cálida, esta clase pisa poco: el fondo claro
+ * neutro y la sans YA eran el default de shadcn, así que no hay nada que
+ * tocar ahí. Lo único que cambia es el acento —ciruela en vez de
+ * negro/gris— en botones primarios, foco y la barra de "Mis datos". Todo lo
+ * demás (status-ok/warning/danger, bordes, fondo de tarjeta) sigue literal:
+ * son alertas y tienen que significar lo mismo en las dos zonas.
+ *
+ * Se aplica en el shell de "pasajero" nada más. La zona del coordinador no
+ * lleva esta clase a propósito: sigue siendo la herramienta de trabajo
+ * densa que ya era, y no entra en este rediseño.
+ */
+.zona-interna {
+  --primary: oklch(0.42 0.13 332);
+  --primary-foreground: oklch(0.985 0 0);
+  --ring: oklch(0.62 0.11 332);
+}

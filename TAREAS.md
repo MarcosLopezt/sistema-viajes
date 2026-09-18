@@ -55,6 +55,21 @@ importancia.
 
 ### [DEV]
 
+- **Prioridad — mostrar equivalencias en otras monedas en el monto de la
+  seña, en `/mi-viaje`.** Pedido del cliente (2026-09-18). La interesada
+  transfiere desde otro país y hoy ve el monto de la seña SOLO en la
+  moneda del viaje — es el momento exacto en que alguien transfiere mal.
+  `getMyDepositView()` (`lib/services/deposits.ts`) no calcula
+  equivalencias ni fecha de cotización para ese monto, a diferencia de
+  `getPaymentPlan()`, que sí se las da a "Mis pagos"
+  (`plan.balanceEquivalences` / `plan.fxSnapshotDate`, ver
+  `payments-panel` en Mis Pagos). El patrón visual —monto grande, con
+  equivalencias y fecha de cotización debajo en secundario— ya existe y
+  se reutiliza tal cual; lo que falta es que el servicio las calcule para
+  el monto de la seña, igual que ya lo hace para el saldo del plan de
+  cuotas. Encontrado durante el rediseño visual de septiembre 2026:
+  quedó afuera a propósito porque agregarlo ahí dejaba de ser estético
+  (tocaba un servicio), no por falta de importancia.
 - **Preparar la demo guiada** del sistema para mostrarle a Laura y Lorena.
   Depende de que haya, al menos, un primer paso de los textos de marca
   reales cargados (ver más abajo, [CLIENTE]).

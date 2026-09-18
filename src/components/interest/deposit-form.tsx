@@ -259,7 +259,7 @@ export function DepositForm({
       </Field>
 
       {/* La condición, completa y en pantalla. Es el texto que se guarda. */}
-      <section className="border-border bg-muted/40 space-y-3 rounded-lg border p-4">
+      <section className="border-border bg-muted/40 space-y-3 rounded-xl border p-4">
         <h3 className="text-base font-medium">{t("termsTitle")}</h3>
         <PlainText text={terms} className="text-sm" />
 

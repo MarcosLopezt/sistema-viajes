@@ -27,8 +27,8 @@ export default async function InterestPage() {
   if (!trip) {
     const custom = await getClosedMessage(locale);
     return (
-      <div className="space-y-4 py-10">
-        <h1 className="text-3xl">{t("closedTitle")}</h1>
+      <div className="space-y-5 py-10">
+        <h1 className="text-3xl sm:text-4xl">{t("closedTitle")}</h1>
         {/* El texto de ellas si lo escribieron; si no, el del catálogo. Que una
             escuela sin nada cargado vea algo razonable importa más que la voz
             de marca. */}
@@ -41,12 +41,12 @@ export default async function InterestPage() {
   }
 
   return (
-    <div className="space-y-8">
-      <header className="space-y-3">
+    <div className="space-y-10">
+      <header className="space-y-4">
         <p className="text-muted-foreground text-sm tracking-wide uppercase">
           {t("eyebrow")}
         </p>
-        <h1 className="text-4xl leading-tight">{trip.name}</h1>
+        <h1 className="text-4xl leading-tight sm:text-5xl">{trip.name}</h1>
       </header>
 
       {trip.infoForInterested ? (
@@ -55,7 +55,7 @@ export default async function InterestPage() {
 
       {/* El encabezado de esta sección lo pone InterestForm, que es quien
           sabe si todavía está pidiendo datos o ya los recibió. */}
-      <div className="border-border border-t pt-8">
+      <div className="border-border border-t pt-10">
         <InterestForm />
       </div>
     </div>

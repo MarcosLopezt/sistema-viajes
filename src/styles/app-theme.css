@@ -75,6 +75,19 @@
   }
 }
 
+/* Todo importe de plata que sea EL elemento de la pantalla, no un número al
+   pasar. Serifa siempre, en las dos zonas: es la excepción a "la zona interna
+   es sans" que pide el rediseño — la plata se lee distinta al resto del
+   texto funcional. `tabular-nums` para que las cifras no salten de ancho
+   cuando cambian, `letter-spacing` negativo porque la serifa a este tamaño
+   se ve floja sin ajustar. No define color ni tamaño: eso lo decide cada
+   pantalla según cuánto peso necesite ese monto puntual. */
+@utility money-amount {
+  font-family: var(--font-serif), Georgia, "Times New Roman", serif;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
 @utility skip-link {
   position: absolute;
   left: -9999px;

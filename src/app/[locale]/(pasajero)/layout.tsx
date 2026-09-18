@@ -20,7 +20,7 @@ export default async function PassengerLayout({
   const t = await getTranslations("common");
 
   return (
-    <div className="flex min-h-full flex-1 flex-col">
+    <div className="zona-interna flex min-h-full flex-1 flex-col">
       <a href="#contenido" className="skip-link">
         {t("skipToContent")}
       </a>

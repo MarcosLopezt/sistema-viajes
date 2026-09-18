@@ -86,10 +86,10 @@ export function InterestForm() {
       // esto: cuando el registro sale bien tiene que dejar de decir «dejanos
       // tus datos». Con el título afuera, la pantalla quedaba diciendo
       // «Dejanos tus datos» arriba de «Listo, recibimos tus datos».
-      <div className="space-y-5">
+      <div className="space-y-6">
         <div className="flex items-start gap-3">
           <CheckCircle2 className="text-primary mt-1 size-6 shrink-0" aria-hidden="true" />
-          <div className="space-y-1">
+          <div className="space-y-2">
             <h3 className="text-2xl">{t("doneTitle")}</h3>
             {/* Si las coordinadoras no escribieron el mensaje de bienvenida,
                 cae al del catálogo: nadie se queda sin saber que salió bien. */}
@@ -112,8 +112,8 @@ export function InterestForm() {
             Va por PlainText y no por un <p>: el texto que ellas escriben
             lleva un link de wa.me, y en un párrafo plano no se puede apretar.
             Esta pantalla y la vista permanente tienen que mostrarlo igual. */}
-        <div className="border-border bg-card rounded-lg border p-4">
-          <h4 className="mb-1 font-semibold">{t("nextStepTitle")}</h4>
+        <div className="border-border bg-card rounded-xl border p-5">
+          <h4 className="mb-1.5 font-semibold">{t("nextStepTitle")}</h4>
           <PlainText text={done.nextStep ?? t("nextStepFallback")} />
         </div>
 
@@ -126,8 +126,8 @@ export function InterestForm() {
 
   // -------------------------------------------------------- el formulario
   return (
-    <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-      <div className="mb-6 space-y-1">
+    <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+      <div className="mb-2 space-y-1.5">
         <h2 className="text-2xl">{t("formTitle")}</h2>
         <p className="text-muted-foreground">{t("formSubtitle")}</p>
       </div>

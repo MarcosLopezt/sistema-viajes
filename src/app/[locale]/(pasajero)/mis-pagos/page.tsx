@@ -83,7 +83,11 @@ export default async function MyPaymentsPage() {
             {next ? t("youOwe") : t("nothingDue")}
           </p>
 
-          <p className="text-4xl font-semibold tabular-nums">
+          {/* El saldo es el elemento dominante de esta pantalla: serifa y
+              grande, misma regla que la seña de la interesada. Las cuotas y
+              el historial de más abajo se quedan en sans — son detalle, no
+              la pregunta que trae a alguien acá. */}
+          <p className="money-amount text-5xl font-semibold">
             {money(plan.balance)}
           </p>
 

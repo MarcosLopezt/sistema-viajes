@@ -187,8 +187,10 @@ export default async function PassengerHomePage() {
           ) : (
             <>
               {/* El número grande es lo que DEBE, no lo que ya pagó: es la
-                  pregunta que trae a alguien a esta tarjeta. */}
-              <p className="text-3xl font-semibold tabular-nums">
+                  pregunta que trae a alguien a esta tarjeta. Serifa, misma
+                  regla que en "Mis pagos": la plata se lee distinta del
+                  resto de esta home, que es sans. */}
+              <p className="money-amount text-3xl font-semibold">
                 {formatMoney(plan.balance, plan.currency, locale)}
               </p>
               <p className="text-muted-foreground text-base">

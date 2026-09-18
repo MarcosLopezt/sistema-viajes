@@ -29,7 +29,10 @@ export default async function PublicLayout({
         {t("skipToContent")}
       </a>
 
-      <main id="contenido" className="mx-auto w-full max-w-xl flex-1 px-5 py-10">
+      <main
+        id="contenido"
+        className="mx-auto w-full max-w-xl flex-1 px-5 py-12 sm:py-16"
+      >
         {children}
       </main>
     </div>
