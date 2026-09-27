@@ -117,15 +117,24 @@ campos cargados a la vez.
   agregar un campo ahí nunca pase desapercibido). `discardedMessage` es un
   campo nuevo y legítimo, así que el test tenía que actualizarse — se hizo.
   No es una regresión: es el guard cumpliendo su función.
-- `test:db` con el test actualizado: **NO se pudo correr (2026-09-27).** La
-  instancia de Supabase no resuelve —`ENOTFOUND tenant/user
-  postgres.dkhutihyvpzquuuzpivh not found`, el mismo error en `check:db`—,
-  así que las 11 suites fallan en la conexión y 252 tests quedan skipped.
-  Es ambiente, no código: ninguna falla es una assertion.
-  **Pendiente de verdad:** los tres tests nuevos de fechas en
-  `passengers.test.ts` y el de superficie de claves en `interest.test.ts`
-  están commiteados SIN haber pasado nunca en verde. Correr `test:db`
-  apenas la base vuelva, antes de dar la tanda por cerrada.
+- `test:db` con el test actualizado: **255/255, 11 suites, ~33 min
+  (2026-09-27).** Queda cerrado el pendiente que había dejado el commit
+  `528aa0a`: los tres tests nuevos de fechas en `passengers.test.ts` y el
+  de superficie de claves en `interest.test.ts` pasan.
+  El primer intento de ese día falló entero por ambiente, no por código:
+  el proyecto de Supabase estaba pausado y el pooler contestaba
+  `ENOTFOUND tenant/user postgres.dkhutihyvpzquuuzpivh not found`.
+  Reactivado, el tenant tarda un par de minutos en re-registrarse — el
+  sondeo conectó al 7º intento. Si vuelve a aparecer ese error con el
+  proyecto activo, mirar el host del pooler en `.env`: Supabase viene
+  renombrando `aws-0-*` a `aws-1-*` y el síntoma es idéntico.
+  Verificado con control positivo además del total: filtrar `test:db` por
+  el nombre de un test nuevo da `1 passed`, no `0 passed`.
+
+  Cuidado con el comando: `npm run test:db | tail` devuelve **exit code 0
+  aunque falle todo** — la pipeline se come el código de salida de vitest.
+  El primer intento fallido de ese día salió con 0. No atar nada a ese
+  exit code sin leer la salida.
 
 ## Esperando al usuario
 
