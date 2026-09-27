@@ -308,10 +308,11 @@ describe("aislamiento de la interesada · por servicio", () => {
   it("su vista NO trae cupos, precios, fechas ni pasajeras", async () => {
     const view = await getMyInterestView("es");
 
-    // La superficie completa son cuatro campos. Que se afirmen las CLAVES y no
+    // La superficie completa son cinco campos. Que se afirmen las CLAVES y no
     // los valores es a propósito: si alguien agrega `maxPassengers` al select,
     // este test lo ve aunque el valor sea inocente.
     expect(Object.keys(view!).sort()).toEqual([
+      "discardedMessage",
       "infoForInterested",
       "nextStepMessage",
       "status",

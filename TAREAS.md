@@ -73,6 +73,18 @@ importancia.
 - **Preparar la demo guiada** del sistema para mostrarle a Laura y Lorena.
   Depende de que haya, al menos, un primer paso de los textos de marca
   reales cargados (ver más abajo, [CLIENTE]).
+- **Pedido a futuro, sin hacer todavía: botón "avisarle" al marcar una
+  interesada como DESCARTADA.** Surgió al arreglar el bug de ruteo
+  interesada/pasajera (2026-09-18): hoy cambiar el estado a DESCARTADA solo
+  cambia lo que ve al entrar (`discardedMessageEs/En` en el paso 6 del
+  wizard) — no manda ningún mail. Decisión explícita del cliente: nada
+  automático. El `<Select>` de estado en `interest-table.tsx` cambia de
+  estado con un solo click y sin confirmación — el mismo control que se usa
+  para EN_CONVERSACION — así que atarle un mail automático dispararía avisos
+  por clicks accidentales o por limpiezas en lote (duplicados, anotados para
+  el viaje anterior). Si en algún momento lo piden: seguir el patrón de
+  `rejectDepositAction` (motivo obligatorio, notifica en un paso separado y
+  explícito), no el del cambio de estado.
 
 ### [USUARIO] — Pablo
 

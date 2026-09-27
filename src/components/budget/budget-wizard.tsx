@@ -467,8 +467,23 @@ export function BudgetWizard({
                   welcomeMessageEn: next.welcomeMessageEn,
                   nextStepMessageEs: next.nextStepMessageEs,
                   nextStepMessageEn: next.nextStepMessageEn,
+                  discardedMessageEs: next.discardedMessageEs,
+                  discardedMessageEn: next.discardedMessageEn,
                   emailSignatureEs: next.emailSignatureEs,
                   emailSignatureEn: next.emailSignatureEn,
+                  // `depositTermsEs/En` y `paymentInstructionsEs/En` faltaban
+                  // acá — se agregaron el campo, el schema y la sección del
+                  // formulario en la fase 8, pero no esta lista. Resultado:
+                  // `setTripPublicTexts` escribe TODO el schema en cada save
+                  // (`input.campo ?? null`, sin merge), así que cualquier
+                  // guardado desde este botón los pisaba a `null` en
+                  // silencio, se hubieran tocado o no. Encontrado al probar
+                  // el campo nuevo de DESCARTADA (2026-09-18): mismo error,
+                  // recién cometido, que el que ya tenía este objeto.
+                  depositTermsEs: next.depositTermsEs,
+                  depositTermsEn: next.depositTermsEn,
+                  paymentInstructionsEs: next.paymentInstructionsEs,
+                  paymentInstructionsEn: next.paymentInstructionsEn,
                   closedMessageEs: next.closedMessageEs,
                   closedMessageEn: next.closedMessageEn,
                 }),

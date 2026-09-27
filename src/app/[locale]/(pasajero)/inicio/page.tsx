@@ -7,12 +7,13 @@ import {
   Receipt,
   UserRound,
 } from "lucide-react";
-import { Link } from "@/i18n/navigation";
+import { Link, redirect } from "@/i18n/navigation";
 import { requireSessionUser } from "@/lib/auth/guards";
 import {
   getMyActivePassenger,
   getRecentCoordinatorEdits,
 } from "@/lib/services/passengers";
+import { viewerIsOnlyInterested } from "@/lib/services/interest";
 import { getPaymentPlan } from "@/lib/services/payments";
 import { listCommunicationsForPassenger } from "@/lib/services/communications";
 import { toIsoDate } from "@/lib/validation/trip";
@@ -43,11 +44,25 @@ export default async function PassengerHomePage() {
   const passenger = await getMyActivePassenger();
 
   if (!passenger) {
+    // Antes de mostrar el vacío, preguntar si esto es en realidad una
+    // interesada que llegó acá por error (link viejo, favorito, lo que sea):
+    // para ella esta pantalla no dice nada cierto, la suya es /mi-viaje.
+    if (await viewerIsOnlyInterested()) {
+      redirect({ href: "/mi-viaje", locale });
+    }
+
     return (
       // Antes decía "Todavía no hay novedades del viaje", que es el texto
       // equivocado: acá el problema no son las novedades, es que esta
       // persona no está en ningún viaje. Un estado vacío tiene que decir
       // qué pasa y qué hacer.
+      //
+      // El texto YA NO promete un mail de invitación: este estado, una vez
+      // sacada la interesada de acá arriba, solo lo alcanza una cuenta sin
+      // Interest ni Passenger — algo que hoy no produce ningún flujo del
+      // producto y que solo aparece por una intervención manual en la base
+      // (ver ESTADO.md). Prometerle un mail que nadie va a mandar es peor
+      // que no prometer nada.
       <div className="space-y-3 py-10 text-center">
         <h1 className="text-2xl font-semibold">{t("noTripTitle")}</h1>
         <p className="text-muted-foreground text-base">{t("noTripBody")}</p>

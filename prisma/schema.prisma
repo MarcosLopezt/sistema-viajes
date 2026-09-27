@@ -327,6 +327,19 @@ model Trip {
   nextStepMessageEs String?
   nextStepMessageEn String?
 
+  /// Lo que ve alguien cuyo `Interest` pasó a DESCARTADA — la rechazaron, se
+  /// bajó sola, o se anotó para un viaje que ya no es este. Reemplaza a
+  /// `infoForInterestedEs/En` y a `nextStepMessageEs/En` enteros en esa
+  /// pantalla: no tiene sentido seguir mostrándole la propuesta del viaje ni
+  /// "escribinos para coordinar una charla" a alguien que ya no sigue en el
+  /// embudo.
+  ///
+  /// El `nextStepMessage` (el WhatsApp) tampoco se le muestra: si este texto
+  /// invita a escribirles, el medio de contacto lo tienen que poner ELLAS
+  /// acá mismo, no asumir que el de arriba se reusa.
+  discardedMessageEs String?
+  discardedMessageEn String?
+
   /// Firma de los mails ("En la Lux de Alba, Laura y Lorena"). La usa el pie
   /// de TODAS las plantillas, no solo las de esta fase: dos firmas distintas
   /// en el mismo sistema son dos voces.

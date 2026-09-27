@@ -297,6 +297,24 @@ Lo sostienen dos tests en `tests/integration/deposit-isolation.test.ts`, y hacen
 
 ---
 
+### 10. Un `User` sin `Interest` ni `Passenger` no es un caso que el producto genere — no se resuelve con código
+
+El punto de entrada (`src/app/[locale]/page.tsx`) resuelve tres ramas —coordina un viaje, es solo interesada, el resto— y esa última rama manda a `/inicio`. Ahí, si `getMyActivePassenger()` da `null`, la página primero pregunta `viewerIsOnlyInterested()`: si en realidad es una interesada que llegó por un link viejo o guardado, la redirige a `/mi-viaje`, que es la pantalla suya. Solo si ni siquiera eso es cierto se muestra el estado vacío genérico ("Todavía no estás en ningún viaje").
+
+**Lo que queda después de sacar a la interesada de ahí es, hoy, un caso inalcanzable desde el producto:** un `User` sin ninguna fila de `Interest` y sin ningún `TripMember`. Se buscó un camino real hacia ese estado y no existe ninguno:
+
+- el canje de invitación (`redeemInvitation`, `lib/services/invitations.ts`) crea el `User` y el `Passenger`/`TripMember` en la MISMA transacción — nunca uno sin el otro;
+- no hay ningún `delete` de `Interest` en el sistema, solo cambios de `status`. Una interesada `DESCARTADA` sigue teniendo su fila, así que para el ruteo sigue "teniendo Interest" (aterriza en `/mi-viaje`, no en este vacío);
+- no existe ninguna función que remueva a alguien de un viaje (ni `delete` de `Passenger` ni de `TripMember`).
+
+**Por qué no se resuelve con código:** no hay ningún caso de negocio real esperando del otro lado. La única forma de producir ese estado hoy es una intervención manual en la base (Prisma Studio, un fix a mano que crea el `User` sin terminar de armar el resto). Si alguien lo encuentra en producción, el diagnóstico correcto es "¿quién tocó la base y qué le faltó crear?", no "hay un bug de ruteo". Se verificó armando ese estado a mano: la pantalla no rompe, solo muestra el vacío.
+
+**Lo que sí se corrigió es el texto.** Antes prometía "vas a recibir un mail con el link para entrar", que asume la invitación directa — y en cualquier escenario donde ese estado apareciera igual (el de arriba, o cualquier otro que no se haya pensado todavía), nadie manda ese mail. El texto nuevo no promete un canal específico.
+
+Si en algún momento se agrega una función real de "sacar a alguien de un viaje", este es el lugar que hay que volver a mirar: ese día este caso deja de ser inalcanzable.
+
+---
+
 ## Por dónde empezar si acabás de llegar
 
 1. **[README.md](README.md)** — el porqué de cada decisión, con detalle.

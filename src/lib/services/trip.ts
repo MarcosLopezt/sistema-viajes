@@ -392,6 +392,8 @@ export interface TripPublicSettings {
   welcomeMessageEn: string | null;
   nextStepMessageEs: string | null;
   nextStepMessageEn: string | null;
+  discardedMessageEs: string | null;
+  discardedMessageEn: string | null;
   emailSignatureEs: string | null;
   emailSignatureEn: string | null;
   closedMessageEs: string | null;
@@ -418,6 +420,8 @@ export async function getTripPublicSettings(
       welcomeMessageEn: true,
       nextStepMessageEs: true,
       nextStepMessageEn: true,
+      discardedMessageEs: true,
+      discardedMessageEn: true,
       emailSignatureEs: true,
       emailSignatureEn: true,
       closedMessageEs: true,
@@ -453,6 +457,8 @@ export async function setTripPublicTexts(
       welcomeMessageEn: input.welcomeMessageEn ?? null,
       nextStepMessageEs: input.nextStepMessageEs ?? null,
       nextStepMessageEn: input.nextStepMessageEn ?? null,
+      discardedMessageEs: input.discardedMessageEs ?? null,
+      discardedMessageEn: input.discardedMessageEn ?? null,
       emailSignatureEs: input.emailSignatureEs ?? null,
       emailSignatureEn: input.emailSignatureEn ?? null,
       closedMessageEs: input.closedMessageEs ?? null,

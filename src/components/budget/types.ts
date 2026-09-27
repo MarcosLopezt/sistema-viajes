@@ -84,6 +84,8 @@ export interface WizardPublicZone {
   welcomeMessageEn: string;
   nextStepMessageEs: string;
   nextStepMessageEn: string;
+  discardedMessageEs: string;
+  discardedMessageEn: string;
   emailSignatureEs: string;
   emailSignatureEn: string;
   closedMessageEs: string;

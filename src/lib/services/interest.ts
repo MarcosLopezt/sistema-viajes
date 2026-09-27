@@ -445,15 +445,23 @@ export interface MyInterestView {
   tripName: string;
   infoForInterested: string | null;
   nextStepMessage: string | null;
+  /**
+   * Solo tiene sentido cuando `status === "DESCARTADA"`: reemplaza a
+   * `infoForInterested` y a `nextStepMessage` enteros en esa pantalla. Se
+   * devuelve siempre igual, sin condicionar acá — es la página la que decide
+   * qué mostrar según el estado, no el servicio.
+   */
+  discardedMessage: string | null;
 }
 
 /**
  * Lo único que una interesada puede ver del viaje.
  *
- * El `select` enumera cuatro campos y esa es toda la superficie: el nombre del
- * viaje, la propuesta, qué sigue, y su propio estado en el embudo. No hay
- * cupos, ni precios, ni fechas, ni una sola referencia a otra persona. Si algo
- * no está en este select, para ella no existe.
+ * El `select` enumera el nombre del viaje, la propuesta, qué sigue, el
+ * mensaje para cuando la descartaron, y su propio estado en el embudo — y esa
+ * es toda la superficie. No hay cupos, ni precios, ni fechas, ni una sola
+ * referencia a otra persona. Si algo no está en este select, para ella no
+ * existe.
  *
  * Devuelve `null` si el usuario no tiene ninguna Interest. Una PASAJERA que
  * entre acá también recibe `null`: esta pantalla no es suya.
@@ -463,6 +471,17 @@ export async function getMyInterestView(
 ): Promise<MyInterestView | null> {
   const user = await getSessionUser();
   if (!user) return null;
+
+  // Misma pregunta que `viewerIsOnlyInterested()`: por la AUSENCIA de
+  // TripMember, no por el estado de la Interest. Alguien que ya la
+  // convirtieron sigue teniendo una fila de Interest (en CONVERTIDA), y sin
+  // este chequeo esta función se la devolvía igual — la pantalla de la
+  // interesada, ya sin sentido para quien es pasajera hace rato.
+  const membership = await prisma.tripMember.findFirst({
+    where: { userId: user.id },
+    select: { id: true },
+  });
+  if (membership) return null;
 
   const interest = await prisma.interest.findFirst({
     where: { userId: user.id },
@@ -476,6 +495,8 @@ export async function getMyInterestView(
           infoForInterestedEn: true,
           nextStepMessageEs: true,
           nextStepMessageEn: true,
+          discardedMessageEs: true,
+          discardedMessageEn: true,
         },
       },
     },
@@ -494,6 +515,11 @@ export async function getMyInterestView(
     nextStepMessage: pickLocalized(
       interest.trip.nextStepMessageEs,
       interest.trip.nextStepMessageEn,
+      locale,
+    ),
+    discardedMessage: pickLocalized(
+      interest.trip.discardedMessageEs,
+      interest.trip.discardedMessageEn,
       locale,
     ),
   };

@@ -78,107 +78,128 @@ export default async function MyTripPage() {
           </h1>
         </header>
 
-        {view.infoForInterested ? (
-          <PlainText text={view.infoForInterested} className="text-lg" />
+        {/* ── DESCARTADA: reemplaza TODO lo de abajo ────────────────────────
+            Ni la propuesta del viaje, ni la seña, ni "Qué sigue" — nada de
+            eso sigue siendo cierto para alguien que ya no está en el embudo.
+            Mostrárselo igual la deja esperando una reunión que nadie le va a
+            dar. Ver ESTADO.md sobre por qué este mensaje es DATO de la
+            coordinadora y no un string del catálogo. */}
+        {view.status === "DESCARTADA" ? (
+          <PlainText
+            text={view.discardedMessage ?? t("discardedFallback")}
+            className="text-lg"
+          />
         ) : (
-          <p className="text-muted-foreground text-lg">{t("noInfoYet")}</p>
-        )}
+          <>
+            {view.infoForInterested ? (
+              <PlainText text={view.infoForInterested} className="text-lg" />
+            ) : (
+              <p className="text-muted-foreground text-lg">{t("noInfoYet")}</p>
+            )}
 
-        {/* ── La seña ────────────────────────────────────────────────────
-            Solo aparece si las coordinadoras ya cargaron el monto Y la
-            condición. Sin cualquiera de los dos no hay nada que pedirle: un
-            formulario de pago sin importe, o una aceptación sin texto que
-            aceptar, son peores que la ausencia de la sección. */}
-        {deposit && deposit.amount && deposit.terms ? (
-          <section className="border-border bg-card space-y-6 rounded-xl border p-6 sm:p-8">
-            <div className="space-y-2">
-              <h2 className="text-muted-foreground text-sm tracking-wide uppercase">
-                {tDeposit("title")}
-              </h2>
-              {/* El monto es el elemento dominante de esta pantalla: es la
+            {/* ── La seña ────────────────────────────────────────────────
+                Solo aparece si las coordinadoras ya cargaron el monto Y la
+                condición. Sin cualquiera de los dos no hay nada que
+                pedirle: un formulario de pago sin importe, o una
+                aceptación sin texto que aceptar, son peores que la
+                ausencia de la sección. */}
+            {deposit && deposit.amount && deposit.terms ? (
+              <section className="border-border bg-card space-y-6 rounded-xl border p-6 sm:p-8">
+                <div className="space-y-2">
+                  <h2 className="text-muted-foreground text-sm tracking-wide uppercase">
+                    {tDeposit("title")}
+                  </h2>
+                  {/* El monto es el elemento dominante de esta pantalla: es la
                   única cifra de plata que ve una interesada, así que no
                   compite con nada. Sin equivalencias ni fecha de cotización
                   al pie —a diferencia de "Mis pagos"— porque este monto es
                   fijo y lo definen las coordinadoras: no viene de una
                   conversión de tipo de cambio que haya que fechar. */}
-              <p className="money-amount text-5xl leading-none font-semibold sm:text-6xl">
-                {formatMoney(deposit.amount, deposit.currency, localeCode)}
-              </p>
-            </div>
+                  <p className="money-amount text-5xl leading-none font-semibold sm:text-6xl">
+                    {formatMoney(deposit.amount, deposit.currency, localeCode)}
+                  </p>
+                </div>
 
-            {deposit.current ? (
-              <DepositStatus
-                status={deposit.current.status}
-                label={
-                  deposit.current.status === "EN_REVISION"
-                    ? tDeposit("underReview")
-                    : tDeposit("confirmed")
-                }
-                detail={
-                  deposit.current.status === "EN_REVISION"
-                    ? tDeposit("underReviewDetail")
-                    : tDeposit("confirmedDetail")
-                }
-              />
-            ) : (
-              <>
-                {/* El motivo del último rechazo, arriba del formulario y no en
+                {deposit.current ? (
+                  <DepositStatus
+                    status={deposit.current.status}
+                    label={
+                      deposit.current.status === "EN_REVISION"
+                        ? tDeposit("underReview")
+                        : tDeposit("confirmed")
+                    }
+                    detail={
+                      deposit.current.status === "EN_REVISION"
+                        ? tDeposit("underReviewDetail")
+                        : tDeposit("confirmedDetail")
+                    }
+                  />
+                ) : (
+                  <>
+                    {/* El motivo del último rechazo, arriba del formulario y no en
                     un mail: es lo primero que va a preguntar al volver. */}
-                {deposit.lastRejection ? (
-                  <div
-                    role="alert"
-                    className="border-status-danger/40 bg-status-danger-surface space-y-2 rounded-xl border p-4"
-                  >
-                    <p className="text-status-danger flex items-center gap-2 text-base font-medium">
-                      <TriangleAlert className="size-5 shrink-0" aria-hidden="true" />
-                      {tDeposit("rejectedTitle")}
-                    </p>
-                    {deposit.lastRejection.reason ? (
-                      <p className="text-base">{deposit.lastRejection.reason}</p>
+                    {deposit.lastRejection ? (
+                      <div
+                        role="alert"
+                        className="border-status-danger/40 bg-status-danger-surface space-y-2 rounded-xl border p-4"
+                      >
+                        <p className="text-status-danger flex items-center gap-2 text-base font-medium">
+                          <TriangleAlert
+                            className="size-5 shrink-0"
+                            aria-hidden="true"
+                          />
+                          {tDeposit("rejectedTitle")}
+                        </p>
+                        {deposit.lastRejection.reason ? (
+                          <p className="text-base">
+                            {deposit.lastRejection.reason}
+                          </p>
+                        ) : null}
+                        <p className="text-muted-foreground text-sm">
+                          {tDeposit("rejectedRetry")}
+                        </p>
+                      </div>
                     ) : null}
-                    <p className="text-muted-foreground text-sm">
-                      {tDeposit("rejectedRetry")}
-                    </p>
-                  </div>
-                ) : null}
 
-                {/* Dónde transferir. Va ARRIBA del formulario: primero hay que
+                    {/* Dónde transferir. Va ARRIBA del formulario: primero hay que
                     poder pagar, después subir el comprobante de haberlo hecho. */}
-                {deposit.paymentInstructions ? (
-                  <div className="border-border bg-muted/40 space-y-2 rounded-xl border p-4">
-                    <h3 className="text-base font-medium">
-                      {tDeposit("whereToPay")}
-                    </h3>
-                    <PlainText
-                      text={deposit.paymentInstructions}
-                      className="text-sm"
+                    {deposit.paymentInstructions ? (
+                      <div className="border-border bg-muted/40 space-y-2 rounded-xl border p-4">
+                        <h3 className="text-base font-medium">
+                          {tDeposit("whereToPay")}
+                        </h3>
+                        <PlainText
+                          text={deposit.paymentInstructions}
+                          className="text-sm"
+                        />
+                      </div>
+                    ) : null}
+
+                    <DepositForm
+                      terms={deposit.terms}
+                      amountLabel={tDeposit("amountHint", {
+                        amount: formatMoney(
+                          deposit.amount,
+                          deposit.currency,
+                          localeCode,
+                        ),
+                      })}
                     />
-                  </div>
-                ) : null}
+                  </>
+                )}
+              </section>
+            ) : null}
 
-                <DepositForm
-                  terms={deposit.terms}
-                  amountLabel={tDeposit("amountHint", {
-                    amount: formatMoney(
-                      deposit.amount,
-                      deposit.currency,
-                      localeCode,
-                    ),
-                  })}
-                />
-              </>
-            )}
-          </section>
-        ) : null}
-
-        {/* El MISMO bloque que vio al registrarse, y por la misma razón: si
-            cerró la pestaña en ese momento, este es el único lugar donde
-            vuelve a encontrar el número de WhatsApp. Se renderiza siempre,
-            con el mismo texto de reserva. */}
-        <section className="border-border bg-card rounded-xl border p-6">
-          <h2 className="mb-2 text-xl">{t("nextStepTitle")}</h2>
-          <PlainText text={view.nextStepMessage ?? t("nextStepFallback")} />
-        </section>
+            {/* El MISMO bloque que vio al registrarse, y por la misma
+                razón: si cerró la pestaña en ese momento, este es el único
+                lugar donde vuelve a encontrar el número de WhatsApp. Se
+                renderiza siempre, con el mismo texto de reserva. */}
+            <section className="border-border bg-card rounded-xl border p-6">
+              <h2 className="mb-2 text-xl">{t("nextStepTitle")}</h2>
+              <PlainText text={view.nextStepMessage ?? t("nextStepFallback")} />
+            </section>
+          </>
+        )}
       </main>
     </div>
   );

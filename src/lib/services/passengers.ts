@@ -16,6 +16,7 @@ import {
   type AuditEntry,
 } from "./audit";
 import { confirmUpload, removeFile } from "./storage";
+import { isRealIsoDate } from "@/lib/domain/date";
 import {
   evaluatePassport,
   type PassportEvaluation,
@@ -373,6 +374,51 @@ export async function getMyActivePassenger() {
 // ------------------------- Datos del pasajero ------------------------------
 
 /**
+ * Columnas de `Person` que la base guarda como `@db.Date`. Un solo conjunto,
+ * compartido por `savePersonDraft` y `updatePersonByCoordinator`: agregar una
+ * fecha nueva a la ficha es tocar una sola lista, no acordarse de repetir la
+ * conversión en cada función que escribe la tabla.
+ */
+const PERSON_DATE_FIELDS = new Set(["birthDate", "passportExpiryDate"]);
+
+/**
+ * Convierte el "AAAA-MM-DD" de un campo `@db.Date` al `Date` a medianoche UTC
+ * que pide Prisma.
+ *
+ * Si no es una fecha real —`isRealIsoDate`— guarda `null` en vez de tirarle
+ * `new Date()` encima: eso es el desborde del 31 de febrero de la fase 3, y
+ * ni el autoguardado ni la edición del coordinador pueden persistir una
+ * fecha distinta a la que se escribió. El autoguardado en particular no puede
+ * fallar por esto: `personDraftSchema` deja pasar fechas a medio escribir a
+ * propósito, así que esta función tiene que poder recibirlas sin explotar.
+ */
+function toPersonDateColumn(raw: unknown): Date | null {
+  if (typeof raw !== "string" || raw === "") return null;
+  return isRealIsoDate(raw) ? new Date(`${raw}T00:00:00.000Z`) : null;
+}
+
+/**
+ * Las claves de `PERSON_DATE_FIELDS` presentes en `input`, convertidas.
+ *
+ * Solo incluye una clave si estaba en `input`: un guardado parcial que no
+ * manda `birthDate` no tiene que pisarlo a `null` porque no vino en este
+ * paso.
+ */
+function personDateOverrides(
+  input: Record<string, unknown>,
+): Partial<Record<"birthDate" | "passportExpiryDate", Date | null>> {
+  const overrides: Partial<Record<"birthDate" | "passportExpiryDate", Date | null>> =
+    {};
+  for (const field of PERSON_DATE_FIELDS) {
+    if (field in input) {
+      overrides[field as "birthDate" | "passportExpiryDate"] =
+        toPersonDateColumn(input[field]);
+    }
+  }
+  return overrides;
+}
+
+/**
  * Autoguardado. Acepta datos parciales, incompletos y mal formados.
  *
  * Este método NO valida contenido a propósito: lo que llega ya pasó por
@@ -398,9 +444,7 @@ export async function savePersonDraft(
     where: { id: passenger.personId },
     data: {
       ...draft,
-      passportExpiryDate: draft.passportExpiryDate
-        ? new Date(`${draft.passportExpiryDate}T00:00:00.000Z`)
-        : null,
+      ...personDateOverrides(draft),
     },
   });
 }
@@ -550,20 +594,19 @@ export async function updatePersonByCoordinator(
   const data: Record<string, unknown> = {};
 
   // Las columnas @db.Date llegan del formulario como "AAAA-MM-DD" y hay que
-  // convertirlas. Es un CONJUNTO y no una comparación contra un solo nombre:
-  // cuando la fase 7 sumó birthDate a los campos editables, la versión con
+  // convertirlas con la MISMA función que usa `savePersonDraft`
+  // (`toPersonDateColumn`, sobre el conjunto `PERSON_DATE_FIELDS`): es un
+  // conjunto y no una comparación contra un solo nombre porque cuando la fase
+  // 7 sumó birthDate a los campos editables, la versión con
   // `field === "passportExpiryDate"` habría intentado escribir un string en
   // una columna de fecha.
-  const DATE_FIELDS = new Set(["passportExpiryDate", "birthDate"]);
-
   for (const field of COORDINATOR_EDITABLE) {
     if (!(field in changes)) continue;
 
     const raw = (changes as Record<string, unknown>)[field];
-    const next =
-      DATE_FIELDS.has(field) && typeof raw === "string" && raw !== ""
-        ? new Date(`${raw}T00:00:00.000Z`)
-        : (raw ?? null);
+    const next = PERSON_DATE_FIELDS.has(field)
+      ? toPersonDateColumn(raw)
+      : (raw ?? null);
 
     data[field] = next;
 

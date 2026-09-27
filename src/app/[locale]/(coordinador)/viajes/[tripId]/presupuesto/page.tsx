@@ -72,6 +72,8 @@ export default async function BudgetPage({
       welcomeMessageEn: publicSettings.welcomeMessageEn ?? "",
       nextStepMessageEs: publicSettings.nextStepMessageEs ?? "",
       nextStepMessageEn: publicSettings.nextStepMessageEn ?? "",
+      discardedMessageEs: publicSettings.discardedMessageEs ?? "",
+      discardedMessageEn: publicSettings.discardedMessageEn ?? "",
       emailSignatureEs: publicSettings.emailSignatureEs ?? "",
       emailSignatureEn: publicSettings.emailSignatureEn ?? "",
       closedMessageEs: publicSettings.closedMessageEs ?? "",

@@ -83,7 +83,7 @@
     "myPaymentsNext": "Próxima cuota: {label}",
     "myPaymentsSettled": "No te queda nada por pagar.",
     "noTripTitle": "Todavía no estás en ningún viaje",
-    "noTripBody": "Cuando te inviten a uno, te va a llegar un mail con el link para entrar."
+    "noTripBody": "Si te parece que esto es un error, escribile a la coordinadora del viaje."
   },
   "coordinatorHome": {
     "title": "Mis viajes",
@@ -349,6 +349,8 @@
       "welcomeHelp": "Lo que lee apenas se registra.",
       "nextStepTitle": "Qué sigue",
       "nextStepHelp": "El próximo paso concreto: a qué WhatsApp escribir y qué decir para coordinar la reunión.",
+      "discardedTitle": "Cuando alguien queda descartada",
+      "discardedHelp": "Lo que ve alguien cuyo registro para ESTE viaje ya no sigue activo — la descartaron, se bajó sola, o se anotó para un viaje anterior. Reemplaza a la propuesta del viaje y a “Qué sigue” enteros en su pantalla: no le queda mostrada ninguna invitación a una reunión que no va a pasar. El WhatsApp de arriba tampoco se le muestra acá — si este texto invita a escribirles, el dato de contacto va DENTRO de este mismo campo.",
       "signatureTitle": "Firma de los mails",
       "signatureHelp": "Va al pie de todos los mails que manda el sistema.",
       "closedTitle": "Cuando no hay viaje abierto",
@@ -855,7 +857,8 @@
     "nextStepTitle": "Qué sigue",
     "goToLogin": "Iniciar sesión",
     "noInfoYet": "Todavía no hay información cargada para este viaje.",
-    "nextStepFallback": "Nos vamos a poner en contacto con vos para coordinar una charla y contarte todo."
+    "nextStepFallback": "Nos vamos a poner en contacto con vos para coordinar una charla y contarte todo.",
+    "discardedFallback": "Este registro ya no sigue activo para este viaje."
   },
   "interests": {
     "title": "Interesadas",

@@ -118,6 +118,8 @@ export const tripPublicTextsSchema = z.object({
   welcomeMessageEn: brandText(2000),
   nextStepMessageEs: brandText(2000),
   nextStepMessageEn: brandText(2000),
+  discardedMessageEs: brandText(2000),
+  discardedMessageEn: brandText(2000),
   emailSignatureEs: brandText(300),
   emailSignatureEn: brandText(300),
   closedMessageEs: brandText(2000),

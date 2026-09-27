@@ -83,7 +83,7 @@
     "myPaymentsNext": "Next instalment: {label}",
     "myPaymentsSettled": "You have nothing left to pay.",
     "noTripTitle": "You are not on a trip yet",
-    "noTripBody": "When you get invited to one, we will email you a link to join."
+    "noTripBody": "If this doesn't look right, get in touch with your trip coordinator."
   },
   "coordinatorHome": {
     "title": "My trips",
@@ -349,6 +349,8 @@
       "welcomeHelp": "What they read as soon as they sign up.",
       "nextStepTitle": "What happens next",
       "nextStepHelp": "The concrete next step: which WhatsApp to write to and what to say to arrange the meeting.",
+      "discardedTitle": "When someone is discarded",
+      "discardedHelp": "What someone sees when their sign-up for THIS trip is no longer active — they were turned down, they dropped out on their own, or they signed up for an earlier trip. It replaces the trip proposal and “What happens next” entirely on their screen: no invitation to a meeting that isn't going to happen stays visible. The WhatsApp number above isn't shown here either — if this text invites them to get in touch, put the contact details INSIDE this same field.",
       "signatureTitle": "Email signature",
       "signatureHelp": "Goes at the foot of every email the system sends.",
       "closedTitle": "When no trip is open",
@@ -855,7 +857,8 @@
     "nextStepTitle": "What happens next",
     "goToLogin": "Sign in",
     "noInfoYet": "There's no information for this trip yet.",
-    "nextStepFallback": "We'll get in touch with you to arrange a chat and tell you everything."
+    "nextStepFallback": "We'll get in touch with you to arrange a chat and tell you everything.",
+    "discardedFallback": "This sign-up is no longer active for this trip."
   },
   "interests": {
     "title": "Enquiries",

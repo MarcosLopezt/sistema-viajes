@@ -369,6 +369,67 @@ describe("autoguardado del formulario", () => {
     expect(person.residenceCity).toBe("Rosario");
   });
 
+  it("birthDate y passportExpiryDate llegan a la base como DateTime, no como el string plano", async () => {
+    // Bug real: birthDate llegaba a prisma.person.update() como
+    // "1990-06-21" sin convertir y Prisma lo rechazaba ("Expected ISO-8601
+    // DateTime"). passportExpiryDate sí se convertía, porque tenía su propio
+    // parche a mano — la falla era que la conversión no estaba centralizada.
+    actAs(ana);
+
+    await savePersonDraft(anaPassengerId, {
+      birthDate: "1990-06-21",
+      passportExpiryDate: "2032-01-01",
+    });
+
+    const person = await prisma.person.findUniqueOrThrow({
+      where: { id: ana.personId },
+      select: { birthDate: true, passportExpiryDate: true },
+    });
+
+    expect(person.birthDate).toEqual(new Date("1990-06-21T00:00:00.000Z"));
+    expect(person.passportExpiryDate).toEqual(
+      new Date("2032-01-01T00:00:00.000Z"),
+    );
+  });
+
+  it("una fecha que no existe se guarda como null, no se desborda al mes siguiente", async () => {
+    // El bug del 31 de febrero (fase 3): "1990-02-31" no puede convertirse en
+    // 1990-03-02 en silencio. El draft nunca rechaza el guardado, pero
+    // tampoco puede persistir una fecha distinta de la que se escribió.
+    actAs(ana);
+
+    await savePersonDraft(anaPassengerId, { birthDate: "1990-02-31" });
+
+    const person = await prisma.person.findUniqueOrThrow({
+      where: { id: ana.personId },
+      select: { birthDate: true },
+    });
+
+    expect(person.birthDate).toBeNull();
+  });
+
+  it("guardar un paso sin la fecha del otro paso no se la pisa a null", async () => {
+    // Bug relacionado: el `? new Date(...) : null` de passportExpiryDate se
+    // evaluaba siempre, así que un guardado que no incluía esa clave la
+    // pisaba a null igual — rompiendo el contrato de "el autoguardado
+    // parcial no borra lo que no llegó en este paso".
+    actAs(ana);
+
+    await savePersonDraft(anaPassengerId, {
+      passportExpiryDate: "2030-05-01",
+    });
+    await savePersonDraft(anaPassengerId, { fullName: `Ana ${SUFFIX} bis` });
+
+    const person = await prisma.person.findUniqueOrThrow({
+      where: { id: ana.personId },
+      select: { passportExpiryDate: true },
+    });
+
+    expect(person.passportExpiryDate).toEqual(
+      new Date("2030-05-01T00:00:00.000Z"),
+    );
+  });
+
   it("no deja finalizar con datos incompletos", async () => {
     actAs(ana);
     await expect(finalizeRegistration(anaPassengerId)).rejects.toSatisfy(

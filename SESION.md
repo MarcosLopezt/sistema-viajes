@@ -7,104 +7,135 @@ AGENTS.md.
 
 ## En qué se está trabajando
 
-Rediseño visual de las pantallas del usuario final (interesada y pasajera
-confirmada), pedido explícitamente como **solo estética**: sin tocar
-lógica, servicios, validaciones ni reglas de negocio. Se acordó ir por
-bloques con parada entre cada uno. **Bloques A y B resueltos y
-commiteados.** Bloque C (zona del coordinador) es "nada por ahora": la
-única excepción, aprobada, es el semáforo de pagos compartido — ver abajo.
+Bug de ruteo interesada/pasajera, reportado con una interesada real ya
+registrada viéndolo (`franciscodrovetta@gmail.com`, viaje "Escocia Sagrada
+2027"). Los tres puntos que pidió el cliente están hechos. Todo se verificó
+de punta a punta con Playwright contra el servidor local (registro real en
+`/interes`, login, logout, conversión real vía el panel de coordinación,
+cambios de estado reales) antes y después de cada cambio. Nada de lo
+probado tocó datos reales del viaje: cuentas y textos de prueba se
+revirtieron/borraron al terminar cada verificación (confirmado con una
+query de vuelta a la base — el viaje real quedó con sus cinco `Interest`
+originales, sin ninguna de prueba).
 
-## Bloque A — `/interes` y la vista de la interesada (zona cálida)
+## 1 y 2 — Ruteo interesada ⇄ pasajera
 
-Ya existía la identidad de la zona cálida (`.zona-calida` en
-`globals.css`: fondo crema, serifa en h1/h2/h3, acento dorado) de una fase
-anterior. Lo que se hizo ahora fue completarla, no crearla de cero:
+- `getMyInterestView()` (`lib/services/interest.ts`) ahora pregunta por la
+  AUSENCIA de `TripMember` —mismo criterio que ya usaba
+  `viewerIsOnlyInterested()`— antes de devolver la vista. Antes devolvía la
+  pantalla de interesada aunque el usuario ya fuera pasajera (`Interest` en
+  `CONVERTIDA` sigue siendo una fila válida). `mi-viaje/page.tsx` no
+  necesitó tocarse: su `if (!view) redirect("/")` ya alcanzaba.
+- `/inicio` ahora llama a `viewerIsOnlyInterested()` cuando no hay
+  `Passenger` activo, y redirige a `/mi-viaje` si es cierto. El texto del
+  vacío (`noTripTitle`/`noTripBody`) ya no promete un mail de invitación.
+- Caso "sin Interest ni Passenger": decidido con el cliente que se queda
+  SIN código — inalcanzable desde el producto. Documentado en
+  [ESTADO.md §decisiones, punto 10](ESTADO.md).
 
-- Token nuevo `.money-amount` (`src/styles/app-theme.css`): serifa +
-  tabular-nums para el monto que sea el elemento dominante de una
-  pantalla de plata, en cualquiera de las dos zonas. No fija tamaño ni
-  color — eso lo decide cada pantalla.
-- La seña en `/mi-viaje`: pasa a ser el elemento dominante de la
-  pantalla — etiqueta chica en mayúsculas, monto grande (`text-5xl/6xl`)
-  con `.money-amount`.
-- Más "aire" en `/interes`, `interest-form.tsx` y `/mi-viaje`: paddings y
-  `space-y` más generosos, `rounded-lg` → `rounded-xl` en las tarjetas
-  para consistencia.
-- **No se agregaron equivalencias ni fecha de cotización al monto de la
-  seña**: `getMyDepositView()` no las calcula (a diferencia de
-  `getPaymentPlan()`, que sí se las da a "Mis pagos") y agregarlas exigía
-  tocar `lib/services/deposits.ts` — dejaba de ser estético. **Anotado en
-  TAREAS.md con prioridad**, a pedido explícito del cliente
-  (2026-09-18): es el momento exacto en que alguien que transfiere desde
-  otro país puede transferir mal.
+## 3 — Interesada DESCARTADA
 
-## Bloque B — inicio, mis-datos, mis-pagos, novedades (zona interna)
+Implementado tal como se propuso, con los dos ajustes del cliente:
 
-- Token nuevo `.zona-interna` (`globals.css`): acento ciruela SOLO en
-  `--primary`/`--primary-foreground`/`--ring`, aplicado una vez en
-  `(pasajero)/layout.tsx`. Fondo, tipografía y el resto de la paleta
-  quedan en el default — es funcional, no una paleta nueva.
-- `inicio` y `mis-pagos`: el saldo adeudado pasa a `.money-amount`. En
-  "Mis pagos" además más grande (`text-5xl`): es la pregunta que trae a
-  alguien a esa pantalla.
-- `mis-datos`, `novedades` y el resto de los formularios: **sin cambios**
-  — heredan el acento por el token del layout, y la indicación de "aire"
-  era para la zona cálida, no para esta, que se queda densa a propósito.
+- **Campo nuevo `discardedMessageEs/En` en `Trip`** (migración
+  `20260918172804_interesada_descartada_mensaje`, solo agrega columnas —
+  revisada con `--create-only` antes de aplicar, no toca el índice parcial
+  de `acceptingInterest`). Texto de marca como los demás: lo escriben las
+  coordinadoras desde el paso 6 del wizard, sección "Cuando alguien queda
+  descartada", ubicada justo después de "Qué sigue".
+- **Ajuste 1 (contacto):** la ayuda del campo en el wizard dice
+  explícitamente que el WhatsApp de "Qué sigue" NO se muestra en esta
+  pantalla — si el texto invita a escribir, el dato de contacto va DENTRO
+  del campo. Verificado con una captura: el texto de prueba con WhatsApp
+  incluido se ve completo, sin depender de ningún otro campo.
+- **Ajuste 2 (fallback neutro):** `interest.discardedFallback` en el
+  catálogo — *"Este registro ya no sigue activo para este viaje."* /
+  *"This sign-up is no longer active for this trip."* Neutro para las tres
+  causas (no seleccionada, se bajó sola, viaje anterior), sin invitar a
+  contacto porque el fallback no tiene ningún medio que ofrecer. Mostrado
+  al cliente antes de darlo por cerrado, con captura de pantalla real.
+- `mi-viaje/page.tsx`: si `status === "DESCARTADA"`, reemplaza TODO lo
+  demás (propuesta del viaje, seña, "Qué sigue") por este único mensaje.
+  Nada de eso sigue siendo cierto para alguien que ya no está en el embudo.
+- **Mail al descartar: nada automático**, tal como decidió el cliente.
+  Anotado en [TAREAS.md](TAREAS.md) como pedido a futuro, con el argumento
+  (el `<Select>` de estado cambia con un click sin confirmar — atarle un
+  mail dispararía avisos por error).
 
-### El semáforo de pagos — cruce con la zona del coordinador, resuelto
+## 4 — Fechas de `Person`: una sola conversión
 
-`PaymentLightBadge`/`InstallmentStateBadge`/`PaymentStatusBadge`
-(`src/components/payments/payment-badges.tsx`) eran un punto de color +
-texto, no un ícono con forma propia — inconsistente con el resto de los
-semáforos del sistema (`PassportAlert`, el `StatusChip` del listado de
-pasajeros), que sí cumplían el criterio auditado ("ícono además de
-color, nunca solo color"). Se agregó ícono por estado (`Check` / `Clock`
-/ `CircleAlert` / `Minus`, `size-4` para igualar a los badges vecinos).
+No estaba en el pedido: apareció al tocar el autoguardado. `savePersonDraft`
+spreadeaba `...draft` y convertía a mano SOLO `passportExpiryDate`, así que
+`birthDate` llegaba a `person.update()` como `"1990-06-21"` y Prisma lo
+rechazaba ("Expected ISO-8601 DateTime"). Y el parche a mano tenía su propio
+bug: el ternario se evaluaba siempre, así que un guardado parcial que no
+incluía la clave la pisaba a `null` igual.
 
-Este componente es compartido con tres pantallas del coordinador. Se
-frenó, se preguntó, y se aprobó explícitamente (accesibilidad, no
-estética — con la condición de verificar densidad). **Verificado con
-capturas reales** (Playwright + servidor local + usuario sembrado
-`coordinador@ejemplo.test`): listado de pasajeros, resumen de pagos del
-viaje y ficha de un pasajero, con los cuatro estados. Encaja sin romper
-ninguna fila — el tamaño usado ya lo usaban los badges vecinos en las
-mismas filas.
+Ahora hay un solo conjunto (`PERSON_DATE_FIELDS`) y una sola función
+(`toPersonDateColumn`), compartidos por `savePersonDraft` y
+`updatePersonByCoordinator`: agregar una fecha a la ficha es tocar una lista,
+no acordarse de repetir la conversión. La función valida con
+`isRealIsoDate()` y guarda `null` si la fecha no existe — el 31 de febrero no
+puede volverse 2 de marzo en silencio, y el autoguardado no puede fallar por
+una fecha a medio escribir. `personDateOverrides()` solo incluye las claves
+que vinieron en `input`, que es lo que arregla el pisado a `null`.
+
+Tres tests nuevos en `tests/integration/passengers.test.ts`, uno por cada una
+de las tres cosas: conversión, fecha inexistente, guardado parcial.
+
+Efecto lateral a tener presente: en `updatePersonByCoordinator` una fecha
+inválida ahora se escribe como `null` y ese cambio va a `AuditLog`. Antes
+desbordaba. `null` es la opción segura y el schema de validación filtra
+antes, pero es un cambio de comportamiento.
+
+### Bug encontrado de encargo, arreglado de encargo
+
+Al verificar el guardado del campo nuevo por la UI real del wizard (no
+alcanzaba con la lectura — el primer intento de guardar no persistió
+nada), apareció esto: `budget-wizard.tsx` arma a mano, campo por campo, el
+objeto que le manda a `savePublicTextsAction`. `setTripPublicTexts` no hace
+merge — escribe `input.campo ?? null` para TODO el schema en cada guardado.
+Cualquier campo que falte en ese objeto se pisa a `null`, se haya tocado o
+no. `depositTermsEs/En` y `paymentInstructionsEs/En` (los campos de la seña
+de fase 8) NUNCA estuvieron en esa lista — mismo error que acababa de
+cometer yo con `discardedMessage`. Agregué los cuatro. Verificado
+guardando desde la UI real y confirmando en la base. No se detectó por
+ningún test existente porque ninguno pasa por ese botón con esos dos
+campos cargados a la vez.
 
 ## Verificado
 
-- `check:i18n`, `check:layers`, `typecheck`, `lint`, `test` (474/474
-  unitarios): en verde, corridos dos veces (antes y después de
-  reincorporar el semáforo compartido).
-- `test:db` (252 tests de integración): **no se corrió en esta sesión a
-  pedido del usuario** ("cortá los tests de integración, luego los hago
-  yo"). Antes de ese cambio de método hubo dos intentos con la conexión a
-  Supabase caída (uno por una superposición accidental de dos corridas,
-  otro porque el sandbox estuvo ~3 días sin red) — ninguno de los dos
-  llegó a completar limpio. El usuario decidió correrla él mismo y
-  commitear igual, dado que los 5 checks rápidos ya alcanzan para un
-  cambio puramente de CSS/JSX y la última corrida completa antes de este
-  método (fin del Bloque A) había dado 252/252.
-- No probado en navegador más allá de las capturas de Playwright de la
-  verificación de densidad (arriba): no se navegaron las pantallas de
-  interesada/pasajera rediseñadas con una herramienta de automatización
-  en esta sesión.
-
-## Commiteado
-
-Un commit, todo el rediseño (bloques A y B), separado de cualquier otra
-cosa. Incluye el ajuste de `TAREAS.md` (la prioridad de equivalencias en
-la seña) porque comparte turno de commit con el código que lo motivó.
+- `typecheck`, `lint`, `check:i18n` (815 claves), `check:layers`, `test`
+  (474/474): en verde, corridos dos veces (antes y después del fix del
+  botón de guardar).
+- `test:db` (antes de este bloque de cambios, sesión anterior): **255/255**,
+  ~27 min.
+- `test:db` de esta tanda, primera corrida: **254/255**. La única falla es
+  la esperada — `tests/integration/interest.test.ts`, el test de
+  "aislamiento de la interesada · por servicio" que afirma la lista EXACTA
+  de claves que devuelve `getMyInterestView()` a propósito (para que
+  agregar un campo ahí nunca pase desapercibido). `discardedMessage` es un
+  campo nuevo y legítimo, así que el test tenía que actualizarse — se hizo.
+  No es una regresión: es el guard cumpliendo su función.
+- `test:db` con el test actualizado: **NO se pudo correr (2026-09-27).** La
+  instancia de Supabase no resuelve —`ENOTFOUND tenant/user
+  postgres.dkhutihyvpzquuuzpivh not found`, el mismo error en `check:db`—,
+  así que las 11 suites fallan en la conexión y 252 tests quedan skipped.
+  Es ambiente, no código: ninguna falla es una assertion.
+  **Pendiente de verdad:** los tres tests nuevos de fechas en
+  `passengers.test.ts` y el de superficie de claves en `interest.test.ts`
+  están commiteados SIN haber pasado nunca en verde. Correr `test:db`
+  apenas la base vuelva, antes de dar la tanda por cerrada.
 
 ## Esperando al usuario
 
-- Que corra `npm run test:db` cuando pueda y avise si algo rompió (no
-  debería: nada de lo tocado en A/B toca `lib/services` ni `lib/domain`).
-- Que revise el resultado visual de los bloques A y B.
-- Decidir si el Bloque C (zona del coordinador) se encara en otra sesión,
-  y con qué alcance.
+- Confirmación de `test:db` de esta tanda (se la doy apenas termine).
+- Que revise el texto del fallback de DESCARTADA (ya mostrado, con
+  captura) y el texto de ayuda del campo en el wizard.
+- Decidir si además quiere el botón "avisarle" ahora o lo deja en
+  TAREAS.md para más adelante.
 
 ## Próximo paso
 
-Ninguno de este rediseño hasta que el usuario confirme. Lo demás sigue
-en [TAREAS.md](TAREAS.md): el cron 405, el deploy, Brevo, los textos de
-marca, y ahora también las equivalencias de la seña.
+Ninguno de código hasta que el cliente vea el resultado de `test:db` y
+confirme que el texto del fallback le cierra.

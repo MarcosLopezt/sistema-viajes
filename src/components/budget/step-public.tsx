@@ -198,6 +198,12 @@ export function StepPublic({
       </section>
 
       <section className="space-y-2">
+        <h3 className="font-semibold">{t("discardedTitle")}</h3>
+        <p className="text-muted-foreground text-sm">{t("discardedHelp")}</p>
+        {pair("discardedMessageEs", "discardedMessageEn", 3)}
+      </section>
+
+      <section className="space-y-2">
         <h3 className="font-semibold">{t("signatureTitle")}</h3>
         <p className="text-muted-foreground text-sm">{t("signatureHelp")}</p>
         {pair("emailSignatureEs", "emailSignatureEn", 2)}
